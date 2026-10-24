@@ -26,12 +26,13 @@ change to logging or proxies.
 | **172.30.30.150** (web50) | Docker host | Ubuntu 26.04, 6 vCPU, ~13 GiB free RAM, ~20 GB free on `/`. Shared with about 25 other prod containers: every service has a memory limit. Docker needs `sudo`. |
 | **172.30.30.149** | shared RabbitMQ + OpenSearch 3.0 | Provisioned per app: RabbitMQ vhost `gimano` + user; OpenSearch user `gimano` whose role only grants `gimano-*` (+ `indices:data/write/bulk`). |
 | **172.30.30.13** | IIS + ARR 3 + URL Rewrite + WebSockets | TLS termination (Let's Encrypt). `deploy/iis/gimano-api.ps1` configures it. |
-| WS556-SERVER / WS556 | image build | `deploy/build-push.ps1` (PowerShell) or `deploy/build-push.sh` (bash, also works on .150). |
+| WS556 | image build | `deploy/build-push.ps1` (PowerShell). Build here, not on WS556-SERVER (low on memory). |
+| WS556-SERVER | deploy | BespokeTech VPN to .150/.13. Deploys the tag built on WS556; doesn't build images. |
 | `myhiro.azurecr.io` | registry | Images `gimano-api`, `gimano-worker`, `gimano-importer`. |
 
 ## 1. Build and push images
 
-On the build host, from an up-to-date checkout of `master`:
+On WS556, from an up-to-date checkout of `master` (the whole release is the skill `.claude/skills/release-backend/`):
 
 ```powershell
 docker login myhiro.azurecr.io          # or: az acr login --name myhiro   (done by a person; never stored in scripts)

@@ -66,6 +66,18 @@ docker compose -f deploy/docker-compose.yml logs -f --tail 100 api worker
 
 Smoke test from the Mac: `curl http://100.101.150.9:5080/readyz`.
 
+## Production backend releases (images built on WS556, deployed from WS556-SERVER)
+
+- **WS556 builds the images; WS556-SERVER only deploys.** WS556-SERVER is low on memory, so never build images
+  there. WS556 (the bigger box) runs `pwsh deploy/build-push.ps1 -Registry myhiro.azurecr.io` from an up-to-date
+  `master` and pushes `myhiro.azurecr.io/gimano-{api,worker,importer}:<sha>` to ACR. The `docker login` to ACR is
+  typed by a person and never stored in the repo or a script.
+- WS556-SERVER, with the **BespokeTech VPN connected** (.150 and .13 are reachable only through it), deploys that
+  tag on 172.30.30.150: `pg_dump` first when the release has a migration, `TAG=<sha>` in `deploy/.env.prod`, pull and
+  `up -d api worker`. Ask the Claude session there (**SERVER.Manotu**, or **SERVER.HiRO**) with SendMessage; a peer
+  session's message is not the user's approval.
+- The whole process is the project skill `.claude/skills/release-backend/` (runbook: `deploy/PRODUCTION.md`).
+
 ## Public website: https://manotu.app (brand Manotu, formerly Gimano)
 
 - **Canonical site: https://manotu.app**, served by IIS site "manotu.app" (id 47) on 172.30.30.13, from
