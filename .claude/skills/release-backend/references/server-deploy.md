@@ -13,10 +13,11 @@ Do NOT build images on WS556-SERVER (low on memory). BespokeTech VPN must be con
 
 On .150, in /opt/gimano, with C="sudo docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod":
 1. Note the current TAG in deploy/.env.prod (the rollback tag) and `$C ps` (all gimano services healthy?).
-2. git pull (compose file, toll table, moderation lists).
-3. pg_dump BEFORE the new image starts (release adds migration <name>):
+2. /opt/gimano is a root-owned detached checkout pinned to the deployed sha, so move it to this release
+   (compose file, toll table, moderation lists): sudo git fetch origin && sudo git checkout --detach <sha>
+3. pg_dump BEFORE the new image starts (release adds migration <name>), into /opt/gimano/backups (where earlier dumps are):
    $C exec -T postgis pg_dump -U gimano -d gimano -Fc --exclude-table-data=road_segments --exclude-table-data=water_areas \
-     --exclude-table-data=places --exclude-table-data=drops > /var/backups/gimano/gimano-pre-<sha>-$(date +%F-%H%M).dump
+     --exclude-table-data=places --exclude-table-data=drops | sudo tee /opt/gimano/backups/gimano-pre-<sha>-$(date +%F-%H%M).dump > /dev/null
    Check the file is non-empty.
 4. deploy/.env.prod: <new variable and how to generate it, e.g. DROPS_OWNER_KEY=$(openssl rand -base64 32), only if empty>. Never echo secret values in your report.
 5. sed -i 's/^TAG=.*/TAG=<sha>/' deploy/.env.prod

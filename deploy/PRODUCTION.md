@@ -125,7 +125,8 @@ Public smoke test: `curl https://gimano-api.bukitbunga.com/readyz`, then sign in
 ## 4. Updates
 
 ```bash
-cd /opt/gimano && git pull                         # compose/toll/moderation changes
+cd /opt/gimano && sudo git fetch origin && sudo git checkout --detach <sha>   # root-owned checkout pinned to the release
+# release with a migration: pg_dump first, into /opt/gimano/backups (the daily cron in §6 is not installed yet)
 # after build-push printed a new sha:
 sed -i 's/^TAG=.*/TAG=<sha>/' deploy/.env.prod
 $C pull api worker importer && $C up -d api worker # migrations run on API start; ~5 s of downtime
