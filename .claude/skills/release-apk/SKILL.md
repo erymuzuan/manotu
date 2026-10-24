@@ -94,11 +94,11 @@ R=.claude/skills/release-apk/scripts/release.py   # run steps as: python3 $R <st
   back to the previous APK, which is never deleted. Overwriting an old rollback file loses that, and
   it has happened once (0.2.2), so the deploy message forbids it.
 - **Backend changes are not in the APK.** If the release depends on a server change (a new
-  endpoint), the backend must be live first, deployed separately by SERVER.HiRO with a DB dump.
+  endpoint), the backend must be live first, deployed separately with the `release-backend` skill (images built on WS556, deployed from WS556-SERVER with a DB dump).
   Otherwise the new screens hit 404s. `plan` lists backend commits so you notice.
 
 ## Not covered
 
 - iOS (IPA, TestFlight, AltStore): blocked until the individual Apple team is active. Never use
   STAFY.
-- Backend deploys: see `deploy/PRODUCTION.md`.
+- Backend deploys: the `release-backend` skill (`deploy/PRODUCTION.md`).
