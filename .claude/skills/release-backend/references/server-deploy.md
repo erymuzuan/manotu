@@ -22,8 +22,8 @@ On .150, in /opt/gimano, with C="sudo docker compose -f deploy/docker-compose.pr
 4. deploy/.env.prod: <new variable and how to generate it, e.g. DROPS_OWNER_KEY=$(openssl rand -base64 32), only if empty>. Never echo secret values in your report.
 5. sed -i 's/^TAG=.*/TAG=<sha>/' deploy/.env.prod
 6. $C pull api worker importer && $C up -d api worker
-7. Wait for healthy, then: curl -s http://localhost:5080/readyz ; $C logs --tail 80 api worker (errors only in the report).
-   <release-specific check, e.g. curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:5080/api/v1/drops → 401>
+7. Wait for healthy, then: curl -s http://172.30.30.150:5080/readyz (the port binds the host IP, not localhost) ; $C logs --tail 80 api worker (errors only in the report).
+   <release-specific check, e.g. curl -s -o /dev/null -w '%{http_code}' -X POST http://172.30.30.150:5080/api/v1/drops → 401>
 
 Touch only the gimano compose project. No docker system prune, no other containers, no Cloudflare or IIS changes.
 If anything fails after step 6, roll back: TAG=<previous> in .env.prod, $C up -d api worker; restore the dump only if

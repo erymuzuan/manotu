@@ -40,8 +40,9 @@ def plan(a):
 
 
 def get(method, url):
+    # Cloudflare blocks Python's default user agent; an empty octet-stream body gets past the 415 to the auth check.
     req = urllib.request.Request(url, method=method, data=b"" if method in ("POST", "PUT") else None,
-                                 headers={"User-Agent": "manotu-release-check"})
+                                 headers={"User-Agent": "manotu-release-check", "Content-Type": "application/octet-stream"})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             return r.status, r.read(400).decode("utf-8", "replace")
