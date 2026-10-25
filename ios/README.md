@@ -106,8 +106,13 @@ from the same `AppModel` and `NavigationSession` as the phone (one voice), and d
 (`com.apple.developer.carplay-maps`) is not granted yet, so only **simulator** builds carry it
 (`Resources/CarPlaySim/*.entitlements`, selected by `[sdk=iphonesimulator*]` in `Config/Signing.xcconfig`); device,
 TestFlight and AltStore builds keep today's entitlements and profiles. Note: Xcode 27's Device Hub has no CarPlay
-external display, so the templates need Apple's CarPlay Simulator app or a car; `-GimanoCarPreview YES` shows the car
-map surface (800 × 480) on the phone for screenshots.
+external display, so the templates need Apple's CarPlay Simulator app (with an iPhone) or a car. `-GimanoCarPreview YES`
+is a **map preview** only (the car map surface, 800 × 480, on the phone): never evidence of CarPlay behaviour.
+The scene's decisions (following the phone's drive across disconnect/reconnect, reroute pauses, arrival, alert
+durations, list/section and template-depth limits, keyboard only when parked, the arrow on every display size,
+day/night style, no private data) live in `CarPlay/CarPlayLogic.swift` and are unit-tested in
+`GimanoTests/CarPlayTests.swift`; the voice (one voice, ducking released after each prompt, silent during calls) in
+`Navigation/VoiceGuide.swift`.
 
 ## Personal data: on device only (docs/privacy-and-backup.md)
 
@@ -233,8 +238,9 @@ Nunito font: SIL Open Font License 1.1 (`Resources/Fonts/Nunito-OFL.txt`).
 
 ### CarPlay development checks
 
-Run `scripts/carplay-tests.sh <simulator-UDID>` from `ios/` to build and check the scene manifest and
-phone/car map-state mirroring. Get a device ID from `xcrun simctl list devices available`.
+Run `scripts/carplay-tests.sh <simulator-UDID>` from `ios/` to run the CarPlay suites (scene manifest, map mirroring,
+display sizes and day/night, lifecycle and reconnection, maneuvers and reroute, stop, arrival, one voice and
+interruptions, list / keyboard / alert / template-depth limits, privacy). Get a device ID from `xcrun simctl list devices available`.
 These tests do **not** establish that Apple has granted CarPlay access or that head-unit interaction works.
 
 For map-only debugging, use the existing `-GimanoCarPreview YES` launch argument. That preview is not a
@@ -247,6 +253,28 @@ and its embedded provisioning profile. Apple must approve the entitlement and th
 adding a key to source alone does not grant access. Do not use provisioning updates to silently switch teams.
 On 25 October 2026 the owner explicitly requested the CarPlay entitlement under STAFY COMPANY LIMITED
 (98KY9PMPX3), overriding the individual-team instruction for this task. Submission/approval is a separate step.
+
+#### After Apple approves the CarPlay navigation entitlement
+
+Do these in order; do not do them before the approval email.
+
+1. In the developer portal (a person, not a script): confirm the CarPlay Navigation capability on the App ID used for
+   development, then regenerate the STAFY development profile so it carries it. Never use
+   `-allowProvisioningUpdates` or a script to register identifiers or create profiles.
+2. Download the regenerated profile in Xcode (Settings → Accounts → Download Manual Profiles) and build the dev app
+   with the key added to its entitlements on the command line only, e.g.
+   `xcodebuild … APP_BUNDLE_ID_manotu=<dev bundle id> GIMANO_ICLOUD=NO CODE_SIGN_ENTITLEMENTS=Gimano/Resources/CarPlaySim/Gimano-NoCloud.entitlements build`.
+3. Check **both**:
+   - the signed app: `codesign -d --entitlements - --xml <DerivedData>/…/Debug-iphoneos/Gimano.app | grep carplay-maps`
+   - its embedded profile: `security cms -D -i <…>/Gimano.app/embedded.mobileprovision | grep -A1 carplay-maps`
+   Both must list `com.apple.developer.carplay-maps`. If the build fails with "Entitlement com.apple.developer.carplay-maps
+   not found and could not be included in profile", the profile was not regenerated yet.
+4. Only then move the key into the device configuration: add `com.apple.developer.carplay-maps` (true) to the four
+   files `Gimano/Resources/Gimano*.entitlements`, delete the four `[sdk=iphonesimulator*]` overrides and
+   `Resources/CarPlaySim/` (with its exclude in `project.yml`), and regenerate the project. Distribution profiles
+   (TestFlight / App Store) must be regenerated too before a store build carries the key.
+5. Then run the head-unit checks below with the CarPlay Simulator app and the iPhone, keeping their screenshots apart
+   from map previews.
 
 After approval, test destination search, favourites, alternative routes, guidance, off-route recalculation,
 arrival, stop navigation, disconnect/reconnect, locked-phone operation and audio interruptions. Verify only

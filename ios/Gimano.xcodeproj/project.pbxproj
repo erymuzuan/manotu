@@ -135,6 +135,7 @@
 		B4CE86DE6B863A4216DC9CBB /* EventWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4C9E378D4EB65DB54801244 /* EventWriterTests.swift */; };
 		B5E4BB936CB43AB8F3B02736 /* Sodium in Frameworks */ = {isa = PBXBuildFile; productRef = E58E3B89FAEE3D4A6E1D7577 /* Sodium */; };
 		B669261B5AD597274930D810 /* BackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2834FD72AD8E161736DD34BA /* BackupView.swift */; };
+		B674A4E59378ACCA3A033238 /* CarPlayLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49AD2A2967F2984ED26CA340 /* CarPlayLogic.swift */; };
 		B67F10EB0B5906889277B5EF /* EventSeal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5776811C290C67DC075A0C78 /* EventSeal.swift */; };
 		B6D56C4C7DCDCFC5C0D452D1 /* NavigationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 713DFCE9A4F204DE831154F1 /* NavigationSession.swift */; };
 		B6E2C6BFF61567EF072392D5 /* VettingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B4338B4089BA06ED2E5A9CC /* VettingUITests.swift */; };
@@ -277,6 +278,7 @@
 		4306ADA546661E0B89FA832C /* DiagnosticsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsUITests.swift; sourceTree = "<group>"; };
 		436DAC239AB19ED86D2E2144 /* negative-info-text-too-long.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "negative-info-text-too-long.json"; sourceTree = "<group>"; };
 		44EC389A12CC8DCF67AEFFF7 /* EventCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCenter.swift; sourceTree = "<group>"; };
+		49AD2A2967F2984ED26CA340 /* CarPlayLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayLogic.swift; sourceTree = "<group>"; };
 		4ADC685465E98343D7295EC3 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		4B2CFC11755024221550485E /* StorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTests.swift; sourceTree = "<group>"; };
 		4B93DE8D1395AD529E820CEA /* negative-invalid-secret-code.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "negative-invalid-secret-code.json"; sourceTree = "<group>"; };
@@ -920,6 +922,7 @@
 			children = (
 				B808992354F3382A4401441A /* CarMapViewController.swift */,
 				928ADFF057476CD471899FC2 /* CarPlayController.swift */,
+				49AD2A2967F2984ED26CA340 /* CarPlayLogic.swift */,
 				F333382323EE2C6C395876AC /* CarPlaySceneDelegate.swift */,
 			);
 			path = CarPlay;
@@ -1151,6 +1154,7 @@
 				B669261B5AD597274930D810 /* BackupView.swift in Sources */,
 				12E4EBF975FFF3BE07CD2CC3 /* CarMapViewController.swift in Sources */,
 				EB9F6650FB13037E38D0F146 /* CarPlayController.swift in Sources */,
+				B674A4E59378ACCA3A033238 /* CarPlayLogic.swift in Sources */,
 				F108474AB6DC6DB77B7BD3B7 /* CarPlaySceneDelegate.swift in Sources */,
 				9F4BCB3288CE9E4FDDC19D27 /* CloudBackup.swift in Sources */,
 				C2815545F493E0CEA5DDD4AF /* Community.swift in Sources */,

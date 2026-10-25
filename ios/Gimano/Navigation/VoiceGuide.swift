@@ -87,12 +87,40 @@ enum SoundMode: String, CaseIterable, Sendable {
 }
 
 /// Spoken guidance via AVSpeechSynthesizer, in the app language (en / ms), ducking other audio.
+///
+/// One voice for the whole app: the phone's NavigationSession owns it and the CarPlay scene never speaks, so with
+/// both scenes active a prompt is said once (through the car's speakers when CarPlay is connected). Other audio is
+/// ducked only while a prompt plays (the session is released afterwards), and nothing is said during an audio
+/// interruption such as a phone call; prompts missed then are not replayed afterwards.
 @MainActor
 final class VoiceGuide {
     var mode: SoundMode = .on
     /// App voice volume (0…1, Settings in the sound selector), applied to each utterance; the system volume is separate.
     var volume: Float = 1
+    /// Tests: called for every prompt actually handed to the synthesizer.
+    var onSpeak: ((String, Kind) -> Void)?
+    /// Tests: false keeps the synthesizer and the audio session untouched.
+    var usesAudio = true
+    /// A phone call or another app took the audio (AVAudioSession interruption).
+    private(set) var isInterrupted = false
+
+    nonisolated static let category: AVAudioSession.Category = .playback
+    nonisolated static let audioMode: AVAudioSession.Mode = .voicePrompt
+    nonisolated static let options: AVAudioSession.CategoryOptions = [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
+
     private let synth = AVSpeechSynthesizer()
+    private let finish = SpeechFinish()
+    private var interruptionObserver: NSObjectProtocol?
+
+    init() {
+        synth.delegate = finish
+        interruptionObserver = NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil,
+                                                                      queue: .main) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let began = raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) == .began
+            MainActor.assumeIsolated { self?.handleInterruption(began: began) }
+        }
+    }
 
     static var languageCode: String {
         let lang = Bundle.main.preferredLocalizations.first ?? Locale.current.language.languageCode?.identifier ?? "en"
@@ -109,13 +137,21 @@ final class VoiceGuide {
 
     enum Kind { case guidance, alert }
 
-    func speak(_ text: String, kind: Kind = .guidance) {
+    /// Whether a prompt of this kind is said in this sound mode (Alerts only keeps alerts such as tolls; Mute nothing).
+    nonisolated static func shouldSpeak(mode: SoundMode, kind: Kind, interrupted: Bool) -> Bool {
+        if interrupted { return false }
         switch (mode, kind) {
-        case (.off, _), (.alertsOnly, .guidance): return
-        default: break
+        case (.off, _), (.alertsOnly, .guidance): return false
+        default: return true
         }
+    }
+
+    func speak(_ text: String, kind: Kind = .guidance) {
+        guard Self.shouldSpeak(mode: mode, kind: kind, interrupted: isInterrupted) else { return }
+        onSpeak?(text, kind)
+        guard usesAudio else { return }
         let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
+        try? session.setCategory(Self.category, mode: Self.audioMode, options: Self.options)
         try? session.setActive(true)
         let u = AVSpeechUtterance(string: text)
         u.voice = voice
@@ -125,11 +161,26 @@ final class VoiceGuide {
         synth.speak(u)
     }
 
+    /// A call (or Siri, another navigation app…) began: stop at once and stay quiet until it ends.
+    func handleInterruption(began: Bool) {
+        isInterrupted = began
+        if began, usesAudio { synth.stopSpeaking(at: .immediate) }
+    }
+
     /// Clamped to 0…1; never fully silent while sound is on (Mute is the way to silence).
     nonisolated static func utteranceVolume(_ v: Float) -> Float { min(1, max(0.1, v)) }
 
     func stop() {
+        guard usesAudio else { return }
         synth.stopSpeaking(at: .immediate)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+}
+
+/// Releases the audio session when a prompt ends, so music and podcasts come back to full volume between prompts.
+private final class SpeechFinish: NSObject, AVSpeechSynthesizerDelegate {
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        guard !synthesizer.isSpeaking else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
