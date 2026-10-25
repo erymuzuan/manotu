@@ -182,6 +182,16 @@ class AppContainer(val app: Application) {
     val drive: DriveBackup? by lazy { my.gimano.app.data.backup.BackupDestinations.drive(BuildConfig.DRIVE_BACKUP) { DriveBackup(app) } }
     val integrity by lazy { my.gimano.app.data.vetting.Integrity(app, BuildConfig.CLOUD_PROJECT_NUMBER) }
     val vetting = my.gimano.app.data.vetting.VettingMemory(db.settings())
+    /**
+     * Restricted areas (docs/safety.md §4): the whole set, fetched anonymously and cached in a file; the phone checks
+     * pins and reports against it offline. Debug builds fall back to a fixture (src/debug/assets) while the server has none.
+     */
+    val restricted = my.gimano.app.data.safety.RestrictedAreaStore(
+        java.io.File(app.filesDir, "safety").apply { mkdirs() },
+        baseUrl = { settings.current.apiBaseUrl },
+        offline = { settings.current.demoMode },
+        debugFixture = if (BuildConfig.DEBUG) ({ runCatching { app.assets.open("restricted-areas-fixture.json").bufferedReader().use { it.readText() } }.getOrNull() }) else null,
+    )
     /** Complaints v1 (hidden until the server has /issues). */
     val issues = my.gimano.app.data.issues.IssueGate(repo)
     val updater = my.gimano.app.data.update.AppUpdater(app).also { it.onAppStart() }
@@ -230,6 +240,7 @@ class GimanoApp : Application() {
         // Events past their expiresAt are deleted on every start (also by EventExpiryWorker at the time itself).
         container.scope.launch(Dispatchers.IO) { runCatching { container.eventStore.purgeExpired() }; runCatching { container.hostStore.purgeExpired() } }
         container.scope.launch(Dispatchers.IO) { runCatching { container.movePersonalRoutes() } }
+        container.scope.launch(Dispatchers.IO) { container.restricted.loadCached(); container.restricted.refresh() }
         // Play build: never leave a Drive auto-backup job scheduled (e.g. a restored "auto backup on" setting).
         if (!BuildConfig.DRIVE_BACKUP) my.gimano.app.data.backup.BackupWorker.schedule(this, false)
     }

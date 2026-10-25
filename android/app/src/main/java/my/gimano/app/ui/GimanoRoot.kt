@@ -62,6 +62,7 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     val crashPending by container.crashes.pending.collectAsStateWithLifecycle()
     val fallback by vm.fallbackActive.collectAsStateWithLifecycle()
     val handle = remember { MapHandle() }
+    val restrictedAreas by container.restricted.areas.collectAsStateWithLifecycle()
     // Events (docs/events.md): the open event, its selected stop, and the import dialogs' "open this event".
     val eventVersion by container.eventStore.version.collectAsStateWithLifecycle()
     val eventScreen = ui.screen as? Screen.EventDetail
@@ -140,6 +141,7 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
                 is my.gimano.app.ui.contribute.ContribEvent.Message -> { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(context.getString(e.res)) }
                 is my.gimano.app.ui.contribute.ContribEvent.Text -> { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(e.text) }
                 is my.gimano.app.ui.contribute.ContribEvent.ShowPlace -> vm.showPlace(e.summary)
+                my.gimano.app.ui.contribute.ContribEvent.Close -> vm.back()
             }
         }
     }
@@ -267,6 +269,11 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
                 onAlertClick = { id -> if (screen == Screen.Home || screen == Screen.PlaceCard) { vm.goHome(); vm.selectAlert(id) } },
                 onRouteClick = { id -> if (screen == Screen.RoutePreview) vm.selectRoute(id) },
                 onPrivateClick = { id -> if (screen == Screen.Home || screen == Screen.PlaceCard) vm.showPrivate(id) },
+                restricted = restrictedAreas,
+                // docs/safety.md §4 D: tapping inside a restricted area explains it (no names, no details).
+                onRestrictedClick = {
+                    if (screen == Screen.Home || screen == Screen.PlaceCard || screen == Screen.PinActions) { vm.openRestrictedSheet(true); true } else false
+                },
             )
             when (screen) {
                 Screen.Home -> {
@@ -286,7 +293,11 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
                 Screen.RoutePreview -> ui.plan?.let { RoutePreviewOverlay(it, settings, vm, handle, onRequestLocation) }
                 Screen.Navigating -> NavigationOverlay(nav, ui, settings, vm)
                 is Screen.Search -> SearchScreen(ui, screen.purpose, vm, onMic)
-                Screen.Settings -> SettingsScreen(settings, vm, fallback, ui.user?.displayName, onBackup = { vm.open(Screen.Backup) }, onMyFeedback = { vm.open(Screen.MyFeedback) }, onTheme = { vm.open(Screen.Theme) }, onAccount = { vm.open(Screen.Account) }, onAbout = { vm.open(Screen.About) })
+                Screen.Settings -> SettingsScreen(settings, vm, fallback, ui.user?.displayName, onBackup = { vm.open(Screen.Backup) }, onMyFeedback = { vm.open(Screen.MyFeedback) }, onTheme = { vm.open(Screen.Theme) }, onAccount = { vm.open(Screen.Account) }, onAbout = { vm.open(Screen.About) }, onSafety = { vm.open(Screen.Safety) })
+                Screen.Safety -> my.gimano.app.ui.safety.SafetySettingsScreen(settings, onBack = vm::back,
+                    onReminder = { vm.setSafetyReminder(it) }, onPreview = vm::previewSafetyCard,
+                    onReadAgain = { vm.openAgreement(AgreementMode.REVIEW) },
+                    onDebugReset = if (my.gimano.app.BuildConfig.DEBUG) vm::debugResetSafety else null)
                 Screen.About -> my.gimano.app.ui.about.AboutScreen(container, live = !fallback && !settings.demoMode, onBack = vm::back, onLicences = { vm.open(Screen.Licences) })
                 Screen.Licences -> my.gimano.app.ui.about.LicencesScreen(onBack = vm::back)
                 Screen.Account -> my.gimano.app.ui.account.AccountScreen(container, vm, ui.user, settings.displayName)
@@ -331,6 +342,13 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
                 Screen.Planned -> my.gimano.app.ui.planned.PlannedDrivesScreen(pvm, settings.use24h, onBack = vm::back,
                     onAdd = { vm.openSearch(SearchPurpose.PLAN_DRIVE) }, onGo = vm::goPlanned)
             }
+            // Started while moving: "Pandu dengan selamat…" for 5 s under the turn banner, nothing to tap.
+            if (ui.safetyBanner && screen == Screen.Navigating) {
+                my.gimano.app.ui.safety.SafetyBanner(Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(top = 150.dp, start = 16.dp, end = 16.dp))
+            }
+            ui.safetyCard?.let { card ->
+                my.gimano.app.ui.safety.SafetyReminderCard(card, onGo = vm::confirmSafetyCard, onDismiss = vm::dismissSafetyCard)
+            }
             // Below the right-hand FAB column (3 × 64 dp + gaps) so it never covers controls.
             // While driving, below the End + Sound column (180–320 dp) so a sound toast never hides the new FAB state.
             SnackbarHost(snackbar, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars)
@@ -346,7 +364,7 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     val lang = container.lang().tag.take(2)
     when (val d = upd.decision) {
         is my.gimano.app.core.update.UpdateDecision.Available ->
-            if ((!d.snoozed || forceUpdateSheet) && updateSheetOpen && ui.screen == Screen.Home && !nav.active) my.gimano.app.ui.update.UpdateSheet(
+            if ((!d.snoozed || forceUpdateSheet) && updateSheetOpen && ui.screen == Screen.Home && !nav.active && ui.safetyAgreement == null) my.gimano.app.ui.update.UpdateSheet(
                 d.manifest, upd, lang, onUpdate = { scope.launch { container.updater.updateNow() } },
                 onLater = { updateSheetOpen = false; forceUpdateSheet = false; container.updater.later() },
             )
@@ -360,7 +378,7 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     LaunchedEffect(upd.justUpdatedTo) {
         upd.justUpdatedTo?.let { v -> snackbar.showSnackbar(context.getString(R.string.updated_to, v)); container.updater.dismissUpdatedNote() }
     }
-    if (crashPending.isNotEmpty() && ui.screen == Screen.Home && !nav.active) my.gimano.app.ui.feedback.CrashSheet(container.crashes, crashPending)
+    if (crashPending.isNotEmpty() && ui.screen == Screen.Home && !nav.active && ui.safetyAgreement == null) my.gimano.app.ui.feedback.CrashSheet(container.crashes, crashPending)
     ui.askPrecise?.let { my.gimano.app.ui.common.PreciseLocationDialog(onAllow = onRequestPrecise, onKeep = vm::onPreciseAnswered) }
     if (ui.precision == my.gimano.app.core.location.LocationPrecision.APPROXIMATE && (ui.screen == Screen.Home || ui.screen == Screen.Navigating)) {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 12.dp).padding(top = if (ui.screen == Screen.Navigating) 250.dp else 96.dp)) {
@@ -380,7 +398,7 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     if (feedbackDraft.open) my.gimano.app.ui.feedback.FeedbackSheet(fvm, feedbackDraft, here = { vm.here().let { it.lat to it.lng } }, onSend = {
         val h = vm.here(); fvm.send(h.lat, h.lng)
     })
-    if (!settings.privacyCardDismissed && screen == Screen.Home) {
+    if (!settings.privacyCardDismissed && screen == Screen.Home && ui.safetyAgreement == null) {
         AlertDialog(
             onDismissRequest = vm::dismissPrivacyCard,
             text = { my.gimano.app.ui.common.PrivacyCard(onBackup = { vm.dismissPrivacyCard(); vm.open(Screen.Backup) }) },
@@ -399,6 +417,19 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
             onRoadProblem = if (ui.issuesAvailable && screen == Screen.Navigating) vm::submitRoadProblem else null)
     }
     ui.departureSlots?.let { slots -> DepartureDialog(slots, settings.use24h, vm) }
+    // Safety (docs/safety.md): the map's restricted-area sheet, "agree first", and the agreement itself on top of all.
+    if (ui.restrictedSheet) my.gimano.app.ui.safety.RestrictedAreaSheet(onClose = { vm.openRestrictedSheet(false) })
+    if (ui.safetyNeedAgreement) my.gimano.app.ui.safety.NeedAgreementSheet(
+        onRead = { vm.openAgreement(AgreementMode.BEFORE_DRIVE) }, onLater = vm::dismissNeedAgreement)
+    ui.safetyAgreement?.let { mode ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { if (mode == AgreementMode.REVIEW) vm.closeAgreement() },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = mode == AgreementMode.REVIEW,
+                dismissOnClickOutside = false, decorFitsSystemWindows = false),
+        ) {
+            my.gimano.app.ui.safety.SafetyAgreementScreen(mode, onAgree = vm::agreeSafety, onNotNow = vm::closeAgreement)
+        }
+    }
 }
 
 @Composable

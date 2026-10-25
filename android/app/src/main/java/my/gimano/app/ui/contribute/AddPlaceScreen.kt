@@ -66,6 +66,8 @@ fun AddPlaceScreen(cvm: ContributeViewModel, handle: MapHandle, onBack: () -> Un
         AddStep.DETAILS -> DetailsStep(s, cvm)
         AddStep.VISIBILITY -> VisibilityStep(s, cvm)
     }
+    // docs/safety.md §4 A: a public pin in a restricted area gets this sheet instead of the form.
+    if (s.blockedSheet) my.gimano.app.ui.safety.BlockedPinSheet(onMove = cvm::blockedMove, onPrivate = cvm::blockedPrivate, onCancel = cvm::blockedCancel)
 }
 
 @Composable
@@ -98,7 +100,7 @@ private fun PinStep(s: AddPlaceState, cvm: ContributeViewModel, handle: MapHandl
             Column(Modifier.padding(16.dp).windowInsetsPadding(WindowInsets.navigationBars)) {
                 Text(s.address.ifBlank { "%.5f, %.5f".format(s.pin.lat, s.pin.lng) }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.text)
                 Spacer(Modifier.height(12.dp))
-                Button(onClick = { cvm.step(AddStep.DETAILS) }, Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(Radius.md),
+                Button(onClick = cvm::nextFromPin, Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(Radius.md),
                     colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn)) { Text(stringResource(R.string.next), style = GimanoType.button) }
             }
         }
@@ -120,9 +122,13 @@ private fun DetailsStep(s: AddPlaceState, cvm: ContributeViewModel) {
     Column(Modifier.fillMaxSize().background(c.background)) {
         TopBar(stringResource(R.string.add_a_place)) { cvm.step(AddStep.PIN) }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp).imePadding()) {
+            // B: near a restricted area (public): the note, no photos, a moderator checks it first.
+            if (s.nearArea) my.gimano.app.ui.safety.NearRestrictedNote(Modifier.padding(bottom = 12.dp))
             OutlinedTextField(s.name, { v -> cvm.update { it.copy(name = v.take(80)) } }, Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text(stringResource(R.string.place_name_required)) }, shape = RoundedCornerShape(Radius.md),
                 textStyle = LocalTextStyle.current.copy(fontSize = 18.sp, fontWeight = FontWeight.ExtraBold))
+            // C: security details in a public name (a private place never leaves the phone).
+            if (!s.privateOnly && cvm.sensitive.hasMatch(s.name)) my.gimano.app.ui.safety.SensitiveWordsWarning({ cvm.removeSensitive("name") }, Modifier.padding(top = 6.dp))
             Section(stringResource(R.string.category))
             PLACE_CATEGORIES.chunked(4).forEach { row ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -143,16 +149,18 @@ private fun DetailsStep(s: AddPlaceState, cvm: ContributeViewModel) {
                 }
             }
             Section(stringResource(R.string.photos))
+            val photosOn = !s.nearArea
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
+                OutlinedButton(enabled = photosOn, onClick = {
                     val f = my.gimano.app.data.places.PhotoPrep.newCameraFile(context)
                     cameraUri = my.gimano.app.data.places.PhotoPrep.cameraUri(context, f)
                     camera.launch(cameraUri!!)
                 }, shape = RoundedCornerShape(Radius.md)) { Icon(Icons.Filled.PhotoCamera, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.camera), fontWeight = FontWeight.ExtraBold) }
-                OutlinedButton(onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, shape = RoundedCornerShape(Radius.md)) {
+                OutlinedButton(enabled = photosOn, onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, shape = RoundedCornerShape(Radius.md)) {
                     Icon(Icons.Filled.PhotoLibrary, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.gallery), fontWeight = FontWeight.ExtraBold)
                 }
             }
+            if (!photosOn) Text(stringResource(R.string.restricted_b_photos_off), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.textMuted, modifier = Modifier.padding(top = 4.dp))
             if (s.photos.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 items(s.photos) { u ->
                     Box {
@@ -169,6 +177,7 @@ private fun DetailsStep(s: AddPlaceState, cvm: ContributeViewModel) {
             OutlinedTextField(s.website, { v -> cvm.update { it.copy(website = v.take(200)) } }, Modifier.fillMaxWidth().padding(top = 6.dp), singleLine = true, label = { Text(stringResource(R.string.website)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), shape = RoundedCornerShape(Radius.md))
             OutlinedTextField(s.description, { v -> cvm.update { it.copy(description = v.take(500)) } }, Modifier.fillMaxWidth().padding(top = 6.dp), minLines = 2, label = { Text(stringResource(R.string.description)) }, shape = RoundedCornerShape(Radius.md))
+            if (!s.privateOnly && cvm.sensitive.hasMatch(s.description)) my.gimano.app.ui.safety.SensitiveWordsWarning({ cvm.removeSensitive("description") }, Modifier.padding(top = 6.dp))
             Section(stringResource(R.string.amenities))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 AMENITIES.forEach { a ->
@@ -271,7 +280,10 @@ private fun VisibilityStep(s: AddPlaceState, cvm: ContributeViewModel) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(s.name, style = GimanoType.title, color = c.text)
             BigChoice(Icons.Filled.Lock, stringResource(R.string.just_for_me), stringResource(R.string.just_for_me_desc), enabled = !s.saving) { cvm.savePrivate() }
-            BigChoice(Icons.Filled.Groups, stringResource(R.string.share_everyone), stringResource(R.string.share_everyone_desc), enabled = !s.saving) { cvm.savePublic() }
+            // After A's "Simpan untuk saya sahaja" there is no public choice. B/C: held, so it says "Hantar untuk semakan".
+            if (!s.privateOnly) BigChoice(Icons.Filled.Groups,
+                stringResource(if (cvm.willBeHeld(s)) R.string.restricted_send_review else R.string.share_everyone),
+                stringResource(R.string.share_everyone_desc), enabled = !s.saving) { cvm.savePublic() }
             if (s.saving) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.brand, trackColor = c.surfaceAlt)
             s.error?.let { Text(if (it == "duplicate") stringResource(R.string.duplicate_place) else it, color = c.report, fontWeight = FontWeight.Bold) }
         }

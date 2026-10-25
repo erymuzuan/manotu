@@ -43,6 +43,7 @@ class SwitchingRepository(
             if (!my.gimano.app.core.net.Reachability.isGatewayDown(e.code())) {
                 policy.onSuccess()
                 if (e.code() == 403) Moderation.reportBanned()   // banned account: reports and votes are refused
+                RestrictedAreaException.from(e)?.let { throw it }   // 422 restricted_area: the server's own words
                 throw e
             }
             if (!policy.onFailure(my.gimano.app.core.net.AppForeground.foreground, System.currentTimeMillis())) throw e
@@ -85,6 +86,8 @@ class SwitchingRepository(
         } catch (e: retrofit2.HttpException) {
             // docs/api.md: a moderator-banned account gets 403 on every public contribution. Say so plainly (once).
             if (e.code() == 403) Moderation.reportBanned()
+            // docs/api.md "Restricted areas": 422 restricted_area carries a localized detail the UI shows as is.
+            RestrictedAreaException.from(e)?.let { throw it }
             throw e
         }
 

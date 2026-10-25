@@ -18,6 +18,7 @@ import my.gimano.app.R
 import my.gimano.app.core.geo.GeoPoint
 import my.gimano.app.core.places.OpeningHours
 import my.gimano.app.core.places.RatingSummary
+import my.gimano.app.core.safety.RestrictedZone
 import my.gimano.app.data.model.*
 import my.gimano.app.data.places.ContributionLog
 import my.gimano.app.data.places.PhotoPrep
@@ -45,7 +46,15 @@ data class AddPlaceState(
     val saving: Boolean = false,
     val duplicate: Place? = null,
     val error: String? = null,
+    /** docs/safety.md §4: where the pin is relative to the restricted areas (checked on the phone, offline). */
+    val zone: RestrictedZone = RestrictedZone.CLEAR,
+    /** A: "Tidak boleh dikongsi di sini" instead of the form. */
+    val blockedSheet: Boolean = false,
+    /** "Simpan untuk saya sahaja" from A: a private place (allowed anywhere, photos included), never public. */
+    val privateOnly: Boolean = false,
 ) {
+    /** B: near an area, sharing publicly: a note, no photos, held for a moderator. */
+    val nearArea get() = zone == RestrictedZone.NEAR && !privateOnly
     val hours: String? get() = if (!hoursEnabled) null else OpeningHours.build(week, open247).ifBlank { null }
     val canContinue get() = name.isNotBlank() && category != null
 }
@@ -68,6 +77,8 @@ data class ReviewsState(
 
 sealed interface ContribEvent {
     data class Message(val res: Int) : ContribEvent
+    /** Leave the add-a-place flow ("Batal" on the blocked-pin sheet). */
+    data object Close : ContribEvent
     data class Text(val text: String) : ContribEvent
     data class ShowPlace(val summary: PlaceSummary) : ContribEvent
 }
@@ -84,7 +95,9 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     // ---------------------------------------------------------------- add a place
 
     fun startAdd(at: GeoPoint, name: String) {
-        _add.value = AddPlaceState(pin = at, name = name)
+        // Long-press / "Tambah tempat" inside a restricted area goes straight to A.
+        val zone = c.restricted.zone(at)
+        _add.value = AddPlaceState(pin = at, name = name, zone = zone, blockedSheet = zone == RestrictedZone.BLOCKED)
         onPinMoved(at)
     }
 
@@ -92,7 +105,7 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
 
     /** The map moves under a fixed centre pin; the address follows (reverse geocoded). */
     fun onPinMoved(p: GeoPoint) {
-        _add.update { it.copy(pin = p) }
+        _add.update { it.copy(pin = p, zone = c.restricted.zone(p)) }
         geoJob?.cancel()
         geoJob = viewModelScope.launch {
             delay(350)
@@ -102,6 +115,43 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     }
 
     fun update(f: (AddPlaceState) -> AddPlaceState) = _add.update(f)
+
+    /** Pin step "Next": a pin in a restricted area (or within blockM) gets A instead of the form. */
+    fun nextFromPin() {
+        val s = _add.value
+        if (!s.privateOnly && c.restricted.zone(s.pin) == RestrictedZone.BLOCKED) _add.update { it.copy(blockedSheet = true) }
+        else step(AddStep.DETAILS)
+    }
+
+    /** A · "Alih pin": back to the map, the pin stays where it was. */
+    fun blockedMove() = _add.update { it.copy(blockedSheet = false, step = AddStep.PIN) }
+
+    /** A · "Simpan untuk saya sahaja": a private place stays on the phone, so it is allowed anywhere. */
+    fun blockedPrivate() = _add.update { it.copy(blockedSheet = false, privateOnly = true, step = AddStep.DETAILS) }
+
+    /** A · "Batal". */
+    fun blockedCancel() { _add.value = AddPlaceState(); _events.tryEmit(ContribEvent.Close) }
+
+    /** The server's security terms (C), matched on the phone. */
+    val sensitive get() = c.restricted.terms.value
+
+    /** C · "Buang ayat ini". */
+    fun removeSensitive(field: String) = _add.update {
+        when (field) {
+            "name" -> it.copy(name = sensitive.removeSentences(it.name))
+            else -> it.copy(description = sensitive.removeSentences(it.description))
+        }
+    }
+
+    /** C on a public place: the name or description mentions security details (held for a moderator). */
+    fun sensitiveText(s: AddPlaceState): Boolean = sensitive.hasMatch(s.name) || sensitive.hasMatch(s.description)
+
+    /** Public sharing will be held for a moderator (B or C): the button reads "Hantar untuk semakan". */
+    fun willBeHeld(s: AddPlaceState): Boolean = s.nearArea || sensitiveText(s)
+
+    /** The user-facing message for a failed write: the server's own words for a restricted area, else [fallback]. */
+    private fun failure(e: Throwable, fallback: Int): ContribEvent =
+        if (e is my.gimano.app.data.repo.RestrictedAreaException) ContribEvent.Text(e.detail) else ContribEvent.Message(fallback)
     fun showExisting(p: Place) { _add.value = AddPlaceState(); _events.tryEmit(ContribEvent.ShowPlace(p.summary())) }
     fun step(s: AddStep) = _add.update { it.copy(step = s, error = null) }
     fun addPhotos(uris: List<Uri>) = _add.update { it.copy(photos = (it.photos + uris).distinct().take(10)) }
@@ -135,7 +185,10 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     fun savePublic(force: Boolean = false) {
         if (!termsOk { savePublic(force) }) return
         val s = _add.value
-        if (!s.canContinue) return
+        if (!s.canContinue || s.privateOnly) return
+        // Checked again at the moment of sending (the areas may have arrived since the pin step).
+        if (c.restricted.zone(s.pin) == RestrictedZone.BLOCKED) { _add.update { it.copy(blockedSheet = true, zone = RestrictedZone.BLOCKED) }; return }
+        val near = c.restricted.zone(s.pin) == RestrictedZone.NEAR
         _add.update { it.copy(saving = true, error = null, duplicate = if (force) null else it.duplicate) }
         viewModelScope.launch {
             try {
@@ -143,10 +196,11 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
                     s.name.trim(), s.category!!, s.pin.lat, s.pin.lng, s.address.ifBlank { null }, s.description.ifBlank { null },
                     s.phone.ifBlank { null }, s.website.ifBlank { null }, s.hours, s.amenities.toList().ifEmpty { null },
                 ))
-                s.photos.forEach { u -> PhotoPrep.decode(c.app, u)?.let { b -> runCatching { c.repo.uploadPhoto(p.id, PhotoPrep.jpeg(b), null) }.onSuccess { ph -> log.photo(ph.id, ph.url) } } }
+                // Photos are refused within reviewM of a restricted area (docs/safety.md B): never sent from there.
+                if (!near) s.photos.forEach { u -> PhotoPrep.decode(c.app, u)?.let { b -> runCatching { c.repo.uploadPhoto(p.id, PhotoPrep.jpeg(b), null) }.onSuccess { ph -> log.photo(ph.id, ph.url) } } }
                 s.photos.forEach { PhotoPrep.deleteIfCameraTemp(c.app, it) }
                 _add.value = AddPlaceState()
-                _events.tryEmit(ContribEvent.Message(R.string.place_added_public))
+                _events.tryEmit(ContribEvent.Message(if (p.heldForReview) R.string.restricted_held else R.string.place_added_public))
                 _events.tryEmit(ContribEvent.ShowPlace(p.summary()))
             } catch (e: HttpException) {
                 val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
@@ -157,6 +211,8 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
                 } else {
                     _add.update { it.copy(saving = false, error = problemDetail(body) ?: "HTTP ${e.code()}") }
                 }
+            } catch (e: my.gimano.app.data.repo.RestrictedAreaException) {
+                _add.update { it.copy(saving = false, error = e.detail) }   // 422 restricted_area: the server's own words
             } catch (e: Exception) {
                 _add.update { it.copy(saving = false, error = e.message ?: e.javaClass.simpleName) }
             }
@@ -197,7 +253,8 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
                 )
             }
             .onFailure { e ->
-                val msg = (e as? retrofit2.HttpException)?.response()?.errorBody()?.string()?.let(::problemDetail)
+                val msg = (e as? my.gimano.app.data.repo.RestrictedAreaException)?.detail
+                    ?: (e as? retrofit2.HttpException)?.response()?.errorBody()?.string()?.let(::problemDetail)
                 _events.tryEmit(if (msg != null) ContribEvent.Text(msg) else ContribEvent.Message(R.string.action_failed))
             }
     }
@@ -210,7 +267,7 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     private fun suggestEditNow(placeId: String, body: SuggestEditRequest) = viewModelScope.launch {
         runCatching { c.repo.suggestEdit(placeId, body) }
             .onSuccess { _events.tryEmit(ContribEvent.Message(R.string.thanks_suggestion)) }
-            .onFailure { _events.tryEmit(ContribEvent.Message(R.string.action_failed)) }
+            .onFailure { _events.tryEmit(failure(it, R.string.action_failed)) }
     }
 
     // ---------------------------------------------------------------- reviews & photos
@@ -237,6 +294,12 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     fun closeReview() = _reviews.update { it.copy(draft = null) }
     fun updateDraft(f: (ReviewDraft) -> ReviewDraft) = _reviews.update { it.copy(draft = it.draft?.let(f)) }
 
+    /** C in a review: "Buang ayat ini". */
+    fun removeSensitiveFromReview() = updateDraft { it.copy(text = sensitive.removeSentences(it.text)) }
+
+    /** Photos of a public place are off within reviewM of a restricted area (the server refuses them too). */
+    fun photosAllowedAt(lat: Double, lng: Double): Boolean = c.restricted.zone(GeoPoint(lat, lng)) == RestrictedZone.CLEAR
+
     /** Review photos upload as soon as they are picked (≤ 5); the review then references them. */
     fun addReviewPhotos(uris: List<Uri>) {
         val placeId = _reviews.value.placeId ?: return
@@ -253,7 +316,9 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
 
     private suspend fun upload(placeId: String, u: Uri): Photo? {
         val b = PhotoPrep.decode(c.app, u) ?: return null
-        return runCatching { c.repo.uploadPhoto(placeId, PhotoPrep.jpeg(b), null) }.getOrNull()?.also {
+        return runCatching { c.repo.uploadPhoto(placeId, PhotoPrep.jpeg(b), null) }
+            .onFailure { e -> if (e is my.gimano.app.data.repo.RestrictedAreaException) _events.tryEmit(ContribEvent.Text(e.detail)) }
+            .getOrNull()?.also {
             log.photo(it.id, it.url)
             PhotoPrep.deleteIfCameraTemp(c.app, u)   // uploaded: the camera's temp file is no longer needed
         }
@@ -268,14 +333,14 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
             runCatching { if (d.editingId != null) c.repo.updateReview(d.editingId, body) else c.repo.createReview(place.id, body) }
                 .onSuccess { r ->
                     myReviewIds += r.id
-                    log.review(r.id, place.name)
+                    log.review(r.id, place.name, held = r.heldForReview)
                     _reviews.update { it.copy(draft = null) }
-                    _events.tryEmit(ContribEvent.Message(R.string.review_posted))
+                    _events.tryEmit(ContribEvent.Message(if (r.heldForReview) R.string.restricted_held else R.string.review_posted))
                     loadReviews(place)
                 }
                 .onFailure { e ->
                     updateDraft { it.copy(sending = false) }
-                    _events.tryEmit(ContribEvent.Message(if ((e as? HttpException)?.code() == 409) R.string.review_one_per_place else R.string.action_failed))
+                    _events.tryEmit(failure(e, if ((e as? HttpException)?.code() == 409) R.string.review_one_per_place else R.string.action_failed))
                 }
         }
     }

@@ -89,6 +89,8 @@ sealed interface Screen {
     data class RouteBuilder(val forEvent: Boolean) : Screen
     /** "Laluan saya": personal routes on this phone. */
     data object MyRoutes : Screen
+    /** Settings › Keselamatan (docs/safety.md §3). */
+    data object Safety : Screen
 }
 
 data class PlaceSel(
@@ -201,9 +203,31 @@ data class UiState(
     val stillClosed: my.gimano.app.data.model.Issue? = null,
     /** Issues about the place on the card (badges). */
     val placeIssues: List<my.gimano.app.data.model.Issue> = emptyList(),
+    /** Safety agreement on screen (null = not shown). */
+    val safetyAgreement: AgreementMode? = null,
+    /** "Setuju dahulu untuk mula memandu" sheet. */
+    val safetyNeedAgreement: Boolean = false,
+    val safetyCard: SafetyCard? = null,
+    /** "Pandu dengan selamat. Patuhi undang-undang jalan raya." for 5 s (started while moving). */
+    val safetyBanner: Boolean = false,
+    /** The map's "Kawasan larangan" sheet (tap inside a restricted area). */
+    val restrictedSheet: Boolean = false,
 )
 
 data class PreciseAsk(val beforeNav: Boolean)
+
+/** Why the safety agreement is on screen (docs/safety.md §1). */
+enum class AgreementMode {
+    /** App start, before the location prompt (agreedVersion < VERSION). */
+    FIRST_RUN,
+    /** "Baca dan setuju" from the "Setuju dahulu" sheet: on agree, navigation starts. */
+    BEFORE_DRIVE,
+    /** Settings › Keselamatan › "Baca semula". */
+    REVIEW,
+}
+
+/** The "Pandu dengan selamat" card; [preview] = from Settings (closes without starting anything). */
+data class SafetyCard(val destination: String?, val durationS: Double?, val preview: Boolean = false)
 
 /** State of "Pilih pada peta" while the user moves the map. */
 data class PickState(
@@ -260,7 +284,10 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
     val settingsState = settings.state
     val fallbackActive = repo.fallbackActive
 
-    private val _ui = MutableStateFlow(UiState())
+    private val _ui = MutableStateFlow(UiState(
+        // docs/safety.md §1: after the splash and before the location prompt, once per agreement version.
+        safetyAgreement = if (my.gimano.app.core.safety.SafetyAgreement.needsAgreement(c.settings.current.safetyAgreedVersion)) AgreementMode.FIRST_RUN else null,
+    ))
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 8)
@@ -290,6 +317,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                 }
                 boundsFlow.value?.let { loadLive(it) }
                 c.issues.reprobeIfUnknown()   // started offline: show complaints once the server answers
+                c.restricted.refresh()   // daily at most (every 30 min while there is no data); no request otherwise
                 runCatching { c.feedback.retryDue() }
             }
         }
@@ -380,6 +408,11 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         c.lastFix = f.point
         c.lastFixAccuracyM = f.accuracyM?.toInt()
         _ui.update { it.copy(myLocation = f) }
+        // The car started moving while the safety card is open: close it and start at once with the banner.
+        if (_ui.value.safetyCard?.preview == false && my.gimano.app.core.safety.SafetyReminder.isMoving(speedKmh(f))) {
+            _ui.update { it.copy(safetyCard = null) }
+            if (beginNavigation()) showSafetyBanner()
+        }
         if (_ui.value.plan?.originSource == OriginSource.UNKNOWN && _ui.value.screen == Screen.RoutePreview) resolveOrigin()
         // A drive ended while still moving: ask "Kenapa tak ikut laluan?" once the phone is stopped.
         if (pendingDeviation != null && !nav.value.active) maybeAskDeviation(f.speedMps?.let { (it * 3.6f).toInt() } ?: 0)
@@ -554,6 +587,8 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         // A report is about where the user is: never place it at the map centre.
         val p = myFreshLocation() ?: run { _ui.update { it.copy(reportOpen = false) }; _events.tryEmit(UiEvent.Toast(R.string.report_needs_location)); return }
         _ui.update { it.copy(reportOpen = false) }
+        // docs/safety.md §4: inside a restricted area (≤ blockM) a road report is never sent.
+        if (reportRefusedHere(p)) return
         viewModelScope.launch {
             runCatching { repo.createReport(CreateReportRequest(type, subtype, p.lat, p.lng, fix?.bearing?.toDouble(), comment?.takeIf { it.isNotBlank() })) }
                 .onSuccess { r ->
@@ -561,8 +596,17 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                     _ui.update { s -> s.copy(alerts = s.alerts.filterNot { it.id == r.id } + r) }
                     _events.tryEmit(UiEvent.Toast(R.string.report_sent))
                 }
-                .onFailure { _events.tryEmit(UiEvent.Toast(R.string.report_failed)) }
+                .onFailure { e ->
+                    _events.tryEmit(if (e is my.gimano.app.data.repo.RestrictedAreaException) UiEvent.ToastText(e.detail) else UiEvent.Toast(R.string.report_failed))
+                }
         }
+    }
+
+    /** True (and says so) when [p] is inside a restricted area or within its `blockM`: the report is not sent. */
+    private fun reportRefusedHere(p: GeoPoint): Boolean {
+        if (c.restricted.zone(p) != my.gimano.app.core.safety.RestrictedZone.BLOCKED) return false
+        _events.tryEmit(UiEvent.Toast(R.string.restricted_report_blocked))
+        return true
     }
 
     // Leaving the app pauses (cancels) the route-preview countdown; coming back probes the live server at once.
@@ -592,6 +636,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         val kind = my.gimano.app.core.issues.IssueSupport.roadProblemKinds[type] ?: return
         val fix = nav.value.fix ?: _ui.value.myLocation
         val p = myFreshLocation() ?: run { _events.tryEmit(UiEvent.Toast(R.string.report_needs_location)); return }
+        if (reportRefusedHere(p)) return
         val heading = fix?.bearing?.toDouble() ?: nav.value.progress?.bearing
         val s = nav.value
         val route = s.route
@@ -649,7 +694,8 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
             if (r != null) {
                 runCatching { my.gimano.app.data.places.ContributionLog(c.db.outbox()).report(r.id, r.kind) }
                 _events.tryEmit(UiEvent.Toast(okMsg)); after(r)
-            } else _events.tryEmit(UiEvent.Toast(if (_ui.value.issuesAvailable) R.string.report_failed else R.string.issues_unavailable))
+            } else c.issues.takeRestricted()?.let { _events.tryEmit(UiEvent.ToastText(it)) }
+                ?: _events.tryEmit(UiEvent.Toast(if (_ui.value.issuesAvailable) R.string.report_failed else R.string.issues_unavailable))
         }
     }
 
@@ -1659,20 +1705,112 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
     }
 
     fun startNavigation(skipPreciseCheck: Boolean = false) {
+        // docs/safety.md §1: no turn-by-turn before the safety agreement ("Setuju dahulu untuk mula memandu").
+        if (!safetyAgreed()) {
+            _ui.update { it.copy(safetyNeedAgreement = true, plan = it.plan?.copy(countdownRunning = false)) }
+            return
+        }
         if (!skipPreciseCheck && !repo.isDemo && c.locations.precision() == my.gimano.app.core.location.LocationPrecision.APPROXIMATE) {
             _ui.update { it.copy(askPrecise = PreciseAsk(beforeNav = true), plan = it.plan?.copy(countdownRunning = false)) }
             return
         }
         val plan = _ui.value.plan ?: return
-        // Never turn-by-turn from a point that isn't the live GPS position (chosen start → "Pandu ke … dahulu").
         if (goActionFor(plan) != GoAction.NAVIGATE) return
         val route = plan.selected ?: return
+        // docs/safety.md §2: the reminder at every START (never on resume/reroute: those don't come through here).
+        when (my.gimano.app.core.safety.SafetyReminder.onStart(settings.current.safetyReminderEnabled, speedKmh(_ui.value.myLocation))) {
+            my.gimano.app.core.safety.ReminderAction.CARD ->
+                _ui.update { it.copy(safetyCard = SafetyCard(plan.destination.name, route.effectiveDurationS), plan = plan.copy(countdownRunning = false)) }
+            my.gimano.app.core.safety.ReminderAction.BANNER -> if (beginNavigation()) showSafetyBanner()
+            my.gimano.app.core.safety.ReminderAction.NONE -> beginNavigation()
+        }
+    }
+
+    /** Starts guidance for the previewed route; false when there is nothing (left) to start. */
+    private fun beginNavigation(): Boolean {
+        val plan = _ui.value.plan ?: return false
+        // Never turn-by-turn from a point that isn't the live GPS position (chosen start → "Pandu ke … dahulu").
+        if (goActionFor(plan) != GoAction.NAVIGATE) return false
+        val route = plan.selected ?: return false
         // Release: never fake a drive just because GPS has no fix yet (debug keeps that for desk testing).
         val simulate = repo.isDemo || settings.current.simulateDrive || (my.gimano.app.BuildConfig.DEBUG && _ui.value.myLocation == null)
         c.navigation.start(route.copy(vehicle = route.vehicle ?: plan.mode.wire), plan.destination, plan.request, simulate, plan.stops,
             detour = simulate && my.gimano.app.BuildConfig.DEBUG && settings.current.simulateDetour)
         _ui.update { it.copy(screen = Screen.Navigating, following = true, navExpanded = false, plan = plan.copy(countdownRunning = false)) }
+        return true
     }
+
+    // --- Safety (docs/safety.md) -----------------------------------------------------------------
+
+    /** Agreed in this session, before the (asynchronous) save lands. */
+    @Volatile private var agreedNow = false
+
+    fun safetyAgreed(): Boolean = agreedNow || !my.gimano.app.core.safety.SafetyAgreement.needsAgreement(settings.current.safetyAgreedVersion)
+
+    /** A fix's speed (km/h), or null when unknown or older than 10 s (a stale speed says nothing about now). */
+    private fun speedKmh(f: Fix?): Double? =
+        f?.takeIf { System.currentTimeMillis() - it.timeMs < 10_000 }?.speedMps?.let { it * 3.6 }
+
+    /** "Saya faham dan setuju": stored on this phone only (version + date); a drive waiting for it starts now. */
+    fun agreeSafety() {
+        val mode = _ui.value.safetyAgreement
+        agreedNow = true
+        viewModelScope.launch { settings.agreeSafety(my.gimano.app.core.safety.SafetyAgreement.VERSION, Instant.now().toString()) }
+        _ui.update { it.copy(safetyAgreement = null) }
+        if (mode == AgreementMode.BEFORE_DRIVE) startNavigation()
+    }
+
+    /** "Belum setuju" (or closing a re-read): the map, search and route preview keep working. */
+    fun closeAgreement() = _ui.update { it.copy(safetyAgreement = null) }
+
+    fun openAgreement(mode: AgreementMode) = _ui.update { it.copy(safetyAgreement = mode, safetyNeedAgreement = false) }
+
+    fun dismissNeedAgreement() = _ui.update { it.copy(safetyNeedAgreement = false) }
+
+    /** "Faham, mula pandu" (with "Jangan tunjuk lagi" ticked or not). */
+    fun confirmSafetyCard(dontShowAgain: Boolean) {
+        val card = _ui.value.safetyCard ?: return
+        _ui.update { it.copy(safetyCard = null) }
+        if (dontShowAgain) {
+            viewModelScope.launch { settings.setSafetyReminder(false, Instant.now().toString()) }
+            _events.tryEmit(UiEvent.Toast(R.string.safety_card_off_toast))
+        }
+        if (!card.preview) beginNavigation()
+    }
+
+    /** Back on the card: nothing starts (the route preview stays). */
+    fun dismissSafetyCard() = _ui.update { it.copy(safetyCard = null) }
+
+    fun previewSafetyCard() = _ui.update { it.copy(safetyCard = SafetyCard(null, null, preview = true)) }
+
+    fun setSafetyReminder(enabled: Boolean) = viewModelScope.launch { settings.setSafetyReminder(enabled, Instant.now().toString()) }
+
+    private var bannerJob: Job? = null
+    private fun showSafetyBanner() {
+        bannerJob?.cancel()
+        _ui.update { it.copy(safetyBanner = true) }
+        bannerJob = viewModelScope.launch {
+            delay(my.gimano.app.core.safety.SafetyReminder.BANNER_MS)
+            _ui.update { it.copy(safetyBanner = false) }
+        }
+    }
+
+    /** Debug builds only: forget the agreement and turn the reminder back on (tests the first run without wiping data). */
+    fun debugResetSafety() {
+        if (!my.gimano.app.BuildConfig.DEBUG) return
+        agreedNow = false
+        viewModelScope.launch { settings.resetSafetyDebug() }
+        _ui.update { it.copy(safetyAgreement = AgreementMode.FIRST_RUN) }
+    }
+
+    /** Debug builds only (MainActivity extra `gimano.moveTo`). */
+    fun debugMoveTo(p: GeoPoint, zoom: Double) {
+        if (!my.gimano.app.BuildConfig.DEBUG) return
+        centeredOnce = true
+        _ui.update { it.copy(screen = Screen.Home, following = false, camera = CameraCommand.MoveTo(p, zoom)) }
+    }
+
+    fun openRestrictedSheet(open: Boolean) = _ui.update { it.copy(restrictedSheet = open) }
 
     fun stopNavigation() {
         c.navigation.stop()
@@ -1777,7 +1915,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                     it.copy(screen = Screen.EventDetail(s.plan.returnToEvent), plan = null)
                 } else _ui.update { it.copy(screen = Screen.Home, plan = null) }
                 Screen.Settings -> goHome()
-                Screen.Backup, Screen.MyFeedback, Screen.Account, Screen.About -> _ui.update { it.copy(screen = Screen.Settings) }
+                Screen.Backup, Screen.MyFeedback, Screen.Account, Screen.About, Screen.Safety -> _ui.update { it.copy(screen = Screen.Settings) }
                 Screen.Licences -> _ui.update { it.copy(screen = Screen.About) }
                 Screen.Contributions, Screen.AddPlace, Screen.Planned, Screen.Favourites, Screen.Inbox -> goHome()
                 Screen.Theme -> goHome()

@@ -30,7 +30,7 @@ import my.gimano.app.ui.theme.Gimano
 import my.gimano.app.ui.theme.Radius
 
 @Composable
-fun SettingsScreen(s: AppSettings, vm: MainViewModel, fallback: Boolean, displayName: String?, onBackup: () -> Unit, onMyFeedback: () -> Unit, onTheme: () -> Unit = {}, onAccount: () -> Unit = {}, onAbout: () -> Unit = {}) {
+fun SettingsScreen(s: AppSettings, vm: MainViewModel, fallback: Boolean, displayName: String?, onBackup: () -> Unit, onMyFeedback: () -> Unit, onTheme: () -> Unit = {}, onAccount: () -> Unit = {}, onAbout: () -> Unit = {}, onSafety: () -> Unit = {}) {
     val c = Gimano.colors
     Column(Modifier.fillMaxSize().background(c.surface).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -54,6 +54,7 @@ fun SettingsScreen(s: AppSettings, vm: MainViewModel, fallback: Boolean, display
             NavRow(stringResource(R.string.backup_restore), onBackup)
             NavRow(stringResource(R.string.my_feedback), onMyFeedback)
             NavRow(stringResource(R.string.theme), onTheme)
+            NavRow(stringResource(R.string.safety_settings), onSafety)
             TextSetting(stringResource(R.string.display_name), displayName ?: s.displayName ?: "", onApply = vm::setDisplayName)
 
             // Privacy: blocked users (kept on this phone only; included in your own backup).

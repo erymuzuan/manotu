@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import my.gimano.app.BuildConfig
+import my.gimano.app.core.safety.SafetyAgreement
 import java.util.UUID
 
 private val Context.dataStore by preferencesDataStore(name = "gimano_settings")
@@ -58,6 +59,14 @@ data class AppSettings(
     /** "Kenapa tak ikut laluan?": "Jangan tanya lagi" and the last day it was asked (on this phone only). */
     val deviationNeverAsk: Boolean = false,
     val deviationLastAsked: String? = null,
+    /**
+     * Safety (docs/safety.md, on this phone and in the user's own backup only, never sent): the agreement version the
+     * user agreed to (0 = never) and when; the drive reminder switch and when it was turned off.
+     */
+    val safetyAgreedVersion: Int = 0,
+    val safetyAgreedAt: String? = null,
+    val safetyReminderEnabled: Boolean = true,
+    val safetyReminderDisabledAt: String? = null,
 )
 
 /** User-facing settings that travel with a backup (DB `settings` table, shared with iOS). */
@@ -70,6 +79,12 @@ fun AppSettings.toBackupMap(): Map<String, String> = mapOf(
     "show_alerts" to showAlerts.toString(),
     "show_drivers" to showDrivers.toString(),
     "theme" to theme,
+    // Safety agreement + reminder (docs/safety.md): shared keys, so they travel with the user's own backup.
+    SafetyAgreement.KEY_AGREED_VERSION to safetyAgreedVersion.toString(),
+    SafetyAgreement.KEY_REMINDER_ENABLED to safetyReminderEnabled.toString(),
+) + listOfNotNull(
+    safetyAgreedAt?.let { SafetyAgreement.KEY_AGREED_AT to it },
+    safetyReminderDisabledAt?.let { SafetyAgreement.KEY_REMINDER_DISABLED_AT to it },
 )
 
 /** DataStore-backed settings mirrored into a StateFlow so non-suspending code can read them. */
@@ -104,6 +119,10 @@ class SettingsStore(private val context: Context, private val scope: CoroutineSc
         val inboxRead = androidx.datastore.preferences.core.stringSetPreferencesKey("inboxRead")
         val deviationNeverAsk = booleanPreferencesKey("deviationNeverAsk")
         val deviationLastAsked = stringPreferencesKey("deviationLastAsked")
+        val safetyAgreedVersion = androidx.datastore.preferences.core.intPreferencesKey("safetyAgreedVersion")
+        val safetyAgreedAt = stringPreferencesKey("safetyAgreedAt")
+        val safetyReminderEnabled = booleanPreferencesKey("safetyReminderEnabled")
+        val safetyReminderDisabledAt = stringPreferencesKey("safetyReminderDisabledAt")
     }
 
     private val _state: MutableStateFlow<AppSettings>
@@ -155,6 +174,10 @@ class SettingsStore(private val context: Context, private val scope: CoroutineSc
         inboxRead = p[K.inboxRead] ?: emptySet(),
         deviationNeverAsk = p[K.deviationNeverAsk] ?: false,
         deviationLastAsked = p[K.deviationLastAsked],
+        safetyAgreedVersion = p[K.safetyAgreedVersion] ?: 0,
+        safetyAgreedAt = p[K.safetyAgreedAt],
+        safetyReminderEnabled = p[K.safetyReminderEnabled] ?: true,
+        safetyReminderDisabledAt = p[K.safetyReminderDisabledAt],
     )
 
     /**
@@ -207,6 +230,17 @@ class SettingsStore(private val context: Context, private val scope: CoroutineSc
     suspend fun setDeviationAsked(day: String, neverAgain: Boolean) = edit {
         it[K.deviationLastAsked] = day; if (neverAgain) it[K.deviationNeverAsk] = true
     }
+    /** "Saya faham dan setuju": the version and the moment (ISO-8601 UTC), on this phone only. */
+    suspend fun agreeSafety(version: Int, at: String) = edit { it[K.safetyAgreedVersion] = version; it[K.safetyAgreedAt] = at }
+    /** The drive reminder on/off; turning it off remembers when ("Dimatikan pada {date}"). */
+    suspend fun setSafetyReminder(enabled: Boolean, at: String) = edit {
+        it[K.safetyReminderEnabled] = enabled
+        if (enabled) it.remove(K.safetyReminderDisabledAt) else it[K.safetyReminderDisabledAt] = at
+    }
+    /** Debug builds only ("Reset safety"): back to a first run without wiping anything else. */
+    suspend fun resetSafetyDebug() = edit {
+        it.remove(K.safetyAgreedVersion); it.remove(K.safetyAgreedAt); it.remove(K.safetyReminderEnabled); it.remove(K.safetyReminderDisabledAt)
+    }
     /** Local read/unread state for the inbox (kept to the last 500 ids). */
     suspend fun markInboxRead(ids: Collection<String>) = edit { p ->
         p[K.inboxRead] = ((p[K.inboxRead] ?: emptySet()) + ids).toList().takeLast(500).toSet()
@@ -222,5 +256,18 @@ class SettingsStore(private val context: Context, private val scope: CoroutineSc
         m["show_alerts"]?.let { p[K.showAlerts] = it.toBoolean() }
         m["show_drivers"]?.let { p[K.showDrivers] = it.toBoolean() }
         m["theme"]?.let { p[K.theme] = it }
+        // Agreement: the later version wins (a restore never asks someone to agree again for terms they accepted).
+        m[SafetyAgreement.KEY_AGREED_VERSION]?.toIntOrNull()?.let { v ->
+            val (ver, at) = SafetyAgreement.newer(
+                (p[K.safetyAgreedVersion] ?: 0) to p[K.safetyAgreedAt], v to m[SafetyAgreement.KEY_AGREED_AT])
+            p[K.safetyAgreedVersion] = ver
+            if (at != null) p[K.safetyAgreedAt] = at
+        }
+        m[SafetyAgreement.KEY_REMINDER_ENABLED]?.let { v ->
+            val on = v.toBoolean()
+            p[K.safetyReminderEnabled] = on
+            val at = m[SafetyAgreement.KEY_REMINDER_DISABLED_AT]
+            if (on || at == null) p.remove(K.safetyReminderDisabledAt) else p[K.safetyReminderDisabledAt] = at
+        }
     }
 }

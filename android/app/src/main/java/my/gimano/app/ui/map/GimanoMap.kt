@@ -125,6 +125,11 @@ private object Ids {
     const val L_B_DRAWN = "g-l-b-drawn"
     const val L_B_DRAWING = "g-l-b-drawing"
     const val L_B_PTS = "g-l-b-pts"
+    const val RESTRICTED = "g-restricted"
+    const val L_R_FILL = "g-l-r-fill"
+    const val L_R_LINE = "g-l-r-line"
+    const val L_R_LABEL = "g-l-r-label"
+    const val HATCH = "g-restricted-hatch"
 }
 
 @Composable
@@ -155,6 +160,10 @@ fun GimanoMap(
      * rest of a gesture to the map (`view.onTouchEvent`).
      */
     touchInterceptor: ((android.view.View, android.view.MotionEvent) -> Boolean)? = null,
+    /** Restricted areas (docs/safety.md §4 D): grey hatched, dashed outline, from zoom 12, "Kawasan larangan". */
+    restricted: my.gimano.app.core.safety.RestrictedAreas? = null,
+    /** Tap inside a drawn restricted area; return true to consume the tap. */
+    onRestrictedClick: (GeoPoint) -> Boolean = { false },
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -177,6 +186,8 @@ fun GimanoMap(
     val routeCb by rememberUpdatedState(onRouteClick)
     val privateCb by rememberUpdatedState(onPrivateClick)
     val touchCb by rememberUpdatedState(touchInterceptor)
+    val restrictedCb by rememberUpdatedState(onRestrictedClick)
+    val restrictedLabel = androidx.compose.ui.res.stringResource(my.gimano.app.R.string.restricted_area)
     DisposableEffect(mapView) {
         mapView.setOnTouchListener { v, ev -> touchCb?.invoke(v, ev) ?: false }
         onDispose { mapView.setOnTouchListener(null) }
@@ -238,6 +249,7 @@ fun GimanoMap(
                 if (route != null) {
                     routeCb(route); return@addOnMapClickListener true
                 }
+                if (map.queryRenderedFeatures(sp, Ids.L_R_FILL).isNotEmpty() && restrictedCb(GeoPoint(ll.latitude, ll.longitude))) return@addOnMapClickListener true
                 clickCb(GeoPoint(ll.latitude, ll.longitude))
                 false
             }
@@ -256,6 +268,7 @@ fun GimanoMap(
             if (!colors.isDark) s.getLayer("background")?.setProperties(PF.backgroundColor(colors.mapBackground.toArgb()))
             // Route/traffic colours follow the basemap (light or dark style).
             installLayers(s, if (colors.isDark) my.gimano.app.ui.theme.DarkTokens else my.gimano.app.ui.theme.LightTokens, iconBitmaps)
+            installRestricted(s, colors.isDark, restrictedLabel, density)
             style = s
         }
     }
@@ -264,6 +277,15 @@ fun GimanoMap(
     LaunchedEffect(style, state) {
         val s = style ?: return@LaunchedEffect
         updateSources(s, state)
+    }
+
+    // Restricted areas change rarely (daily at most): pushed on their own, never with every puck update.
+    LaunchedEffect(style, restricted) {
+        val s = style ?: return@LaunchedEffect
+        val features = restricted?.rings.orEmpty().map { r ->
+            Feature.fromGeometry(org.maplibre.geojson.Polygon.fromLngLats(listOf(r.points.map(::pt))))
+        }
+        s.getSourceAs<GeoJsonSource>(Ids.RESTRICTED)?.setGeoJson(FeatureCollection.fromFeatures(features))
     }
 
     LaunchedEffect(camera?.id, handle.ready) {
@@ -430,6 +452,38 @@ private fun installLayers(style: Style, c: GimanoColors, icons: Map<String, Bitm
 }
 
 private fun pt(p: GeoPoint) = Point.fromLngLat(p.lng, p.lat)
+
+/**
+ * Restricted areas, under the labels and the route lines: a translucent grey hatch, a dashed grey outline (zoom ≥ 12)
+ * and a "Kawasan larangan" label (no names, no kinds).
+ */
+private fun installRestricted(style: Style, dark: Boolean, label: String, density: Density) {
+    style.addSource(GeoJsonSource(Ids.RESTRICTED, FeatureCollection.fromFeatures(emptyList())))
+    val ink = if (dark) Color(0xFFA9B6CF) else Color(0xFF4E5D78)
+    style.addImage(Ids.HATCH, hatch(ink, density))
+    // Under the first route layer (so routes stay on top) and under every label.
+    val below = style.layers.firstOrNull { it.id == Ids.L_JAMS }?.id ?: firstSymbolLayerId(style)
+    style.addBelowLabels(org.maplibre.android.style.layers.FillLayer(Ids.L_R_FILL, Ids.RESTRICTED).withProperties(
+        PF.fillPattern(Ids.HATCH), PF.fillOpacity(0.9f),
+    ).apply { minZoom = 12f }, below)
+    style.addBelowLabels(LineLayer(Ids.L_R_LINE, Ids.RESTRICTED).withProperties(
+        PF.lineColor(ink.toArgb()), PF.lineWidth(1.6f), PF.lineDasharray(arrayOf(3f, 2f)), PF.lineOpacity(0.9f),
+    ).apply { minZoom = 12f }, below)
+    style.addLayerBelow(SymbolLayer(Ids.L_R_LABEL, Ids.RESTRICTED).withProperties(
+        PF.textField(label), PF.textFont(arrayOf("Noto Sans Bold")), PF.textSize(12f),
+        PF.textColor(ink.toArgb()), PF.textHaloColor((if (dark) Color(0xFF0E1626) else Color.White).toArgb()), PF.textHaloWidth(1.5f),
+        PF.symbolPlacement(Property.SYMBOL_PLACEMENT_POINT), PF.textAllowOverlap(false),
+    ).apply { minZoom = 13f }, Ids.L_B_DRAWING)
+}
+
+/** 12 dp tile: translucent grey wash with one diagonal stroke (tiles into a hatch). */
+private fun hatch(ink: Color, density: Density): Bitmap = render(12f, 12f, density) { size ->
+    drawRect(ink.copy(alpha = 0.16f))
+    val w = 1.4f * density.density
+    drawLine(ink.copy(alpha = 0.55f), Offset(0f, size.height), Offset(size.width, 0f), strokeWidth = w)
+    drawLine(ink.copy(alpha = 0.55f), Offset(-size.width / 2, size.height / 2), Offset(size.width / 2, -size.height / 2), strokeWidth = w)
+    drawLine(ink.copy(alpha = 0.55f), Offset(size.width / 2, size.height * 1.5f), Offset(size.width * 1.5f, size.height / 2), strokeWidth = w)
+}
 
 private fun updateSources(style: Style, s: MapRenderState) {
     // Draw alternatives first so the selected route is on top within the same source.

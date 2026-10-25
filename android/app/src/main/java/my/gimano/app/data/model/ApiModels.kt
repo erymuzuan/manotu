@@ -124,6 +124,8 @@ data class PlaceSummary(
     val openNow: Boolean? = null,
     /** Complaints v1 badge (docs/api.md "Places"). */
     val badge: PlaceBadge? = null,
+    /** Hidden for a moderator (near a restricted area or security details): "Sedang disemak" in My contributions. */
+    val heldForReview: Boolean = false,
 )
 
 @Serializable
@@ -191,12 +193,14 @@ data class Place(
     val required: Double? = null,
     val rural: Boolean = false,
     val contributorTier: String? = null,
+    /** Hidden for a moderator (docs/api.md "Restricted areas"). */
+    val heldForReview: Boolean = false,
 ) {
     val isCommunity get() = source == "community"
     val isUnverified get() = isCommunity && status != "published"
     val isGold get() = contributorTier == "emas"
     fun summary() = PlaceSummary(id, name, category, address, lat, lng, distanceM, brand, source, status, rating, reviewCount, thumbnailUrl,
-        confirmationsWeighted, required, rural, contributorTier, badge = badge)
+        confirmationsWeighted, required, rural, contributorTier, badge = badge, heldForReview = heldForReview)
 }
 
 @Serializable
@@ -236,6 +240,8 @@ data class Review(
     val editedAt: String? = null,
     val status: String = "published",
     val mine: Boolean = false,          // client-side: written by this device's user
+    /** Hidden until a moderator checks it (security details in the text). */
+    val heldForReview: Boolean = false,
 )
 
 @Serializable
@@ -595,6 +601,8 @@ data class ProblemDetails(
     val status: Int? = null,
     val detail: String? = null,
     @SerialName("errors") val errors: JsonElement? = null,
+    /** Machine-readable reason, e.g. `restricted_area` (docs/api.md "Restricted areas"). */
+    val code: String? = null,
 )
 
 

@@ -1,0 +1,10 @@
+{
+  "version": "debug-fixture",
+  "blockM": 100,
+  "reviewM": 300,
+  "terms": ["kem", "pangkalan", "pengawal", "cctv", "pintu belakang", "waktu rondaan", "pagar", "guard", "patrol", "back entrance"],
+  "areas": [
+    [[101.7020, 3.0700], [101.7110, 3.0700], [101.7110, 3.0775], [101.7020, 3.0775], [101.7020, 3.0700]],
+    [[101.5530, 3.1250], [101.5620, 3.1250], [101.5620, 3.1330], [101.5530, 3.1330], [101.5530, 3.1250]]
+  ]
+}
