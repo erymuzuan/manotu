@@ -49,6 +49,12 @@ final class MapState {
     var drivers: [Driver] = []
     /// "Just for me" places, drawn from the local DB only.
     var privatePins: [LatLng] = []
+    /// Restricted areas (docs/safety.md D): grey fill + dashed outline from zoom 12, under the basemap labels.
+    var restrictedAreas: [[LatLng]] = [] { didSet { restrictedRevision += 1 } }
+    private(set) var restrictedRevision = 0
+    /// Hit test for a tap inside an area (the map only draws; the app owns the index).
+    @ObservationIgnored var isInsideRestrictedArea: ((LatLng) -> Bool)?
+    @ObservationIgnored var onRestrictedAreaTapped: (() -> Void)?
     var camera: CameraMode = .trackNorth(zoom: 14)
     var cameraRevision = 0
     /// Extra insets (sheet/banners) so fitted content stays visible.

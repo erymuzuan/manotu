@@ -225,6 +225,10 @@ struct SettingsView: View {
                 PrivacyCard().listRowInsets(EdgeInsets())
                 NavigationLink("Backup & restore") { BackupView() }.accessibilityIdentifier("settingsBackup")
             }
+            Section {
+                NavigationLink { SafetySettingsView() } label: { Label("Safety", systemImage: "checkmark.shield") }
+                    .accessibilityIdentifier("settingsSafety")
+            }
             Section("Theme") {
                 ThemePicker()
             }

@@ -553,7 +553,7 @@ final class ParityUITests: XCTestCase {
         // Onboarding shows while location permission is undecided (only this test build's permission is reset).
         app.resetAuthorizationStatus(for: .location)
         app.launchArguments = ["-GimanoDataMode", mode, "-GimanoFreshDevice", "YES", "-GimanoFakeLocation", klStart,
-                               "-AppleLanguages", "(\(lang))", "-onboarding.done", "NO"]
+                               "-AppleLanguages", "(\(lang))", "-onboarding.done", "NO", "-GimanoSkipSafety", "YES"]
         app.launch()
         sleep(6)
         shot("15-onboarding-1")

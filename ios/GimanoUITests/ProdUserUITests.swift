@@ -43,7 +43,13 @@ final class ProdUserUITests: XCTestCase {
         }
     }
 
+    /// Safety agreement (docs/safety.md §1): shown once, before the location prompt.
+    func agreeToSafety(_ timeout: TimeInterval = 3) {
+        if app.buttons["safetyAgree"].waitForExistence(timeout: timeout) { app.buttons["safetyAgree"].tap(); sleep(1) }
+    }
+
     func home() {
+        agreeToSafety()
         if app.buttons["Continue"].waitForExistence(timeout: 3) { app.buttons["Continue"].tap(); allowSystemAlerts(5) }
         // A previous run may have left navigation running.
         let clock = app.buttons["etaClock"].exists ? app.buttons["etaClock"] : app.staticTexts["etaClock"]
@@ -81,6 +87,9 @@ final class ProdUserUITests: XCTestCase {
     // MARK: matrix
 
     func test_01_FirstLaunchAndRegistration() {
+        XCTAssertTrue(app.buttons["safetyAgree"].waitForExistence(timeout: 20), "first launch shows the safety agreement first")
+        shot("01-safety-agreement")
+        app.buttons["safetyAgree"].tap()
         let welcome = app.staticTexts.matching(NSPredicate(format: "label IN {'Welcome to Manotu', 'Welcome to Gimano'}")).firstMatch
         XCTAssertTrue(welcome.waitForExistence(timeout: 20), "first launch shows onboarding")
         shot("01-onboarding")
@@ -143,6 +152,8 @@ final class ProdUserUITests: XCTestCase {
         sleep(2)
         wait(go).tap()
         allowSystemAlerts(4)
+        // The safety reminder card at the start of the drive (docs/safety.md §2).
+        if app.buttons["safetyStart"].waitForExistence(timeout: 5) { shot("03-safety-card"); app.buttons["safetyStart"].tap() }
         let maneuver = wait(app.staticTexts.matching(identifier: "maneuverDistance").firstMatch, 30)
         sleep(4)
         note("03-navigation", "first maneuver: \(maneuver.label)")

@@ -321,6 +321,56 @@
         }
       }
     },
+    "**Drive only when alert.** Don't drive when tired or sleepy, or under the influence of alcohol, drugs or medicine that makes you drowsy." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "**Pandu hanya bila cergas.** Jangan memandu ketika letih atau mengantuk, atau di bawah pengaruh alkohol, dadah atau ubat yang mengantukkan."
+          }
+        }
+      }
+    },
+    "**Hands on the wheel, not the phone.** Set your destination before you move, or ask a passenger." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "**Tangan di stereng, bukan di telefon.** Tetapkan destinasi sebelum bergerak, atau minta penumpang."
+          }
+        }
+      }
+    },
+    "**Manotu is only an aid.** Maps, routes and reports can be wrong or out of date. You drive and you decide." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "**Manotu alat bantu sahaja.** Peta, laluan dan laporan mungkin salah atau lapuk. Anda yang memandu dan membuat keputusan."
+          }
+        }
+      }
+    },
+    "**Obey the traffic laws.** Road signs, traffic lights and the police always come before the app's directions." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "**Patuhi undang-undang jalan raya.** Papan tanda, lampu isyarat dan polis sentiasa didahulukan, bukan arahan aplikasi."
+          }
+        }
+      }
+    },
+    "**Your responsibility.** To the extent permitted by law, the developer of Manotu is not responsible for accidents, injury, damage or fines." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "**Tanggungjawab anda.** Setakat yang dibenarkan undang-undang, pembangun Manotu tidak bertanggungjawab atas kemalangan, kecederaan, kerosakan atau saman."
+          }
+        }
+      }
+    },
     "+ Add a missing place" : {
       "localizations" : {
         "ms" : {
@@ -441,6 +491,26 @@
         }
       }
     },
+    "A military or strategic site, a shelter, a private home, or details such as guards and CCTV. Hidden at once while it's checked." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kawasan tentera atau strategik, rumah perlindungan, rumah persendirian, atau butiran seperti pengawal dan CCTV. Disembunyikan serta-merta sementara disemak."
+          }
+        }
+      }
+    },
+    "A moderator will check this place before others can see it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat ini akan disemak oleh moderator sebelum orang lain nampak."
+          }
+        }
+      }
+    },
     "A note for guests is too long (1000 characters at most)." : {
       "localizations" : {
         "ms" : {
@@ -477,6 +547,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Masih ada kaki laluan yang perlu dikira. Buka laluan itu semasa dalam talian, atau simpan sebagai lakaran."
+          }
+        }
+      }
+    },
+    "A shop or stall outside the fence? Move the pin to where it really is, outside the shaded area." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kedai atau gerai di luar pagar? Alih pin ke tempat sebenar, di luar kawasan berlorek."
           }
         }
       }
@@ -849,6 +929,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Atur cara · %lld"
+          }
+        }
+      }
+    },
+    "Agree first to start driving" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setuju dahulu untuk mula memandu"
+          }
+        }
+      }
+    },
+    "Agreed on %@ · Version %lld" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dipersetujui %1$@ · Versi %2$lld"
           }
         }
       }
@@ -1563,12 +1663,32 @@
         }
       }
     },
+    "Before we start" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sebelum kita mula"
+          }
+        }
+      }
+    },
     "Before you share with everyone" : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sebelum anda berkongsi dengan semua"
+          }
+        }
+      }
+    },
+    "Being checked" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sedang disemak"
           }
         }
       }
@@ -1829,6 +1949,16 @@
         }
       }
     },
+    "Can't be shared here" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak boleh dikongsi di sini"
+          }
+        }
+      }
+    },
     "Can't find it?" : {
       "localizations" : {
         "ms" : {
@@ -2025,6 +2155,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Semak tempat ini"
+          }
+        }
+      }
+    },
+    "Checked within 24 hours. You'll get a note in your Inbox." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disemak dalam 24 jam. Anda dapat notis dalam Peti masuk."
           }
         }
       }
@@ -3125,6 +3265,16 @@
         }
       }
     },
+    "Direction looks wrong? Follow the road." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arahan nampak salah? Ikut keadaan jalan."
+          }
+        }
+      }
+    },
     "Discard" : {
       "localizations" : {
         "ms" : {
@@ -3205,12 +3355,42 @@
         }
       }
     },
+    "Don't photograph or sketch this area (Act 298)." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jangan ambil gambar atau melakar kawasan ini (Akta 298)."
+          }
+        }
+      }
+    },
     "Don't send" : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Jangan hantar"
+          }
+        }
+      }
+    },
+    "Don't show again" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jangan tunjuk lagi"
+          }
+        }
+      }
+    },
+    "Don't write about entrances, guards, CCTV, fences or patrol times, anywhere. Remove this sentence, or a moderator will check this place first." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jangan tulis tentang pintu masuk, pengawal, CCTV, pagar atau waktu rondaan, di mana-mana tempat pun. Buang ayat ini, atau tempat ini akan disemak oleh moderator dahulu."
           }
         }
       }
@@ -3301,6 +3481,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Drive"
+          }
+        }
+      }
+    },
+    "Drive safely" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pandu dengan selamat"
+          }
+        }
+      }
+    },
+    "Drive safely. Obey the traffic laws." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pandu dengan selamat. Patuhi undang-undang jalan raya."
           }
         }
       }
@@ -4095,6 +4295,26 @@
         }
       }
     },
+    "Full terms" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terma penuh"
+          }
+        }
+      }
+    },
+    "Full terms at manotu.app" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terma penuh di manotu.app"
+          }
+        }
+      }
+    },
     "Full terms: %@" : {
       "localizations" : {
         "ms" : {
@@ -4350,6 +4570,16 @@
         }
       }
     },
+    "Got it, start driving" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faham, mula pandu"
+          }
+        }
+      }
+    },
     "Guests navigate to the vehicle entrance when there is one, else to the pin. Only the coordinates are sent for routing." : {
       "localizations" : {
         "ms" : {
@@ -4426,6 +4656,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gim"
+          }
+        }
+      }
+    },
+    "Hands on the wheel. Don't hold the phone." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tangan di stereng. Jangan pegang telefon."
           }
         }
       }
@@ -4682,6 +4922,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Setuju"
+          }
+        }
+      }
+    },
+    "I understand and agree" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saya faham dan setuju"
           }
         }
       }
@@ -5028,6 +5278,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Perjalanan"
+          }
+        }
+      }
+    },
+    "Just a moment. This is about your safety and everyone else's on the road." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekejap sahaja. Ini tentang keselamatan anda dan orang lain di jalan."
           }
         }
       }
@@ -5518,6 +5778,16 @@
         }
       }
     },
+    "Long drive: rest every 2 hours. Tired or sleepy? Stop." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perjalanan jauh: rehat setiap 2 jam. Letih atau mengantuk? Berhenti."
+          }
+        }
+      }
+    },
     "Long roadworks" : {
       "localizations" : {
         "ms" : {
@@ -5624,6 +5894,16 @@
         }
       }
     },
+    "Manotu doesn't accept places, photos, reviews or details in military, security and strategic areas. Photographing or sketching a restricted area is also an offence under Act 298." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manotu tidak menerima tempat, gambar, ulasan atau butiran di kawasan tentera, keselamatan dan strategik. Mengambil gambar atau melakar kawasan larangan juga satu kesalahan di bawah Akta 298."
+          }
+        }
+      }
+    },
     "Manotu keeps only an encrypted copy, without its key, until 14 days after the event." : {
       "localizations" : {
         "ms" : {
@@ -5640,6 +5920,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Manotu tidak pernah tahu siapa anda. Sumbangan awam anda dikreditkan kepada nama samaran rawak ini, yang hanya telefon dan sandaran anda boleh tandatangani."
+          }
+        }
+      }
+    },
+    "Manotu routes don't go through this area." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laluan Manotu tidak melalui kawasan ini."
           }
         }
       }
@@ -5964,6 +6254,16 @@
         }
       }
     },
+    "Move the pin" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alih pin"
+          }
+        }
+      }
+    },
     "Move up" : {
       "localizations" : {
         "ms" : {
@@ -6204,6 +6504,16 @@
         }
       }
     },
+    "Near a restricted area" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dekat kawasan larangan"
+          }
+        }
+      }
+    },
     "Nearest" : {
       "localizations" : {
         "ms" : {
@@ -6230,6 +6540,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Memerlukan akaun Google anda; Manotu tidak pernah melihatnya. Pilihan."
+          }
+        }
+      }
+    },
+    "Never drive drunk, high or on drowsy medicine." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jangan memandu jika mabuk, khayal atau makan ubat yang mengantukkan."
           }
         }
       }
@@ -6524,6 +6844,16 @@
         }
       }
     },
+    "No reviews, photos or added places for this area." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiada ulasan, gambar atau tempat tambahan untuk kawasan ini."
+          }
+        }
+      }
+    },
     "No road found here" : {
       "localizations" : {
         "ms" : {
@@ -6594,6 +6924,16 @@
         }
       }
     },
+    "Not agreed yet · Version %lld" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum dipersetujui · Versi %lld"
+          }
+        }
+      }
+    },
     "Not available" : {
       "localizations" : {
         "ms" : {
@@ -6620,6 +6960,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bukan sekarang"
+          }
+        }
+      }
+    },
+    "Not now (safety agreement)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not now"
+          }
+        },
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum setuju"
           }
         }
       }
@@ -6720,6 +7076,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OK"
+          }
+        }
+      }
+    },
+    "Obey the law, road signs and the police." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Patuhi undang-undang, papan tanda dan polis."
           }
         }
       }
@@ -7390,6 +7756,26 @@
         }
       }
     },
+    "Photos are off within %lld m of a restricted area." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gambar dimatikan dalam %lld m dari kawasan larangan."
+          }
+        }
+      }
+    },
+    "Photos aren't allowed here. A moderator will check this place before others can see it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gambar tidak dibenarkan di sini. Tempat ini akan disemak oleh moderator sebelum orang lain nampak."
+          }
+        }
+      }
+    },
     "Pick one. The form follows it." : {
       "localizations" : {
         "ms" : {
@@ -7914,6 +8300,26 @@
         }
       }
     },
+    "Read again" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Baca semula"
+          }
+        }
+      }
+    },
+    "Read and agree" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Baca dan setuju"
+          }
+        }
+      }
+    },
     "Read the terms (manotu.app/terms)" : {
       "localizations" : {
         "ms" : {
@@ -8114,6 +8520,16 @@
         }
       }
     },
+    "Remove this sentence" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buang ayat ini"
+          }
+        }
+      }
+    },
     "Remove time" : {
       "localizations" : {
         "ms" : {
@@ -8256,6 +8672,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dilaporkan, menunggu pengesahan."
+          }
+        }
+      }
+    },
+    "Reports aren't accepted in restricted areas." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laporan tidak diterima di kawasan larangan."
           }
         }
       }
@@ -8426,6 +8852,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Memulihkan…"
+          }
+        }
+      }
+    },
+    "Restricted area" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kawasan larangan"
           }
         }
       }
@@ -8680,6 +9116,16 @@
         }
       }
     },
+    "Safety advice every time you start driving" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nasihat keselamatan setiap kali mula memandu"
+          }
+        }
+      }
+    },
     "Safety code" : {
       "localizations" : {
         "ms" : {
@@ -8726,6 +9172,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Simpan perubahan"
+          }
+        }
+      }
+    },
+    "Save just for me" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Simpan untuk saya sahaja"
           }
         }
       }
@@ -8996,6 +9452,16 @@
         }
       }
     },
+    "Security details aren't allowed" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Butiran keselamatan tidak dibenarkan"
+          }
+        }
+      }
+    },
     "See details" : {
       "localizations" : {
         "ms" : {
@@ -9012,6 +9478,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nampak sesuatu yang salah? Ketik Lapor pada ulasan, atau Laporkan gambar. Moderator menyemak laporan."
+          }
+        }
+      }
+    },
+    "See the advice card without starting a drive" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lihat kad nasihat tanpa memulakan perjalanan"
           }
         }
       }
@@ -9096,6 +9572,16 @@
         }
       }
     },
+    "Send for review" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hantar untuk semakan"
+          }
+        }
+      }
+    },
     "Send link" : {
       "localizations" : {
         "ms" : {
@@ -9162,6 +9648,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Acara sensitif"
+          }
+        }
+      }
+    },
+    "Sensitive or security location" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lokasi sensitif atau keselamatan"
           }
         }
       }
@@ -9522,6 +10018,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tunjuk"
+          }
+        }
+      }
+    },
+    "Show it now" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tunjuk contoh sekarang"
           }
         }
       }
@@ -10096,6 +10602,16 @@
         }
       }
     },
+    "Stored on this phone only · Version %lld" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disimpan dalam telefon ini sahaja · Versi %lld"
+          }
+        }
+      }
+    },
     "Stored only on this phone and in your own backups." : {
       "localizations" : {
         "ms" : {
@@ -10656,6 +11172,16 @@
         }
       }
     },
+    "The pin is in a restricted area" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pin berada dalam kawasan larangan"
+          }
+        }
+      }
+    },
     "The pin stays in the centre · pinch to zoom" : {
       "localizations" : {
         "ms" : {
@@ -10772,6 +11298,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sudah ada versi %lld yang berbeza untuk acara ini. Kedua-duanya disimpan dan anda boleh memilih satu."
+          }
+        }
+      }
+    },
+    "These settings and the date you agreed are stored only on your phone and go into your own backup. Manotu never receives them." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tetapan ini dan tarikh persetujuan disimpan dalam telefon anda sahaja, dan ikut sandaran anda sendiri. Manotu tidak menerimanya."
           }
         }
       }
@@ -11058,6 +11594,36 @@
         }
       }
     },
+    "Tired or sleepy? Stop and rest." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letih atau mengantuk? Berhenti dan rehat."
+          }
+        }
+      }
+    },
+    "To %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ke %@"
+          }
+        }
+      }
+    },
+    "To %@ · %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ke %1$@ · %2$@"
+          }
+        }
+      }
+    },
     "To calculate" : {
       "localizations" : {
         "ms" : {
@@ -11284,6 +11850,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Belok kanan ke %@"
+          }
+        }
+      }
+    },
+    "Turned off on %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dimatikan pada %@"
+          }
+        }
+      }
+    },
+    "Turned off. Turn it back on in Settings › Safety." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dimatikan. Hidupkan semula di Tetapan › Keselamatan."
           }
         }
       }
@@ -11590,6 +12176,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Guna pautan tanpa laluan"
+          }
+        }
+      }
+    },
+    "User agreement" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perjanjian pengguna"
           }
         }
       }
@@ -12236,6 +12832,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Anda boleh menyekat mana-mana pengguna: ulasan dan gambar mereka disembunyikan dalam telefon anda."
+          }
+        }
+      }
+    },
+    "You can still look at the map, find places and compare routes. Turn-by-turn directions start only after you agree to the safety agreement." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anda masih boleh melihat peta, mencari tempat dan membandingkan laluan. Arahan pandu dimulakan hanya selepas anda bersetuju dengan perjanjian keselamatan."
           }
         }
       }

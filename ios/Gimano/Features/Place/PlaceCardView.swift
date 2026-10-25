@@ -87,10 +87,10 @@ struct PlaceCardView: View {
             SuggestEditSheet(placeId: summary.id, current: place, fallback: summary)
         }
         .sheet(isPresented: $writing) {
-            WriteReviewSheet(placeId: summary.id, placeName: summary.name, existing: myReview) { await reloadReviews() }
+            WriteReviewSheet(placeId: summary.id, placeName: summary.name, location: summary.location, existing: myReview) { await reloadReviews() }
         }
         .sheet(isPresented: $showAddPhotos) {
-            AddPlacePhotosSheet(placeId: summary.id, placeName: summary.name)
+            AddPlacePhotosSheet(placeId: summary.id, placeName: summary.name, location: summary.location)
         }
         .sheet(isPresented: $showAllReviews) { AllReviewsSheet(placeId: summary.id) }
         .fullScreenCover(item: $viewer) { v in PhotoViewer(urls: v.urls, index: v.index, photos: v.photos) }
@@ -384,14 +384,12 @@ struct PlaceCardView: View {
             }
             if isCommunity, !isPrivate {
                 Menu {
-                    ForEach(FlagReason.allCases) { r in
-                        Button(r.title) {
-                            Task {
-                                do {
-                                    try await model.repo.flagPlace(id: summary.id, reason: r)
-                                    model.showToast(String(localized: "Thanks, we'll take a look"))
-                                } catch { model.showToast(error.localizedDescription) }
-                            }
+                    FlagReasonButtons { r in
+                        Task {
+                            do {
+                                try await model.repo.flagPlace(id: summary.id, reason: r)
+                                model.showToast(String(localized: "Thanks, we'll take a look"))
+                            } catch { model.showToast(error.localizedDescription) }
                         }
                     }
                 } label: { Label("Report place", systemImage: "flag") }
@@ -605,7 +603,19 @@ struct PlaceCardView: View {
                             .accessibilityIdentifier("placePhoto")
                             .accessibilityValue(Text(verbatim: u.absoluteString))
                         }
-                        if canReview {
+                        // Near or in a restricted area: photos are off (docs/safety.md B).
+                        if canReview && model.restricted.proximity(of: summary.location) != .clear {
+                            VStack(spacing: 4) {
+                                Image(systemName: "camera.fill").font(.system(size: 22)).foregroundStyle(Color.textMuted)
+                                PhotosOffCaption(reviewM: model.restricted.set?.reviewM ?? 300)
+                                    .labelStyle(.titleOnly)
+                                    .multilineTextAlignment(.center)
+                                    .minimumScaleFactor(0.7)
+                            }
+                            .padding(6)
+                            .frame(width: 140, height: 96)
+                            .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        } else if canReview {
                             Button { showAddPhotos = true } label: {
                                 VStack(spacing: 4) {
                                     FlatIconView(icon: .camera, size: 30)

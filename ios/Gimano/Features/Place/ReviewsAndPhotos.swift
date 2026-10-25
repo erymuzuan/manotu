@@ -84,12 +84,10 @@ struct PhotoViewer: View {
             if let photo = current {
                 Menu {
                     Menu {
-                        ForEach(FlagReason.allCases) { r in
-                            Button(r.title) {
-                                Task {
-                                    try? await model.repo.flagPhoto(id: photo.id, reason: r)
-                                    model.showToast(String(localized: "Thanks, we'll take a look"))
-                                }
+                        FlagReasonButtons { r in
+                            Task {
+                                try? await model.repo.flagPhoto(id: photo.id, reason: r)
+                                model.showToast(String(localized: "Thanks, we'll take a look"))
                             }
                         }
                     } label: { Label("Report photo", systemImage: "flag") }
@@ -159,10 +157,8 @@ struct ReviewRow: View {
                 Spacer()
                 Menu {
                     Menu {
-                        ForEach(FlagReason.allCases) { r in
-                            Button(r.title) {
-                                Task { try? await model.repo.flagReview(id: review.id, reason: r); model.showToast(String(localized: "Thanks, we'll take a look")) }
-                            }
+                        FlagReasonButtons { r in
+                            Task { try? await model.repo.flagReview(id: review.id, reason: r); model.showToast(String(localized: "Thanks, we'll take a look")) }
                         }
                     } label: { Label("Report review", systemImage: "flag") }
                     if review.blockRef != nil {
@@ -230,6 +226,7 @@ extension FlagReason {
         case .offensive: "Offensive"
         case .offTopic: "Off topic"
         case .conflictOfInterest: "Conflict of interest"
+        case .sensitiveLocation: "Sensitive or security location"
         case .other: "Other"
         }
     }
@@ -279,6 +276,8 @@ struct WriteReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     let placeId: String
     let placeName: String
+    /// The place's position, for the restricted-area check (docs/safety.md part 4).
+    var location: LatLng? = nil
     let existing: Review?
     let onDone: () async -> Void
     @State private var rating = 0
@@ -309,21 +308,29 @@ struct WriteReviewSheet: View {
                         .font(Tokens.Font.bodyBold).foregroundStyle(Color.brandInk)
                         .frame(maxWidth: .infinity)
                         .accessibilityIdentifier("ratingWord")
+                    if proximity == .blocked { RestrictedBlockedNote() }
                     TextField(String(localized: "Tell us about your visit"), text: $text, axis: .vertical)
                         .lineLimit(4...8)
                         .padding(14)
                         .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: Tokens.Radius.md, style: .continuous))
                         .accessibilityIdentifier("reviewText")
                         .onChange(of: text) { if text.count > 2000 { text = String(text.prefix(2000)) } }
-                    PhotoPickerRow(photos: $photos)
+                    if sensitive {
+                        SensitiveTermsWarning { text = model.restricted.terms.removingMatchingSentences(text) }
+                    }
+                    if proximity == .clear {
+                        PhotoPickerRow(photos: $photos)
+                    } else if let reviewM = model.restricted.set?.reviewM {
+                        PhotosOffCaption(reviewM: reviewM)
+                    }
                     if let progress {
                         ProgressView(value: progress) { Text("Uploading photos…").font(Tokens.Font.caption) }
                             .accessibilityIdentifier("reviewUploadProgress")
                     }
                     if let error { Text(error).foregroundStyle(Color.speeding).font(Tokens.Font.caption).accessibilityIdentifier("reviewError") }
-                    Button(existing == nil ? "Post review" : "Save changes") { Task { await send() } }
+                    Button(sensitive ? "Send for review" : (existing == nil ? "Post review" : "Save changes")) { Task { await send() } }
                         .buttonStyle(PrimaryButtonStyle())
-                        .disabled(rating == 0 || sending)
+                        .disabled(rating == 0 || sending || proximity == .blocked)
                         .accessibilityIdentifier("postReview")
                     if let existing {
                         Button("Delete review", role: .destructive) {
@@ -348,6 +355,9 @@ struct WriteReviewSheet: View {
         }
     }
 
+    private var proximity: RestrictedProximity { location.map { model.restricted.proximity(of: $0) } ?? .clear }
+    private var sensitive: Bool { model.restricted.terms.matches(text) }
+
     private func send() async {
         guard await model.ensureRulesAccepted() else { return }
         sending = true
@@ -355,14 +365,18 @@ struct WriteReviewSheet: View {
         error = nil
         do {
             var photoIds = existing?.photos?.map(\.id) ?? []
-            if !photos.isEmpty {
+            if !photos.isEmpty, proximity == .clear {
                 progress = 0
                 for (i, p) in photos.enumerated() {
                     let base = Double(i) / Double(photos.count), share = 1 / Double(photos.count)
-                    let uploaded = try await model.repo.uploadPhoto(p.jpeg, placeId: placeId, caption: nil) { f in
-                        Task { @MainActor in progress = base + f * share }
+                    do {
+                        let uploaded = try await model.repo.uploadPhoto(p.jpeg, placeId: placeId, caption: nil) { f in
+                            Task { @MainActor in progress = base + f * share }
+                        }
+                        photoIds.append(uploaded.id)
+                    } catch let e as APIError where e.isRestrictedArea {
+                        continue   // photos refused near a restricted area: the review goes without them
                     }
-                    photoIds.append(uploaded.id)
                 }
             }
             let body = NewReview(rating: rating, text: text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text,
@@ -370,7 +384,11 @@ struct WriteReviewSheet: View {
             let saved = existing == nil ? try await model.repo.createReview(placeId: placeId, body) : try await model.repo.updateReview(id: existing!.id, body)
             try? model.store.setSetting("review.\(placeId)", saved.id)
             await onDone()
-            model.showToast(String(localized: "Thanks for your review!"))
+            if saved.heldForReview == true || sensitive {
+                model.showToast(String(localized: "Checked within 24 hours. You'll get a note in your Inbox."), seconds: 4)
+            } else {
+                model.showToast(String(localized: "Thanks for your review!"))
+            }
             dismiss()
         } catch let e as APIError where e.isServerSideGap {
             error = String(localized: "Reviews aren't available on the server yet.")
@@ -418,7 +436,7 @@ struct MyContributionsView: View {
                     if let error { Text(error).foregroundStyle(Color.textMuted).font(Tokens.Font.caption) }
                     if !loading && places.isEmpty && error == nil { Text("Nothing shared yet").foregroundStyle(Color.textMuted) }
                     ForEach(places) { p in
-                        Button { dismiss(); model.openPlace(p) } label: { row(p.name, p.category, status: p.status) }
+                        Button { dismiss(); model.openPlace(p) } label: { row(p.name, p.category, status: p.status, held: p.heldForReview == true) }
                             .accessibilityIdentifier("contribution.\(p.name)")
                     }
                 }
@@ -447,12 +465,15 @@ struct MyContributionsView: View {
         }
     }
 
-    private func row(_ name: String, _ cat: PlaceCategory, status: PlaceStatus?) -> some View {
+    private func row(_ name: String, _ cat: PlaceCategory, status: PlaceStatus?, held: Bool = false) -> some View {
         HStack(spacing: 12) {
             CategoryIcon(category: cat)
             Text(name).font(Tokens.Font.bodyBold).foregroundStyle(Color.textPrimary)
             Spacer()
-            if let status {
+            if held {
+                // Held for a moderator (restricted area nearby or sensitive words): docs/safety.md part 4.
+                BeingCheckedBadge()
+            } else if let status {
                 Text(status.badgeTitle)
                     .font(Tokens.Font.small).foregroundStyle(.white)
                     .padding(.horizontal, 8).padding(.vertical, 3)
@@ -494,14 +515,23 @@ struct AddPlacePhotosSheet: View {
     @Environment(\.dismiss) private var dismiss
     let placeId: String
     let placeName: String
+    var location: LatLng? = nil
     @State private var photos: [PickedPhoto] = []
     @State private var progress: Double?
     @State private var error: String?
 
+    /// Photos are refused within reviewM of a restricted area (docs/safety.md B).
+    private var proximity: RestrictedProximity { location.map { model.restricted.proximity(of: $0) } ?? .clear }
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
-                PhotoPickerRow(photos: $photos)
+                if proximity == .blocked { RestrictedBlockedNote() }
+                if proximity == .clear {
+                    PhotoPickerRow(photos: $photos)
+                } else if let reviewM = model.restricted.set?.reviewM {
+                    PhotosOffCaption(reviewM: reviewM)
+                }
                 Text("Location and camera details are removed on your phone before upload.")
                     .font(Tokens.Font.small).foregroundStyle(Color.textMuted)
                 if let progress { ProgressView(value: progress) }

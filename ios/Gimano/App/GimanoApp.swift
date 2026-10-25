@@ -69,7 +69,11 @@ struct GimanoApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     model.isForeground = phase == .active
-                    if phase == .active { model.events.refresh() }
+                    if phase == .active {
+                        model.events.refresh()
+                        // Restricted areas: re-checked at most daily (ETag), cached in a file.
+                        Task { await model.refreshRestrictedAreas() }
+                    }
                 }
                 // Universal Links (https://manotu.app/j/#…, /a/#…), when the Associated Domains entitlement is on.
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
@@ -219,6 +223,26 @@ struct RootView: View {
         }
         .fullScreenCover(isPresented: $model.showOnboarding) {
             OnboardingView()
+        }
+        // Safety agreement (docs/safety.md §1): first launch before the location prompt, or "Read and agree".
+        .fullScreenCover(item: $model.safetyAgreement) { _ in
+            SafetyAgreementView { agreed in model.answerSafetyAgreement(agreed) }
+        }
+        .sheet(isPresented: $model.showNotAgreedSheet) {
+            SafetyNotAgreedSheet(onAgree: {
+                model.showNotAgreedSheet = false
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    model.safetyAgreement = .startDriving
+                }
+            }, onLater: { model.showNotAgreedSheet = false })
+            .presentationDetents([.height(470), .large])
+            .presentationCornerRadius(Tokens.Radius.sheetTop)
+        }
+        .sheet(isPresented: $model.showRestrictedAreaInfo) {
+            RestrictedAreaInfoSheet()
+                .presentationDetents([.height(400), .large])
+                .presentationCornerRadius(Tokens.Radius.sheetTop)
         }
         .preferredColorScheme(model.preferredScheme)
         .onAppear { model.schemeChanged(colorScheme) }

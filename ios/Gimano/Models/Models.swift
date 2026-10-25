@@ -317,6 +317,8 @@ struct PlaceSummary: Codable, Sendable, Identifiable, Hashable {
     var openNow: Bool?
     var confirmationsWeighted: Double?
     var required: Double?
+    /// Held for a moderator (restricted area nearby or sensitive words): "Being checked" in My contributions.
+    var heldForReview: Bool?
 
     init(id: String, name: String, category: PlaceCategory, address: String, lat: Double, lng: Double, distanceM: Double? = nil,
          brand: String? = nil, source: PlaceSource? = nil, status: PlaceStatus? = nil, rating: Double? = nil,
@@ -404,10 +406,13 @@ struct Place: Codable, Sendable, Identifiable, Hashable {
     var photos: [Photo]?
     var confirmationsWeighted: Double?
     var required: Double?
+    var heldForReview: Bool?
 
     var summary: PlaceSummary {
-        PlaceSummary(id: id, name: name, category: category, address: address, lat: lat, lng: lng, distanceM: distanceM, brand: brand,
-                     source: source, status: status, rating: rating, reviewCount: reviewCount, thumbnailUrl: thumbnailUrl)
+        var s = PlaceSummary(id: id, name: name, category: category, address: address, lat: lat, lng: lng, distanceM: distanceM, brand: brand,
+                             source: source, status: status, rating: rating, reviewCount: reviewCount, thumbnailUrl: thumbnailUrl)
+        s.heldForReview = heldForReview
+        return s
     }
 }
 
@@ -520,6 +525,8 @@ struct Review: Codable, Sendable, Hashable, Identifiable {
     var createdAt: Date
     var editedAt: Date?
     var status: String?
+    /// Hidden until a moderator checks it (sensitive words): docs/api.md "Restricted areas".
+    var heldForReview: Bool?
     /// Opaque contributor handle (`authorRef`), at the top level or inside `author`.
     var authorRef: String?
 
@@ -541,6 +548,8 @@ enum FlagReason: String, Codable, Sendable, CaseIterable, Identifiable {
     case spam, offensive
     case offTopic = "off_topic"
     case conflictOfInterest = "conflict_of_interest"
+    /// Military / strategic site, shelter, private home, or security details: hidden after one report (docs/safety.md E).
+    case sensitiveLocation = "sensitive_location"
     case other
     var id: String { rawValue }
 }

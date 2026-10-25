@@ -52,6 +52,7 @@ struct GimanoMapView: UIViewRepresentable {
         private var lastAlerts: [Report] = []
         private var lastDrivers: [Driver] = []
         private var lastPrivate: [LatLng] = []
+        private var lastRestrictedRevision = -1
         private var lastDestination: LatLng?
         private var lastPuckMove = Date.distantPast
         private var lastHomeInset: Double = 0
@@ -78,6 +79,7 @@ struct GimanoMapView: UIViewRepresentable {
             let alerts = state.alerts
             let drivers = state.drivers
             let privatePins = state.privatePins
+            let restrictedRevision = state.restrictedRevision
             let destination = state.destination
             let puck = state.puck
             let heading = state.puckHeading
@@ -102,6 +104,7 @@ struct GimanoMapView: UIViewRepresentable {
             if alerts != lastAlerts { updateAlerts(alerts, style: style); lastAlerts = alerts }
             if drivers != lastDrivers { updateDrivers(drivers, style: style); lastDrivers = drivers }
             if privatePins != lastPrivate { updatePrivate(privatePins); lastPrivate = privatePins }
+            if restrictedRevision != lastRestrictedRevision { updateRestricted(state.restrictedAreas); lastRestrictedRevision = restrictedRevision }
             if destination != lastDestination { updateDestination(destination, style: style); lastDestination = destination }
             updatePuck(puck, heading: heading, nav: navPuck, style: style)
             updateAccuracy(puck, accuracyM: accuracy)
@@ -234,6 +237,39 @@ struct GimanoMapView: UIViewRepresentable {
                 return l
             }
 
+            // Restricted areas: translucent grey fill + dashed outline from zoom 12, under the basemap's labels, labelled
+            // "Restricted area" (no names, no kinds).
+            let restricted = MLNShapeSource(identifier: "restricted", shape: nil)
+            style.addSource(restricted)
+            let firstLabel = style.layers.first { $0 is MLNSymbolStyleLayer }
+            let grey = UIColor(hex: 0x5B6475)
+            let fill = MLNFillStyleLayer(identifier: "restricted-fill", source: restricted)
+            fill.fillColor = NSExpression(forConstantValue: grey)
+            fill.fillOpacity = NSExpression(forConstantValue: 0.22)
+            fill.minimumZoomLevel = 12
+            let outline = MLNLineStyleLayer(identifier: "restricted-outline", source: restricted)
+            outline.lineColor = NSExpression(forConstantValue: grey)
+            outline.lineWidth = NSExpression(forConstantValue: 1.6)
+            outline.lineOpacity = NSExpression(forConstantValue: 0.8)
+            outline.lineDashPattern = NSExpression(forConstantValue: [3, 2])
+            outline.minimumZoomLevel = 12
+            let label = MLNSymbolStyleLayer(identifier: "restricted-label", source: restricted)
+            label.text = NSExpression(forConstantValue: String(localized: "Restricted area"))
+            label.textFontNames = NSExpression(forConstantValue: ["Noto Sans Regular"])
+            label.textFontSize = NSExpression(forConstantValue: 12)
+            label.textColor = NSExpression(forConstantValue: UIColor(hex: 0x3A4250))
+            label.textHaloColor = NSExpression(forConstantValue: UIColor.white.withAlphaComponent(0.85))
+            label.textHaloWidth = NSExpression(forConstantValue: 1.2)
+            label.symbolPlacement = NSExpression(forConstantValue: "point")
+            label.minimumZoomLevel = 13
+            if let firstLabel {
+                style.insertLayer(fill, below: firstLabel)
+                style.insertLayer(outline, below: firstLabel)
+                style.insertLayer(label, below: firstLabel)
+            } else {
+                [fill, outline, label].forEach { style.addLayer($0) }
+            }
+
             let jams = MLNShapeSource(identifier: "jams", shape: nil)
             let alt = MLNShapeSource(identifier: "routes-alt", shape: nil)
             let sel = MLNShapeSource(identifier: "route-sel", shape: nil)
@@ -304,7 +340,7 @@ struct GimanoMapView: UIViewRepresentable {
             puckLayer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
             style.addLayer(puckLayer)
 
-            lastRoutes = []; lastJams = []; lastAlerts = []; lastDrivers = []; lastDestination = nil; lastPrivate = []
+            lastRoutes = []; lastJams = []; lastAlerts = []; lastDrivers = []; lastDestination = nil; lastPrivate = []; lastRestrictedRevision = -1
             appliedCameraRevision = -1
             apply()
         }
@@ -367,6 +403,14 @@ struct GimanoMapView: UIViewRepresentable {
             source("private")?.shape = MLNShapeCollectionFeature(shapes: features)
         }
 
+        private func updateRestricted(_ rings: [[LatLng]]) {
+            let polys: [MLNPolygonFeature] = rings.map { ring in
+                var coords = ring.map(\.coordinate)
+                return MLNPolygonFeature(coordinates: &coords, count: UInt(coords.count))
+            }
+            source("restricted")?.shape = polys.isEmpty ? nil : MLNShapeCollectionFeature(shapes: polys)
+        }
+
         private func updateDestination(_ p: LatLng?, style: MLNStyle) {
             guard let p else { source("dest")?.shape = nil; return }
             let f = MLNPointFeature()
@@ -405,6 +449,11 @@ struct GimanoMapView: UIViewRepresentable {
             if let r = map.visibleFeatures(in: rect, styleLayerIdentifiers: ["route-alt", "route-sel"]).first,
                let id = r.attribute(forKey: "id") as? String {
                 state.onRouteTapped?(id)
+                return
+            }
+            if map.zoomLevel >= 12, let inside = state.isInsideRestrictedArea,
+               inside(LatLng(map.convert(pt, toCoordinateFrom: map))) {
+                state.onRestrictedAreaTapped?()
                 return
             }
             state.onMapTap?()
