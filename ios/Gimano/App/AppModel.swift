@@ -818,8 +818,9 @@ final class AppModel {
             }
         }
         // Only a fix that was just snapped (usable for guidance) may move the puck to the road; a poor fix shows raw.
-        if GpsQuality.usableForGuidance(fix), let nav = navigation, let snapped = nav.progress?.snap, snapped.distanceFromRouteM <= 30 {
-            // Keep the puck glued to the road while on route (≤ 30 m); otherwise show the raw fix (off-route logic runs on it).
+        if GpsQuality.usableForGuidance(fix), let nav = navigation, nav.puckSnapped, let snapped = nav.progress?.snap {
+            // Keep the puck glued to the road while on route (snap hysteresis: 25 m in, 40 m for 3 s out); otherwise the
+            // raw fix (off-route logic runs on it). While navigating the map draws the animated arrow from `nav.motion`.
             map.puck = snapped.point
         }
     }
@@ -1171,7 +1172,12 @@ final class AppModel {
     @ObservationIgnored private var startingNavigation = false
 
     private func beginNavigation() {
-        guard let planner, let route = planner.selected else { return }
+        guard let planner, var route = planner.selected else { return }
+        #if DEBUG
+        // `-GimanoFakeJam 3000`: a 1.2 km standstill starting that many metres into the route (memory only, never sent),
+        // to see Tinjau and the traffic colours on a route replay.
+        if let at = UserDefaults.standard.string(forKey: "GimanoFakeJam"), let m = Double(at) { route = route.withDebugJam(atM: m) }
+        #endif
         let session = NavigationSession(destination: planner.destination, route: route, stops: planner.stops, vehicle: planner.vehicle,
                                         avoid: planner.avoid, repo: repo, voice: voice)
         Task {
@@ -1192,6 +1198,7 @@ final class AppModel {
             if self.shouldSimulate { self.startSimulator(on: r) }
         }
         navigation = session
+        map.motion = session.motion
         location.setNavigating(true, requestAlways: !shouldSimulate)
         go(.navigating)
         session.begin()
@@ -1337,6 +1344,7 @@ final class AppModel {
         simulator.stop()
         navigation?.stop()
         navigation = nil
+        map.motion = nil
         planner = nil
         location.setNavigating(false)
         UIApplication.shared.isIdleTimerDisabled = false

@@ -18,6 +18,12 @@ struct DriveView: View {
                             .padding(.top, 6)
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
+                    if let problem = nav.motion.tinjauProblem {
+                        TinjauBanner(problem: problem, distanceM: nav.motion.tinjauDistanceM)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 6)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     if let toll = nav.tollAhead {
                         TollBanner(toll: toll, distanceM: nav.distanceToToll(toll))
                             .padding(.horizontal, 10)
@@ -99,7 +105,7 @@ struct DriveView: View {
                         .padding(.top, 6)
                     }
                     // Hidden diagnostics for UI tests (max off-road distance while on route, reroutes).
-                    Text(verbatim: "offroad=\(Int(nav.maxOffRoadM.rounded()));reroutes=\(nav.rerouteCount);stopsLeft=\(nav.stops.count - nav.stopTracker.nextStopIndex)")
+                    Text(verbatim: "offroad=\(Int(nav.maxOffRoadM.rounded()));reroutes=\(nav.rerouteCount);stopsLeft=\(nav.stops.count - nav.stopTracker.nextStopIndex);camera=\(nav.motion.mode.rawValue)")
                         .font(.system(size: 1))
                         .opacity(0.01)
                         .accessibilityIdentifier("navDebug")
@@ -117,6 +123,7 @@ struct DriveView: View {
                     Spacer()
                 }
                 .animation(.snappy, value: nav.tollAhead?.id)
+                .animation(.snappy, value: nav.motion.tinjauProblem?.id)
 
                 VStack(spacing: 12) {
                     if nav.approachingAlert == nil, let issue = model.stillClosedPrompt {
@@ -343,6 +350,33 @@ struct BottomBar: View {
     private var shareText: String {
         let eta = ETAFormatter.arrivalTime(remainingS: nav.remainingS)
         return String(localized: "I'm driving to \(nav.destination.name) with Gimano. ETA \(eta).")
+    }
+}
+
+/// Tinjau (docs/driving.md §2): while the camera looks ahead at a jam or closure, what it is looking at.
+struct TinjauBanner: View {
+    let problem: DriveProblem
+    let distanceM: Double
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: problem.kind == .jam ? "car.2.fill" : "exclamationmark.triangle.fill")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(width: 36, height: 36)
+                .background(Color(uiColor: problem.kind == .jam ? Tokens.Palette.traffic3 : Tokens.Palette.speeding), in: Circle())
+            Text(problem.bannerText(distanceM: distanceM))
+                .font(Tokens.Font.label)
+                .foregroundStyle(Color.textPrimary)
+                .monospacedDigit()
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.lg, style: .continuous))
+        .fabShadow()
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("tinjauBanner")
     }
 }
 

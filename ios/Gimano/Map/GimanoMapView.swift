@@ -37,6 +37,7 @@ struct GimanoMapView: UIViewRepresentable {
     func updateUIView(_ map: MLNMapView, context: Context) {}
 
     static func dismantleUIView(_ map: MLNMapView, coordinator: Coordinator) {
+        coordinator.stopDisplayLink()
         coordinator.map = nil
     }
 
@@ -86,7 +87,6 @@ struct GimanoMapView: UIViewRepresentable {
             let puck = state.puck
             let heading = state.puckHeading
             let accuracy = state.puckAccuracyM
-            _ = state.zoom
             let navPuck = state.navigationPuck
             let cameraRevision = state.cameraRevision
             let camera = state.camera
@@ -109,8 +109,11 @@ struct GimanoMapView: UIViewRepresentable {
             if restrictedRevision != lastRestrictedRevision { updateRestricted(state.restrictedAreas); lastRestrictedRevision = restrictedRevision }
             if destination != lastDestination { updateDestination(destination, style: style); lastDestination = destination }
             if tolls != lastTolls { updatePoints(tolls, source: "tolls"); lastTolls = tolls }
-            updatePuck(puck, heading: heading, nav: navPuck, style: style)
-            updateAccuracy(puck, accuracyM: accuracy)
+            syncDisplayLink()
+            if !isDrivenByMotion {
+                updatePuck(puck, heading: heading, nav: navPuck, style: style)
+                updateAccuracy(puck, accuracyM: accuracy)
+            }
 
             if homeInset != lastHomeInset {
                 lastHomeInset = homeInset
@@ -131,7 +134,7 @@ struct GimanoMapView: UIViewRepresentable {
             if cameraRevision != appliedCameraRevision {
                 appliedCameraRevision = cameraRevision
                 applyCamera(camera, puck: puck, heading: heading, animated: true)
-            } else if let puck, state.isFollowing {
+            } else if let puck, state.isFollowing, !isDrivenByMotion {
                 followPuck(camera, puck: puck, heading: heading)
             }
             projectBubbles()
@@ -152,9 +155,15 @@ struct GimanoMapView: UIViewRepresentable {
                 cam.pitch = 0
                 map.setCamera(cam, animated: animated)
             case .navigation:
-                let h = map.bounds.height
-                map.setContentInset(UIEdgeInsets(top: h * 0.35, left: 0, bottom: 0, right: 0), animated: false, completionHandler: nil)
-                if let puck { followPuck(.navigation, puck: puck, heading: heading, duration: 0.6) }
+                if isDrivenByMotion {
+                    // The display link moves the camera every frame; the first frame eases in from wherever the map is.
+                    map.setContentInset(.zero, animated: false, completionHandler: nil)
+                    easeInUntil = 0
+                } else {
+                    let h = map.bounds.height
+                    map.setContentInset(UIEdgeInsets(top: h * 0.35, left: 0, bottom: 0, right: 0), animated: false, completionHandler: nil)
+                    if let puck { followPuck(.navigation, puck: puck, heading: heading, duration: 0.6) }
+                }
             case .overview(let bbox):
                 map.setContentInset(.zero, animated: false, completionHandler: nil)
                 let bounds = MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: bbox.minLat, longitude: bbox.minLng),
@@ -209,12 +218,82 @@ struct GimanoMapView: UIViewRepresentable {
 
         fileprivate func regionChanged(final: Bool) {
             guard let map else { return }
-            projectBubbles()
-            if final {
-                let b = map.visibleCoordinateBounds
-                state.visibleBBox = BBox(minLng: b.sw.longitude, minLat: b.sw.latitude, maxLng: b.ne.longitude, maxLat: b.ne.latitude)
-                state.zoom = map.zoomLevel
+            if !state.bubbleAnchors.isEmpty || !state.bubblePoints.isEmpty { projectBubbles() }
+            guard final else { return }
+            // While the camera follows the arrow every frame, publish the viewport at most once a second: these writes
+            // are observed (live-data subscriptions) and must never feed back into the per-frame camera (apply() no
+            // longer reads them).
+            let now = CACurrentMediaTime()
+            if isDrivenByMotion, now - lastRegionPublish < 1 { return }
+            lastRegionPublish = now
+            let b = map.visibleCoordinateBounds
+            let bbox = BBox(minLng: b.sw.longitude, minLat: b.sw.latitude, maxLng: b.ne.longitude, maxLat: b.ne.latitude)
+            if state.visibleBBox != bbox { state.visibleBBox = bbox }
+            if abs(state.zoom - map.zoomLevel) > 0.01 { state.zoom = map.zoomLevel }
+            if !isDrivenByMotion { updateAccuracy(state.puck, accuracyM: state.puckAccuracyM) }
+        }
+
+        // MARK: per-frame arrow and camera (docs/driving.md §2–3)
+
+        private var displayLink: CADisplayLink?
+        private var lastRegionPublish: CFTimeInterval = 0
+        private var lastDrawn: (LatLng, Double)?
+        /// The camera eases (animated) back onto the arrow until this time, then follows it frame by frame; 0 = ease next.
+        private var easeInUntil: CFTimeInterval = 0
+
+        /// Navigating with a motion model: the display link draws the arrow and moves the camera.
+        var isDrivenByMotion: Bool { state.navigationPuck && state.motion != nil }
+
+        func syncDisplayLink() {
+            if isDrivenByMotion {
+                guard displayLink == nil else { return }
+                let link = CADisplayLink(target: FrameTarget(self), selector: #selector(FrameTarget.tick(_:)))
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+                link.add(to: .main, forMode: .common)
+                displayLink = link
+                lastDrawn = nil
+                lastRegionPublish = 0
+                easeInUntil = 0
+            } else if let link = displayLink {
+                link.invalidate()
+                displayLink = nil
             }
+        }
+
+        func stopDisplayLink() {
+            displayLink?.invalidate()
+            displayLink = nil
+        }
+
+        /// Top padding that puts the arrow `puckY` of the way down the map.
+        var puckPadding: (CGFloat, Double) -> UIEdgeInsets = { h, y in UIEdgeInsets(top: max(0, (2 * y - 1) * h), left: 0, bottom: 0, right: 0) }
+
+        func drawFrame(_ link: CADisplayLink) {
+            guard let map, style != nil, let motion = state.motion, let f = motion.frame(at: CACurrentMediaTime()) else { return }
+            // Only the arrow changes per frame; route, traffic and alerts are redrawn only when they change (apply()).
+            if lastDrawn.map({ Geo.distance($0.0, f.point) > 0.05 || abs(Geo.angleDelta($0.1, f.heading)) > 0.2 }) ?? true {
+                let p = MLNPointFeature()
+                p.coordinate = f.point.coordinate
+                p.attributes = ["icon": "puck-nav", "heading": f.heading]
+                source("puck")?.shape = p
+                if lastDrawn == nil { source("puck-accuracy")?.shape = nil }
+                lastDrawn = (f.point, f.heading)
+            }
+            guard case .navigation = state.camera, map.bounds.height > 0 else { return }
+            let size = map.bounds.size
+            let altitude = MLNAltitudeForZoomLevel(f.zoom, CGFloat(f.pitch), f.point.lat, size)
+            let cam = MLNMapCamera(lookingAtCenter: f.point.coordinate, altitude: altitude, pitch: CGFloat(f.pitch), heading: f.heading)
+            let padding = puckPadding(size.height, f.puckY)
+            let now = CACurrentMediaTime()
+            if easeInUntil == 0 {
+                // Start / recentre: one short animated move onto the arrow, then per-frame following.
+                easeInUntil = now + 0.7
+                map.setCamera(cam, withDuration: 0.7, animationTimingFunction: CAMediaTimingFunction(name: .easeInEaseOut),
+                              edgePadding: padding, completionHandler: nil)
+                return
+            }
+            guard now >= easeInUntil else { return }
+            map.setCamera(cam, withDuration: 0, animationTimingFunction: nil, edgePadding: padding, completionHandler: nil)
         }
 
         // MARK: style setup
@@ -599,6 +678,17 @@ struct GimanoMapView: UIViewRepresentable {
                 UIBezierPath(roundedRect: CGRect(x: 16.5, y: 32, width: 3, height: 12), cornerRadius: 1.5).fill()
             }
         }
+    }
+}
+
+/// Breaks the CADisplayLink → target retain cycle.
+@MainActor
+final class FrameTarget: NSObject {
+    weak var coordinator: GimanoMapView.Coordinator?
+    init(_ c: GimanoMapView.Coordinator) { coordinator = c }
+    @objc func tick(_ link: CADisplayLink) {
+        guard let coordinator else { link.invalidate(); return }
+        coordinator.drawFrame(link)
     }
 }
 

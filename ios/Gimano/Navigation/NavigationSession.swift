@@ -43,6 +43,11 @@ final class NavigationSession {
     @ObservationIgnored private var batcher = LocationPingBatcher()
     @ObservationIgnored private var handledAlerts: Set<String> = []
     @ObservationIgnored private(set) var tollTracker: TollTracker
+    /// Arrow animation and camera modes, drawn by the phone map and the car screen (docs/driving.md §2–3).
+    let motion: DriveMotion
+    @ObservationIgnored private var snapHysteresis = SnapHysteresis()
+    /// The arrow is glued to the road (snap within 25 m, released beyond 40 m for 3 s).
+    @ObservationIgnored private(set) var puckSnapped = false
     /// Tolls paid before the current route began (reroutes keep the trip's running total).
     @ObservationIgnored private var tollsPaidBeforeRoute: Double = 0
     /// Called once per plaza when the toll banner appears (the car screen shows its own alert).
@@ -66,6 +71,7 @@ final class NavigationSession {
         let tracker = RouteTracker(route: route)
         self.tracker = tracker
         self.tollTracker = TollTracker(route: route, geometry: tracker.geometry)
+        self.motion = DriveMotion(route: route, geometry: tracker.geometry)
         self.announcer = VoiceAnnouncer(mode: vehicle)
         self.stopTracker = StopTracker(schedule: StopSchedule.make(route: route, stops: stops.map(\.location)), stopCount: stops.count)
         self.stopArrivals = Self.arrivalLabels(maneuvers: tracker.maneuvers, stops: stops)
@@ -126,6 +132,9 @@ final class NavigationSession {
         guard !arrived else { return }
         guard let p = tracker.update(location: fix.coordinate) else { return }
         progress = p
+        puckSnapped = snapHysteresis.update(distanceFromRouteM: p.snap.distanceFromRouteM, speedKmh: fix.speedKmh, course: fix.course,
+                                            routeBearing: tracker.geometry.bearing(atAlongM: p.snap.distanceAlongM), now: fix.timestamp)
+        motion.push(fix: fix, snap: p.snap, snapped: puckSnapped)
         if p.snap.distanceFromRouteM <= 30 { maxOffRoadM = max(maxOffRoadM, p.snap.distanceFromRouteM) }
         // Stops and the destination are only reached on the route: on a parallel road the snapped distance along
         // can pass a stop while the driver is nowhere near it (the off-route check below then reroutes instead).
@@ -223,6 +232,7 @@ final class NavigationSession {
         tollTracker = TollTracker(route: r, geometry: tracker.geometry, announced: tollTracker.announced, passed: tollTracker.passed,
                                   paidMyr: tollTracker.paidMyr)
         tollAhead = nil
+        motion.setRoute(r, geometry: tracker.geometry)
         tollTotals = Self.totals(route: r, paidBefore: tollsPaidBeforeRoute, paidNow: tollTracker.paidMyr)
         stopTracker = StopTracker(schedule: StopSchedule.make(route: r, stops: stops.map(\.location)), stopCount: stops.count)
         stopArrivals = Self.arrivalLabels(maneuvers: tracker.maneuvers, stops: stops)

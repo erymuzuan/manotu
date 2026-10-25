@@ -31,6 +31,16 @@
         }
       }
     },
+    "%@ long" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ panjang"
+          }
+        }
+      }
+    },
     "%@ more accepted places" : {
       "localizations" : {
         "ms" : {
@@ -673,6 +683,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kemalangan"
+          }
+        }
+      }
+    },
+    "Accident %@ ahead" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kemalangan %@ di hadapan"
           }
         }
       }
@@ -4686,6 +4706,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bahaya"
+          }
+        }
+      }
+    },
+    "Hazard %@ ahead" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bahaya %@ di hadapan"
           }
         }
       }
@@ -8986,6 +9016,16 @@
         }
       }
     },
+    "Road closed %@ ahead" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jalan ditutup %@ di hadapan"
+          }
+        }
+      }
+    },
     "Road problem" : {
       "localizations" : {
         "ms" : {
@@ -11800,6 +11840,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Trafik"
+          }
+        }
+      }
+    },
+    "Traffic %@ ahead" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesak %@ di hadapan"
           }
         }
       }
