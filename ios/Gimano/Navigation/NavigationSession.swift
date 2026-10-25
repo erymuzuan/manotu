@@ -13,6 +13,10 @@ final class NavigationSession {
     private(set) var isRerouting = false
     private(set) var arrived = false
     private(set) var approachingAlert: AlertOnRoute?
+    /// The toll plaza on the "toll ahead" banner (docs/driving.md §1); stays 10 s after passing it.
+    private(set) var tollAhead: RouteToll?
+    /// "Tolls so far RM x · estimate RM y".
+    private(set) var tollTotals = TollTotals(paidMyr: 0, estimateMyr: nil, estimateComplete: true)
     private(set) var rerouteCount = 0
     /// Largest snapped distance from the route seen while on it (diagnostics / UI tests).
     private(set) var maxOffRoadM: Double = 0
@@ -38,6 +42,11 @@ final class NavigationSession {
     @ObservationIgnored private var originalStopOffset = 0
     @ObservationIgnored private var batcher = LocationPingBatcher()
     @ObservationIgnored private var handledAlerts: Set<String> = []
+    @ObservationIgnored private(set) var tollTracker: TollTracker
+    /// Tolls paid before the current route began (reroutes keep the trip's running total).
+    @ObservationIgnored private var tollsPaidBeforeRoute: Double = 0
+    /// Called once per plaza when the toll banner appears (the car screen shows its own alert).
+    @ObservationIgnored var onTollAhead: ((RouteToll) -> Void)?
     /// Set by `stop()`: late reroute / add-stop responses and fixes are ignored afterwards.
     @ObservationIgnored private(set) var isStopped = false
     @ObservationIgnored private let repo: any GimanoRepository
@@ -54,11 +63,28 @@ final class NavigationSession {
         self.avoid = avoid
         self.repo = repo
         self.voice = voice
-        self.tracker = RouteTracker(route: route)
+        let tracker = RouteTracker(route: route)
+        self.tracker = tracker
+        self.tollTracker = TollTracker(route: route, geometry: tracker.geometry)
         self.announcer = VoiceAnnouncer(mode: vehicle)
         self.stopTracker = StopTracker(schedule: StopSchedule.make(route: route, stops: stops.map(\.location)), stopCount: stops.count)
         self.stopArrivals = Self.arrivalLabels(maneuvers: tracker.maneuvers, stops: stops)
+        self.tollTotals = Self.totals(route: route, paidBefore: 0, paidNow: 0)
     }
+
+    static func totals(route: Route, paidBefore: Double, paidNow: Double) -> TollTotals {
+        let badge = TollBadge.make(for: route, mode: route.vehicle ?? .car)
+        switch badge {
+        case .complete(let v): return TollTotals(paidMyr: paidNow, estimateMyr: paidBefore + v, estimateComplete: true)
+        case .from(let v): return TollTotals(paidMyr: paidNow, estimateMyr: paidBefore + v, estimateComplete: false)
+        case .unknown, .none: return TollTotals(paidMyr: paidNow, estimateMyr: paidBefore > 0 ? paidBefore : nil, estimateComplete: badge == .none)
+        }
+    }
+
+    /// The trip has tolls to talk about (route preview showed some, or some were already paid).
+    var showsTollTotals: Bool { route.hasTolls || !(route.tolls ?? []).isEmpty || tollTotals.paidMyr > 0 }
+
+    func distanceToToll(_ t: RouteToll) -> Double { tollTracker.distanceAhead(t, alongM: progress?.snap.distanceAlongM ?? 0) }
 
     /// Intermediate "arrive" maneuvers, in order, map to the stops.
     static func arrivalLabels(maneuvers: [Maneuver], stops: [TripStop]) -> [Int: String] {
@@ -142,6 +168,19 @@ final class NavigationSession {
         }
 
         updateAlerts(along: p.snap.distanceAlongM)
+        updateTolls(along: p.snap.distanceAlongM, speedKmh: fix.speedKmh, now: fix.timestamp)
+    }
+
+    private func updateTolls(along: Double, speedKmh: Double, now: Date) {
+        let announce = tollTracker.update(alongM: along, speedKmh: speedKmh, now: now)
+        if tollAhead != tollTracker.current { tollAhead = tollTracker.current }
+        if tollTotals.paidMyr != tollTracker.paidMyr {
+            tollTotals = Self.totals(route: route, paidBefore: tollsPaidBeforeRoute, paidNow: tollTracker.paidMyr)
+        }
+        guard let announce else { return }
+        // Full and Alerts only (never Mute): an alert-kind prompt.
+        voice.speak(TollSpeech.text(for: announce, language: VoiceGuide.languageCode), kind: .alert)
+        onTollAhead?(announce)
     }
 
     private func updateAlerts(along: Double) {
@@ -180,6 +219,11 @@ final class NavigationSession {
         if let newStops { stops = newStops }
         if newRequest { originalStopOffset = 0 }
         tracker = RouteTracker(route: r)
+        tollsPaidBeforeRoute = tollTracker.paidMyr
+        tollTracker = TollTracker(route: r, geometry: tracker.geometry, announced: tollTracker.announced, passed: tollTracker.passed,
+                                  paidMyr: tollTracker.paidMyr)
+        tollAhead = nil
+        tollTotals = Self.totals(route: r, paidBefore: tollsPaidBeforeRoute, paidNow: tollTracker.paidMyr)
         stopTracker = StopTracker(schedule: StopSchedule.make(route: r, stops: stops.map(\.location)), stopCount: stops.count)
         stopArrivals = Self.arrivalLabels(maneuvers: tracker.maneuvers, stops: stops)
         announcer.reset()

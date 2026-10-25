@@ -91,6 +91,16 @@
         }
       }
     },
+    "%@ toll" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol %@"
+          }
+        }
+      }
+    },
     "%@ · %@" : {
       "shouldTranslate" : false
     },
@@ -11674,6 +11684,26 @@
         }
       }
     },
+    "Toll ahead · fare unknown" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol di hadapan · harga tidak diketahui"
+          }
+        }
+      }
+    },
+    "Toll entry · pay at the exit" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol masuk · bayar di tol keluar"
+          }
+        }
+      }
+    },
     "Toll plaza" : {
       "localizations" : {
         "ms" : {
@@ -11700,6 +11730,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tol"
+          }
+        }
+      }
+    },
+    "Tolls so far %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol setakat ini %@"
+          }
+        }
+      }
+    },
+    "Tolls so far %@ · estimate %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol setakat ini %@ · anggaran %@"
           }
         }
       }

@@ -44,6 +44,8 @@ final class MapState {
     var navigationPuck = false
     var routes: [RouteLine] = []
     var destination: LatLng?
+    /// Toll plazas on the shown route (docs/driving.md §1: plaza icon along the route).
+    var tolls: [LatLng] = []
     var alerts: [Report] = []
     var jams: [JamLine] = []
     var drivers: [Driver] = []

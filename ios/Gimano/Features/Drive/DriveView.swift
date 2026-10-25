@@ -18,6 +18,12 @@ struct DriveView: View {
                             .padding(.top, 6)
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
+                    if let toll = nav.tollAhead {
+                        TollBanner(toll: toll, distanceM: nav.distanceToToll(toll))
+                            .padding(.horizontal, 10)
+                            .padding(.top, 6)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     if let stop = nav.arrivedAtStop {
                         HStack(spacing: 10) {
                             GimanoIcon(icon: .addStop, size: 30, stroke: .brandOn, fill: .brandOn)
@@ -110,6 +116,7 @@ struct DriveView: View {
                     .padding(.top, 12)
                     Spacer()
                 }
+                .animation(.snappy, value: nav.tollAhead?.id)
 
                 VStack(spacing: 12) {
                     if nav.approachingAlert == nil, let issue = model.stillClosedPrompt {
@@ -269,6 +276,15 @@ struct BottomBar: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(nav.destination.name).font(Tokens.Font.bodyBold)
                         Text(nav.route.summary).font(Tokens.Font.caption).foregroundStyle(Color.textMuted).lineLimit(1)
+                        if nav.showsTollTotals {
+                            HStack(spacing: 6) {
+                                GimanoIcon(icon: .toll, size: 16)
+                                Text(nav.tollTotals.text)
+                            }
+                                .font(Tokens.Font.caption)
+                                .foregroundStyle(Color.textMuted)
+                                .accessibilityIdentifier("tollTotals")
+                        }
                         let remainingStops = Array(nav.stops.dropFirst(nav.stopTracker.nextStopIndex))
                         let etas = nav.etaOffsets
                         ForEach(Array(remainingStops.enumerated()), id: \.element.id) { i, s in
@@ -327,6 +343,49 @@ struct BottomBar: View {
     private var shareText: String {
         let eta = ETAFormatter.arrivalTime(remainingS: nav.remainingS)
         return String(localized: "I'm driving to \(nav.destination.name) with Gimano. ETA \(eta).")
+    }
+}
+
+/// "Toll ahead" banner (docs/driving.md §1): plaza, distance, and the fare or what to expect.
+struct TollBanner: View {
+    let toll: RouteToll
+    let distanceM: Double
+
+    var body: some View {
+        HStack(spacing: 12) {
+            GimanoIcon(icon: .toll, size: 28, stroke: .brandInk, fill: .brandTint)
+                .frame(width: 46, height: 46)
+                .background(Color.brandMist, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(TollText.title(toll)).font(Tokens.Font.bodyBold).lineLimit(1).minimumScaleFactor(0.8)
+                Group {
+                    if distanceM > 0 {
+                        Text("\(ManeuverFormatter.distance(distanceM)) ahead") + Text(TollText.fareLine(toll).map { " · \($0)" } ?? "")
+                    } else {
+                        Text(TollText.fareLine(toll) ?? "")
+                    }
+                }
+                .font(Tokens.Font.caption)
+                .foregroundStyle(Color.textMuted)
+                .lineLimit(2)
+                .monospacedDigit()
+            }
+            Spacer(minLength: 4)
+            if let fare = toll.fare {
+                Text(TollBadge.myr(fare))
+                    .font(Tokens.Font.nunito(18, .black))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.brandOn)
+                    .padding(.horizontal, 12).frame(height: 38)
+                    .background(Color.brand, in: Capsule())
+            }
+        }
+        .foregroundStyle(Color.textPrimary)
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.lg, style: .continuous))
+        .fabShadow()
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("tollBanner")
     }
 }
 

@@ -54,6 +54,7 @@ struct GimanoMapView: UIViewRepresentable {
         private var lastPrivate: [LatLng] = []
         private var lastRestrictedRevision = -1
         private var lastDestination: LatLng?
+        private var lastTolls: [LatLng] = []
         private var lastPuckMove = Date.distantPast
         private var lastHomeInset: Double = 0
         private var lastPlaceInset: Double = 0
@@ -81,6 +82,7 @@ struct GimanoMapView: UIViewRepresentable {
             let privatePins = state.privatePins
             let restrictedRevision = state.restrictedRevision
             let destination = state.destination
+            let tolls = state.tolls
             let puck = state.puck
             let heading = state.puckHeading
             let accuracy = state.puckAccuracyM
@@ -106,6 +108,7 @@ struct GimanoMapView: UIViewRepresentable {
             if privatePins != lastPrivate { updatePrivate(privatePins); lastPrivate = privatePins }
             if restrictedRevision != lastRestrictedRevision { updateRestricted(state.restrictedAreas); lastRestrictedRevision = restrictedRevision }
             if destination != lastDestination { updateDestination(destination, style: style); lastDestination = destination }
+            if tolls != lastTolls { updatePoints(tolls, source: "tolls"); lastTolls = tolls }
             updatePuck(puck, heading: heading, nav: navPuck, style: style)
             updateAccuracy(puck, accuracyM: accuracy)
 
@@ -279,7 +282,8 @@ struct GimanoMapView: UIViewRepresentable {
             let drivers = MLNShapeSource(identifier: "drivers", shape: nil)
             let puck = MLNShapeSource(identifier: "puck", shape: nil)
             let priv = MLNShapeSource(identifier: "private", shape: nil)
-            [jams, alt, sel, traffic, dest, alerts, drivers, puck, priv].forEach { style.addSource($0) }
+            let tolls = MLNShapeSource(identifier: "tolls", shape: nil)
+            [jams, alt, sel, traffic, dest, alerts, drivers, puck, priv, tolls].forEach { style.addSource($0) }
 
             for level in 1...4 {
                 style.addLayer(lineLayer("jam-\(level)", source: jams, color: Tokens.Palette.traffic(level: level), width: 5, opacity: 0.8,
@@ -305,6 +309,13 @@ struct GimanoMapView: UIViewRepresentable {
             privLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
             privLayer.iconAnchor = NSExpression(forConstantValue: "bottom")
             style.addLayer(privLayer)
+
+            let tollLayer = MLNSymbolStyleLayer(identifier: "tolls", source: tolls)
+            tollLayer.iconImageName = NSExpression(forConstantValue: "toll")
+            tollLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
+            tollLayer.iconAnchor = NSExpression(forConstantValue: "bottom")
+            tollLayer.minimumZoomLevel = 9
+            style.addLayer(tollLayer)
 
             let alertLayer = MLNSymbolStyleLayer(identifier: "alerts", source: alerts)
             alertLayer.iconImageName = NSExpression(forKeyPath: "icon")
@@ -341,6 +352,7 @@ struct GimanoMapView: UIViewRepresentable {
             style.addLayer(puckLayer)
 
             lastRoutes = []; lastJams = []; lastAlerts = []; lastDrivers = []; lastDestination = nil; lastPrivate = []; lastRestrictedRevision = -1
+            lastTolls = []
             appliedCameraRevision = -1
             apply()
         }
@@ -401,6 +413,15 @@ struct GimanoMapView: UIViewRepresentable {
                 return f
             }
             source("private")?.shape = MLNShapeCollectionFeature(shapes: features)
+        }
+
+        private func updatePoints(_ pts: [LatLng], source id: String) {
+            let features: [MLNPointFeature] = pts.map { p in
+                let f = MLNPointFeature()
+                f.coordinate = p.coordinate
+                return f
+            }
+            source(id)?.shape = MLNShapeCollectionFeature(shapes: features)
         }
 
         private func updateRestricted(_ rings: [[LatLng]]) {
@@ -476,6 +497,7 @@ struct GimanoMapView: UIViewRepresentable {
             style.setImage(driverImage(), forName: "driver")
             style.setImage(destinationImage(), forName: "dest")
             style.setImage(privateImage(), forName: "private")
+            style.setImage(tollImage(), forName: "toll")
         }
 
         private static func symbol(_ name: String, size: CGFloat, color: UIColor) -> UIImage? {
@@ -548,6 +570,23 @@ struct GimanoMapView: UIViewRepresentable {
                 UIColor(hex: 0xE3ECFA).setFill()
                 UIBezierPath(roundedRect: CGRect(x: 5, y: 5, width: 26, height: 26), cornerRadius: 10).fill()
                 GIcon.heart.draw(in: c, rect: CGRect(x: 8, y: 8, width: 20, height: 20), stroke: UIColor(hex: 0x0A2E6E), fill: UIColor(hex: 0x8FB0E8))
+            }
+        }
+
+        /// Toll plaza on the route: small white pebble with the duotone toll glyph.
+        static func tollImage() -> UIImage {
+            UIGraphicsImageRenderer(size: CGSize(width: 32, height: 38)).image { ctx in
+                let c = ctx.cgContext
+                c.setShadow(offset: CGSize(width: 0, height: 1.5), blur: 3, color: UIColor(hex: 0x0B1B3A, alpha: 0.25).cgColor)
+                UIColor.white.setFill()
+                UIBezierPath(roundedRect: CGRect(x: 2, y: 2, width: 28, height: 28), cornerRadius: 10).fill()
+                let tail = UIBezierPath()
+                tail.move(to: CGPoint(x: 11, y: 29)); tail.addLine(to: CGPoint(x: 16, y: 36)); tail.addLine(to: CGPoint(x: 21, y: 29)); tail.close()
+                tail.fill()
+                c.setShadow(offset: .zero, blur: 0, color: nil)
+                UIColor(hex: 0xE3ECFA).setFill()
+                UIBezierPath(roundedRect: CGRect(x: 4.5, y: 4.5, width: 23, height: 23), cornerRadius: 8).fill()
+                GIcon.toll.draw(in: c, rect: CGRect(x: 7, y: 7, width: 18, height: 18), stroke: UIColor(hex: 0x0A2E6E), fill: UIColor(hex: 0x8FB0E8))
             }
         }
 

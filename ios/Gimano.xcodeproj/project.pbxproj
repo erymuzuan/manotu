@@ -163,6 +163,7 @@
 		D7A218BFA9CAA0413348FC22 /* unknown-template-and-info-kind.json in Resources */ = {isa = PBXBuildFile; fileRef = 7478B39562D06CFFE829625E /* unknown-template-and-info-kind.json */; };
 		D804C280482F22AA0D7C5EC8 /* import-stops-only-sequence.json in Resources */ = {isa = PBXBuildFile; fileRef = 6023B07BB4A55205325F42E2 /* import-stops-only-sequence.json */; };
 		D8B4CDC2846BA6D1F4052421 /* HomePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9A3A92DC74ADFCE84D6110C /* HomePanel.swift */; };
+		D9E3DC56745D7DEA4BEFC19B /* TollAhead.swift in Sources */ = {isa = PBXBuildFile; fileRef = 228DFE08851608065388DB01 /* TollAhead.swift */; };
 		DA112C0CBF28A294057DD3D6 /* PlaceCardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F80C78F3101B2C2AE7A35FB /* PlaceCardTests.swift */; };
 		DA482411E45A20D4BD5C4E2C /* EventHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39554626B0986D9A23045DF3 /* EventHost.swift */; };
 		DBB1214AA30F1D5EAF932747 /* EventPack.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0BDAB0405E1278C02CE9ECC /* EventPack.swift */; };
@@ -189,6 +190,7 @@
 		F8A32C621804649AD8C92E5A /* negative-unknown-variant.json in Resources */ = {isa = PBXBuildFile; fileRef = 8980EA7C318720C27AB872D4 /* negative-unknown-variant.json */; };
 		F8B876ABC27695B2A7EA31B0 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBC90672622F0ABA4D89CFEA /* LocationService.swift */; };
 		FA50685C80C235AA22BC9EA2 /* GimanoIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CB027DE8A1892B964BDE866 /* GimanoIcon.swift */; };
+		FBD2570D4B8DA651C38AFAB4 /* TollAheadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD2F548D8B08143E9D7D735A /* TollAheadTests.swift */; };
 		FDF5F849BE123BCD3867E06E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C8950351547906452FDCEB79 /* Assets.xcassets */; };
 		FE6FBA2D3C4CA021F77F41D6 /* RouteStartUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC922B0C3EE98133DEA0C55A /* RouteStartUITests.swift */; };
 		FF08D21DE23C5ABB9784DDE2 /* RouteBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB126F524DFEE02E6BE3C81 /* RouteBuilderTests.swift */; };
@@ -235,6 +237,7 @@
 		1C81FFCBA32722136F5E9C5B /* ReportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportSheet.swift; sourceTree = "<group>"; };
 		1DCB10BF337BCDBA04303A29 /* EventHostUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventHostUITests.swift; sourceTree = "<group>"; };
 		1E10D2741068A818F9DD4A47 /* GimanoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GimanoApp.swift; sourceTree = "<group>"; };
+		228DFE08851608065388DB01 /* TollAhead.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TollAhead.swift; sourceTree = "<group>"; };
 		2431E7AD0B92C709C0E4C5FC /* SoundSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSelector.swift; sourceTree = "<group>"; };
 		27108E49D369D2E7E847F2D5 /* SearchRetestUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchRetestUITests.swift; sourceTree = "<group>"; };
 		2834FD72AD8E161736DD34BA /* BackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupView.swift; sourceTree = "<group>"; };
@@ -396,6 +399,7 @@
 		F99C09F6978E54EEB6DE9E0E /* negative-oversized-fragment.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "negative-oversized-fragment.json"; sourceTree = "<group>"; };
 		FBED0F8FE579F3B5F1450975 /* Polyline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Polyline.swift; sourceTree = "<group>"; };
 		FCB4A8EBDBFD3D3E30CD851F /* InboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxTests.swift; sourceTree = "<group>"; };
+		FD2F548D8B08143E9D7D735A /* TollAheadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TollAheadTests.swift; sourceTree = "<group>"; };
 		FEBDD7794BF35380C8835FD5 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		FEFB055D289B0D1AE4CE0307 /* ride-two-day.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ride-two-day.json"; sourceTree = "<group>"; };
 		FF9AC16956C2FFE93935B45F /* ParityFixesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParityFixesTests.swift; sourceTree = "<group>"; };
@@ -609,6 +613,7 @@
 				2D90713368FDFFC83AF819E5 /* ShareDriveTests.swift */,
 				4B2CFC11755024221550485E /* StorageTests.swift */,
 				9D7D08318C4045FBC2B3C28F /* ThemeTests.swift */,
+				FD2F548D8B08143E9D7D735A /* TollAheadTests.swift */,
 				D2A2809B4A861031AAB5862D /* VettingTests.swift */,
 				E037E0AB0CCC9F5D4FFD545A /* EventVectors */,
 			);
@@ -794,6 +799,7 @@
 				52031E5D350FC808BCB074A1 /* RouteOrigin.swift */,
 				AF979840E579CA036CC7B2B9 /* RouteTracker.swift */,
 				41614307C95440C6622D1E8C /* ShareDrive.swift */,
+				228DFE08851608065388DB01 /* TollAhead.swift */,
 				A6F2671DFCA82ABFE38FC048 /* TripLogic.swift */,
 				7C47FE94945188AC3C750DE0 /* VoiceGuide.swift */,
 			);
@@ -1085,6 +1091,7 @@
 				8D4ADB9D79B660A1AB81D12C /* ShareDriveTests.swift in Sources */,
 				D71A61684F5EE427B13F87DF /* StorageTests.swift in Sources */,
 				2EC52B6C25AFA47C14F2165B /* ThemeTests.swift in Sources */,
+				FBD2570D4B8DA651C38AFAB4 /* TollAheadTests.swift in Sources */,
 				5F1EA50718464D9E6D649C99 /* VettingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1181,6 +1188,7 @@
 				E6169F7B80236A1835041F9B /* SoundSelector.swift in Sources */,
 				424210F7C177C1EB5B118A34 /* Theme.swift in Sources */,
 				FFE4C15C9F53974A46140A9A /* Tokens.swift in Sources */,
+				D9E3DC56745D7DEA4BEFC19B /* TollAhead.swift in Sources */,
 				FF3CD6649E8170DE8A2542DE /* TripLogic.swift in Sources */,
 				10D16C05A818349A2470E8FF /* Vetting.swift in Sources */,
 				E307B225E1E8F4388EDAB245 /* VettingViews.swift in Sources */,

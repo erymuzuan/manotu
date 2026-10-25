@@ -741,6 +741,8 @@ struct TollPlaza: Codable, Sendable, Hashable, Identifiable {
     var fareMyr: Double?
     var system: String?
     var source: String?
+    /// Metres from the route start to the plaza ("toll ahead" alert); older servers leave it out.
+    var distanceAlongRouteM: Double?
     var id: String { plazaId }
 }
 
