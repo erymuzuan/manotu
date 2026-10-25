@@ -28,6 +28,15 @@ GIMANO_ENTITLEMENTS_CLOUD_YES = Gimano/Resources/Gimano-AppLinks.entitlements
 GIMANO_ENTITLEMENTS_NOCLOUD_NO = Gimano/Resources/Gimano-NoCloud.entitlements
 GIMANO_ENTITLEMENTS_NOCLOUD_YES = Gimano/Resources/Gimano-NoCloud-AppLinks.entitlements
 
+// CarPlay (docs/driving.md §5): the CarPlay navigation entitlement (com.apple.developer.carplay-maps) is not granted
+// yet, so only simulator builds carry it (the iOS Simulator's CarPlay display). Device, TestFlight and AltStore builds
+// keep the entitlements above and sign with today's profiles; the CarPlay scene is simply never connected there.
+// Once Apple grants it to the individual team, add the key to the four files above and drop these overrides.
+GIMANO_ENTITLEMENTS_CLOUD_NO[sdk=iphonesimulator*] = Gimano/Resources/CarPlaySim/Gimano.entitlements
+GIMANO_ENTITLEMENTS_CLOUD_YES[sdk=iphonesimulator*] = Gimano/Resources/CarPlaySim/Gimano-AppLinks.entitlements
+GIMANO_ENTITLEMENTS_NOCLOUD_NO[sdk=iphonesimulator*] = Gimano/Resources/CarPlaySim/Gimano-NoCloud.entitlements
+GIMANO_ENTITLEMENTS_NOCLOUD_YES[sdk=iphonesimulator*] = Gimano/Resources/CarPlaySim/Gimano-NoCloud-AppLinks.entitlements
+
 // Google Drive backup (GoogleSignIn + Drive appDataFolder). The store/TestFlight build sets GIMANO_DRIVE = NO
 // (owner decision 2026-10-24): no Drive destination, no Google sign-in, no Drive auto-backup or restore, and no Google
 // client id or URL scheme in Info.plist. Every user of that build sees the same thing. Dev and sideload builds keep YES.

@@ -10,8 +10,22 @@ struct GimanoMapView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(state: state) }
 
     func makeUIView(context: Context) -> MLNMapView {
+        let map = Self.makeMap(state: state, coordinator: context.coordinator)
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        for g in map.gestureRecognizers ?? [] where (g as? UITapGestureRecognizer)?.numberOfTapsRequired == 2 {
+            tap.require(toFail: g)
+        }
+        map.addGestureRecognizer(tap)
+        let long = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        map.addGestureRecognizer(long)
+        context.coordinator.observe()
+        return map
+    }
+
+    /// A configured MapLibre view drawing `state` through `coordinator` (the phone map, and the CarPlay surface).
+    static func makeMap(state: MapState, coordinator: Coordinator) -> MLNMapView {
         let map = MLNMapView(frame: .zero, styleURL: state.styleURL)
-        map.delegate = context.coordinator
+        map.delegate = coordinator
         map.logoView.isHidden = true
         // We show our own "© OpenStreetMap contributors" label (see OSMAttribution) which links to the full notice.
         map.attributionButton.isHidden = true
@@ -20,17 +34,7 @@ struct GimanoMapView: UIViewRepresentable {
         map.allowsRotating = true
         map.setCenter(DemoRepository.defaultLocation.coordinate, zoomLevel: 14, animated: false)
         map.accessibilityIdentifier = "map"
-
-        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
-        for g in map.gestureRecognizers ?? [] where (g as? UITapGestureRecognizer)?.numberOfTapsRequired == 2 {
-            tap.require(toFail: g)
-        }
-        map.addGestureRecognizer(tap)
-        let long = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
-        map.addGestureRecognizer(long)
-
-        context.coordinator.map = map
-        context.coordinator.observe()
+        coordinator.map = map
         return map
     }
 
@@ -269,7 +273,11 @@ struct GimanoMapView: UIViewRepresentable {
         }
 
         /// Top padding that puts the arrow `puckY` of the way down the map.
-        var puckPadding: (CGFloat, Double) -> UIEdgeInsets = { h, y in UIEdgeInsets(top: max(0, (2 * y - 1) * h), left: 0, bottom: 0, right: 0) }
+        /// Edge padding that puts the arrow `puckY` of the way down the map (the car screen also keeps it clear of the
+        /// guidance panel on the left).
+        var puckPadding: (CGSize, Double) -> UIEdgeInsets = { size, y in
+            UIEdgeInsets(top: max(0, (2 * y - 1) * size.height), left: 0, bottom: 0, right: 0)
+        }
 
         func drawFrame(_ link: CADisplayLink) {
             guard let map, style != nil, let motion = state.motion, let f = motion.frame(at: CACurrentMediaTime()) else { return }
@@ -286,7 +294,7 @@ struct GimanoMapView: UIViewRepresentable {
             let size = map.bounds.size
             let altitude = MLNAltitudeForZoomLevel(f.zoom, CGFloat(f.pitch), f.point.lat, size)
             let cam = MLNMapCamera(lookingAtCenter: f.point.coordinate, altitude: altitude, pitch: CGFloat(f.pitch), heading: f.heading)
-            let padding = puckPadding(size.height, f.puckY)
+            let padding = puckPadding(size, f.puckY)
             let now = CACurrentMediaTime()
             if easeInUntil == 0 {
                 // Start / recentre: one short animated move onto the arrow, then per-frame following.

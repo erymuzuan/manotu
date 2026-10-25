@@ -79,6 +79,8 @@ enum MenuSheet: String, Identifiable {
 @MainActor
 @Observable
 final class AppModel {
+    /// The app's model, for the CarPlay scene (a second view of the same drive; docs/driving.md §5).
+    static weak var current: AppModel?
     let config: AppConfig
     let location = LocationService()
     let live = LiveMapStore()
@@ -266,6 +268,7 @@ final class AppModel {
         if let raw = UserDefaults.standard.string(forKey: "GimanoTheme"), let t = ThemeMode(rawValue: raw) { theme = t }
         #endif
         wireMap()
+        Self.current = self
         location.onFix = { [weak self] fix in self?.handleRealFix(fix) }
         rebuildRepository()
         moveToPinned()
@@ -324,6 +327,7 @@ final class AppModel {
         map.puck = position
         await refreshUserData()
         #if DEBUG
+        if UserDefaults.standard.bool(forKey: "GimanoCarPreview") { CarSurfacePreview.show(model: self) }
         await runDemoScene()
         #endif
     }
@@ -1179,6 +1183,16 @@ final class AppModel {
     }
 
     @ObservationIgnored private var startingNavigation = false
+
+    /// "Start" on the car screen's trip preview. The agreement and the reminder card are never shown in the car: not
+    /// agreed → nil (the car says to open Manotu on the phone); otherwise guidance starts at once and the result says
+    /// whether the car should show the 5 s drive reminder.
+    func startNavigationFromCar() -> Bool? {
+        guard let planner, planner.selected != nil, planner.start.isGPS, navigation == nil, !needsSafetyAgreement else { return nil }
+        safetyCard = nil
+        beginNavigation()
+        return navigation != nil && reminderEnabled
+    }
 
     private func beginNavigation() {
         guard let planner, var route = planner.selected else { return }

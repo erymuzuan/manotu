@@ -4550,6 +4550,16 @@
         }
       }
     },
+    "Gone" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiada"
+          }
+        }
+      }
+    },
     "Good" : {
       "localizations" : {
         "ms" : {
@@ -4626,6 +4636,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Google Drive: belum dikonfigurasi dalam binaan ini"
+          }
+        }
+      }
+    },
+    "Got it" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faham"
           }
         }
       }
@@ -6984,12 +7004,32 @@
         }
       }
     },
+    "No saved places yet" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada tempat disimpan"
+          }
+        }
+      }
+    },
     "No sound" : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tiada bunyi"
+          }
+        }
+      }
+    },
+    "No tolls" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanpa tol"
           }
         }
       }
@@ -7432,6 +7472,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Buka Manotu untuk masa terbaik bertolak ke %@ (tiba %@)"
+          }
+        }
+      }
+    },
+    "Open Manotu on your phone to start" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buka Manotu di telefon untuk bermula"
           }
         }
       }
@@ -11840,6 +11890,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tol"
+          }
+        }
+      }
+    },
+    "Tolls %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol %@"
+          }
+        }
+      }
+    },
+    "Tolls from %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol dari %@"
           }
         }
       }
