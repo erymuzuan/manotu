@@ -18,6 +18,18 @@ struct DriveView: View {
                             .padding(.top, 6)
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
+                    if let problem = nav.motion.tinjauProblem {
+                        TinjauBanner(problem: problem, distanceM: nav.motion.tinjauDistanceM)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 6)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    if let toll = nav.tollAhead {
+                        TollBanner(toll: toll, distanceM: nav.distanceToToll(toll))
+                            .padding(.horizontal, 10)
+                            .padding(.top, 6)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     if let stop = nav.arrivedAtStop {
                         HStack(spacing: 10) {
                             GimanoIcon(icon: .addStop, size: 30, stroke: .brandOn, fill: .brandOn)
@@ -93,7 +105,7 @@ struct DriveView: View {
                         .padding(.top, 6)
                     }
                     // Hidden diagnostics for UI tests (max off-road distance while on route, reroutes).
-                    Text(verbatim: "offroad=\(Int(nav.maxOffRoadM.rounded()));reroutes=\(nav.rerouteCount);stopsLeft=\(nav.stops.count - nav.stopTracker.nextStopIndex)")
+                    Text(verbatim: "offroad=\(Int(nav.maxOffRoadM.rounded()));reroutes=\(nav.rerouteCount);stopsLeft=\(nav.stops.count - nav.stopTracker.nextStopIndex);camera=\(nav.motion.mode.rawValue)")
                         .font(.system(size: 1))
                         .opacity(0.01)
                         .accessibilityIdentifier("navDebug")
@@ -110,6 +122,8 @@ struct DriveView: View {
                     .padding(.top, 12)
                     Spacer()
                 }
+                .animation(.snappy, value: nav.tollAhead?.id)
+                .animation(.snappy, value: nav.motion.tinjauProblem?.id)
 
                 VStack(spacing: 12) {
                     if nav.approachingAlert == nil, let issue = model.stillClosedPrompt {
@@ -142,7 +156,8 @@ struct DriveView: View {
                 .animation(.snappy, value: nav.approachingAlert?.id)
 
                 if nav.arrived {
-                    ArrivedCard(destination: nav.destination, onDone: { model.stopNavigation() },
+                    ArrivedCard(destination: nav.destination, info: nav.arrivalInfo, onDone: { model.stopNavigation() },
+                                onWrongEntrance: nav.canReportWrongEntrance ? { model.reportWrongEntrance() } : nil,
                                 onName: nav.destination.isPin ? {
                                     let d = nav.destination
                                     model.stopNavigation()
@@ -269,6 +284,15 @@ struct BottomBar: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(nav.destination.name).font(Tokens.Font.bodyBold)
                         Text(nav.route.summary).font(Tokens.Font.caption).foregroundStyle(Color.textMuted).lineLimit(1)
+                        if nav.showsTollTotals {
+                            HStack(spacing: 6) {
+                                GimanoIcon(icon: .toll, size: 16)
+                                Text(nav.tollTotals.text)
+                            }
+                                .font(Tokens.Font.caption)
+                                .foregroundStyle(Color.textMuted)
+                                .accessibilityIdentifier("tollTotals")
+                        }
                         let remainingStops = Array(nav.stops.dropFirst(nav.stopTracker.nextStopIndex))
                         let etas = nav.etaOffsets
                         ForEach(Array(remainingStops.enumerated()), id: \.element.id) { i, s in
@@ -327,6 +351,76 @@ struct BottomBar: View {
     private var shareText: String {
         let eta = ETAFormatter.arrivalTime(remainingS: nav.remainingS)
         return String(localized: "I'm driving to \(nav.destination.name) with Gimano. ETA \(eta).")
+    }
+}
+
+/// Tinjau (docs/driving.md §2): while the camera looks ahead at a jam or closure, what it is looking at.
+struct TinjauBanner: View {
+    let problem: DriveProblem
+    let distanceM: Double
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: problem.kind == .jam ? "car.2.fill" : "exclamationmark.triangle.fill")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(width: 36, height: 36)
+                .background(Color(uiColor: problem.kind == .jam ? Tokens.Palette.traffic3 : Tokens.Palette.speeding), in: Circle())
+            Text(problem.bannerText(distanceM: distanceM))
+                .font(Tokens.Font.label)
+                .foregroundStyle(Color.textPrimary)
+                .monospacedDigit()
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.lg, style: .continuous))
+        .fabShadow()
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("tinjauBanner")
+    }
+}
+
+/// "Toll ahead" banner (docs/driving.md §1): plaza, distance, and the fare or what to expect.
+struct TollBanner: View {
+    let toll: RouteToll
+    let distanceM: Double
+
+    var body: some View {
+        HStack(spacing: 12) {
+            GimanoIcon(icon: .toll, size: 28, stroke: .brandInk, fill: .brandTint)
+                .frame(width: 46, height: 46)
+                .background(Color.brandMist, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(TollText.title(toll)).font(Tokens.Font.bodyBold).lineLimit(1).minimumScaleFactor(0.8)
+                Group {
+                    if distanceM > 0 {
+                        Text("\(ManeuverFormatter.distance(distanceM)) ahead") + Text(TollText.fareLine(toll).map { " · \($0)" } ?? "")
+                    } else {
+                        Text(TollText.fareLine(toll) ?? "")
+                    }
+                }
+                .font(Tokens.Font.caption)
+                .foregroundStyle(Color.textMuted)
+                .lineLimit(2)
+                .monospacedDigit()
+            }
+            Spacer(minLength: 4)
+            if let fare = toll.fare {
+                Text(TollBadge.myr(fare))
+                    .font(Tokens.Font.nunito(18, .black))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.brandOn)
+                    .padding(.horizontal, 12).frame(height: 38)
+                    .background(Color.brand, in: Capsule())
+            }
+        }
+        .foregroundStyle(Color.textPrimary)
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.lg, style: .continuous))
+        .fabShadow()
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("tollBanner")
     }
 }
 
@@ -409,7 +503,11 @@ struct AlertDetailSheet: View {
 
 struct ArrivedCard: View {
     let destination: Destination
+    /// "Main entrance on your left · 25 m from the road".
+    var info: ArrivalInfo? = nil
     let onDone: () -> Void
+    /// "Wrong entrance?": the existing place_entrance_wrong flow (place destinations only).
+    var onWrongEntrance: (() -> Void)? = nil
     /// Arrived at a point chosen on the map: offer once to name (save) it on this phone.
     var onName: (() -> Void)? = nil
 
@@ -418,12 +516,37 @@ struct ArrivedCard: View {
             Image(systemName: "flag.checkered.circle.fill").font(.system(size: 54)).foregroundStyle(Color.brand)
             Text("You've arrived").font(Tokens.Font.title)
             Text(destination.name).font(Tokens.Font.body).foregroundStyle(Color.textMuted)
+            if let info {
+                HStack(spacing: 10) {
+                    Image(systemName: info.side == .left ? "arrow.turn.up.left" : "arrow.turn.up.right")
+                        .font(.system(size: 18, weight: .heavy))
+                        .foregroundStyle(Color.brand)
+                        .frame(width: 40, height: 40)
+                        .background(Color.brandMist, in: Circle())
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(info.sideText).font(Tokens.Font.bodyBold)
+                        Text(info.distanceText).font(Tokens.Font.caption).foregroundStyle(Color.textMuted)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(12)
+                .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: Tokens.Radius.md, style: .continuous))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("arrivalSide")
+            }
             if let onName {
                 Button(action: onName) { Label("Name this place?", systemImage: "star") }
                     .buttonStyle(SecondaryButtonStyle())
                     .accessibilityIdentifier("namePinPlace")
             }
-            Button("Done", action: onDone).buttonStyle(PrimaryButtonStyle())
+            HStack(spacing: 10) {
+                if let onWrongEntrance {
+                    Button("Wrong entrance?", action: onWrongEntrance)
+                        .buttonStyle(SecondaryButtonStyle())
+                        .accessibilityIdentifier("wrongEntrance")
+                }
+                Button("Done", action: onDone).buttonStyle(PrimaryButtonStyle())
+            }
         }
         .padding(24)
         .frame(maxWidth: .infinity)

@@ -52,8 +52,11 @@ public sealed record PlaceDto(
     string? Description = null, AddedBy? AddedBy = null, int VerifiedCount = 0, IReadOnlyList<PhotoDto>? Photos = null,
     PlaceBadge? Badge = null, NavigationPoint? NavigationPoint = null, bool HeldForReview = false);
 
-/// <summary>A confirmed place_entrance_wrong: route here instead of the display pin.</summary>
-public sealed record NavigationPoint(double Lat, double Lng, Guid IssueId);
+/// <summary>
+/// Route here instead of the display pin. source: confirmed (a confirmed place_entrance_wrong, IssueId set), osm_entrance
+/// (an OSM entrance node; Kind = its entrance=* value) or outline (the outline point nearest the closest named road).
+/// </summary>
+public sealed record NavigationPoint(double Lat, double Lng, Guid? IssueId, string Source = "confirmed", string? Kind = null);
 
 /// <param name="AuthorRef">Opaque, stable per-author id for on-device blocking (AuthorHandles); null when the author deleted their account.</param>
 public sealed record AddedBy(string DisplayName, string? AuthorRef = null);
@@ -166,7 +169,8 @@ public sealed record RouteDto(
     string Summary, string TrafficDescription, Vehicle Vehicle,
     bool HasTolls, decimal? TollEstimateMyr, bool TollFareComplete, IReadOnlyList<TollOnRoute> Tolls,
     string Polyline, double[] Bbox, IReadOnlyList<RouteLeg> Legs,
-    IReadOnlyList<TrafficSegment> TrafficSegments, IReadOnlyList<AlertOnRoute> Alerts, IReadOnlyList<RouteIssue>? Issues = null);
+    IReadOnlyList<TrafficSegment> TrafficSegments, IReadOnlyList<AlertOnRoute> Alerts, IReadOnlyList<RouteIssue>? Issues = null,
+    NavigationPoint? Arrival = null);
 
 /// <summary>
 /// An issue relevant to a route. avoided = true: a confirmed closure/no-road the route goes around ("Mengelak Jln X");
@@ -201,7 +205,9 @@ public sealed record RouteLeg(double DurationS, double DistanceM, LegEnd To, IRe
 
 public sealed record LegEnd(double Lat, double Lng, string? Name);
 
-public sealed record TollOnRoute(string PlazaId, string Name, string? Highway, double Lat, double Lng, decimal? FareMyr, TollSystem System, string? Source);
+/// <param name="DistanceAlongRouteM">Metres from the route start to the plaza (its first booth along the route), for the "toll ahead" alert.</param>
+public sealed record TollOnRoute(string PlazaId, string Name, string? Highway, double Lat, double Lng, decimal? FareMyr, TollSystem System, string? Source,
+    double? DistanceAlongRouteM = null);
 
 public sealed record ManeuverDto(
     ManeuverType Type, string Instruction, string? StreetName, string? ExitNumber, string? RoadRef,

@@ -33,6 +33,7 @@ public sealed class GimanoDbContext(DbContextOptions<GimanoDbContext> options) :
     public DbSet<PhotoFlag> PhotoFlags => Set<PhotoFlag>();
     public DbSet<WaterArea> WaterAreas => Set<WaterArea>();
     public DbSet<RestrictedArea> RestrictedAreas => Set<RestrictedArea>();
+    public DbSet<PlaceEntrance> PlaceEntrances => Set<PlaceEntrance>();
     public DbSet<InboxItem> InboxItems => Set<InboxItem>();
     public DbSet<ReportContact> ReportContacts => Set<ReportContact>();
     public DbSet<CrashGroup> CrashGroups => Set<CrashGroup>();
@@ -495,6 +496,15 @@ public sealed class GimanoDbContext(DbContextOptions<GimanoDbContext> options) :
         {
             e.Property(x => x.Geom).HasColumnType("geography (polygon, 4326)");
             e.HasIndex(x => x.Geom).HasMethod("gist");
+        });
+
+        b.Entity<PlaceEntrance>(e =>
+        {
+            e.HasKey(x => x.PlaceId);
+            e.Property(x => x.PlaceId).HasMaxLength(40);
+            e.Property(x => x.Location).HasColumnType("geography (point, 4326)");
+            e.Property(x => x.Source).HasMaxLength(16);
+            e.Property(x => x.Kind).HasMaxLength(16);
         });
 
         b.Entity<RestrictedArea>(e =>

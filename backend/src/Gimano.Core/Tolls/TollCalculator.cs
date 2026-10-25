@@ -64,7 +64,8 @@ public static partial class TollCalculator
             var withData = g.Where(x => byPlace.ContainsKey(x.Plaza.Id)).OrderBy(x => x.Proj.DistanceM).ToList();
             var rep = (withData.Count > 0 ? withData : g.OrderBy(x => x.Proj.DistanceM).ToList())[0].Plaza;
             var tariffsHere = g.SelectMany(x => byPlace.GetValueOrDefault(x.Plaza.Id) ?? []).Distinct().ToList();
-            return (Plaza: rep, Tariffs: tariffsHere);
+            // Where the driver first reaches the plaza (its first booth node along the route), for the "toll ahead" alert.
+            return (Plaza: rep, Tariffs: tariffsHere, AlongM: g.Min(x => x.Proj.AlongM));
         }).ToList();
 
         // 3. Price: open plazas directly; closed-system exits by the entry plaza passed earlier on this route.
@@ -75,7 +76,7 @@ public static partial class TollCalculator
         var sources = new string?[passed.Count];
         for (var i = 0; i < passed.Count; i++)
         {
-            var (plaza, tariffsHere) = passed[i];
+            var (plaza, tariffsHere, _) = passed[i];
             var open = tariffsHere.FirstOrDefault(t => t.System == TollSystem.Open);
             if (open is not null)
             {
@@ -114,9 +115,9 @@ public static partial class TollCalculator
 
         for (var i = 0; i < passed.Count; i++)
         {
-            var (plaza, tariffsHere) = passed[i];
+            var (plaza, tariffsHere, alongM) = passed[i];
             result.Add(new TollOnRoute(plaza.Id, DisplayName(plaza.Name), tariffsHere.Select(t => t.Highway).FirstOrDefault(h => h is not null),
-                plaza.Lat, plaza.Lng, fares[i], systems[i], sources[i]));
+                plaza.Lat, plaza.Lng, fares[i], systems[i], sources[i], Math.Round(alongM)));
         }
 
         var known = result.Where(t => t.FareMyr is not null).Select(t => t.FareMyr!.Value).ToList();

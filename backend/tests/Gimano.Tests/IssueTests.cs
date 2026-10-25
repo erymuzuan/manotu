@@ -265,7 +265,7 @@ public class IssueRoutingTests
 
     private static IssueDirectory.Snapshot Snap(IReadOnlyList<IssueDirectory.RoadIssue> ex, IReadOnlyList<IssueDirectory.RoadIssue> warn, Issue? nav = null) =>
         new(ex, warn, new Dictionary<string, Issue>(), new HashSet<string>(),
-            nav is null ? new Dictionary<string, Issue>() : new Dictionary<string, Issue> { ["n1"] = nav }, new Dictionary<string, string>(), DateTimeOffset.UtcNow);
+            nav is null ? new Dictionary<string, Issue>() : new Dictionary<string, Issue> { [nav.PlaceId ?? "n1"] = nav }, new Dictionary<string, string>(), DateTimeOffset.UtcNow);
 
     [Fact]
     public void Confirmed_closures_near_the_trip_become_exclusions_unless_ignored_or_for_another_vehicle()
@@ -304,5 +304,45 @@ public class IssueRoutingTests
         Assert.Equal(3.10011, routed.Destination.Lat);
         Assert.Equal(101.60022, routed.Destination.Lng);
         Assert.Equal("n1", routed.Destination.PlaceId);
+    }
+
+    [Fact]
+    public void An_imported_entrance_is_the_routing_destination_unless_a_correction_is_confirmed()
+    {
+        var entrances = new Dictionary<string, PlaceEntrance>
+        {
+            ["w9"] = new() { PlaceId = "w9", Location = new GeoPoint(3.2001, 101.7002).ToPoint(), Source = "osm_entrance", Kind = "main" },
+        };
+        var req = new RouteRequest(new LatLng(3.0, 101.5), new LatLng(3.2, 101.7, "w9", "Mall"), null, Vehicle.Car, null, null, 0);
+        var routed = RouteService.WithNavigationPoints(req, Snap([], []), entrances);
+        Assert.Equal((3.2001, 101.7002, "w9"), (routed.Destination.Lat, routed.Destination.Lng, routed.Destination.PlaceId));
+        var arrival = RouteService.ArrivalPoint(req.Destination, Snap([], []), entrances);
+        Assert.Equal(("osm_entrance", "main", (Guid?)null), (arrival!.Source, arrival.Kind, arrival.IssueId));
+
+        // A dropped pin (no placeId) is routed as it is.
+        Assert.Null(RouteService.ArrivalPoint(new LatLng(3.2, 101.7), Snap([], []), entrances));
+
+        // A confirmed correction wins over the imported entrance.
+        var nav = new Issue { Kind = IssueKind.PlaceEntranceWrong, State = IssueState.Confirmed, PlaceId = "w9", Location = new GeoPoint(3.2, 101.7).ToPoint(),
+            Payload = new() { ["navLat"] = "3.2003", ["navLng"] = "101.7004" } };
+        Assert.Equal(("confirmed", 3.2003), (RouteService.ArrivalPoint(req.Destination, Snap([], [], nav), entrances)!.Source,
+            RouteService.WithNavigationPoints(req, Snap([], [], nav), entrances).Destination.Lat));
+    }
+
+    [Theory]
+    [InlineData("main", "main")]
+    [InlineData("yes", "yes")]
+    [InlineData("exit", null)]
+    [InlineData("emergency", null)]
+    public void Entrance_kinds(string value, string? expected) =>
+        Assert.Equal(expected, Gimano.Importer.OsmImporter.EntranceKind(new Dictionary<string, string> { ["entrance"] = value }));
+
+    [Fact]
+    public void Best_entrance_prefers_main_then_yes_then_others_then_service()
+    {
+        var kinds = new Dictionary<long, string> { [2] = "service", [3] = "yes", [4] = "main" };
+        Assert.Equal(4, Gimano.Importer.OsmImporter.BestEntrance([1, 2, 3, 4, 1], kinds));
+        Assert.Equal(3, Gimano.Importer.OsmImporter.BestEntrance([1, 2, 3, 1], kinds));
+        Assert.Null(Gimano.Importer.OsmImporter.BestEntrance([1, 5, 1], kinds));
     }
 }

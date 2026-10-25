@@ -166,6 +166,7 @@ public class TollCalculatorTests
         Assert.Equal("E23", t.Highway);
         Assert.Equal("https://src", t.Source);
         Assert.Equal(TollSystem.Open, t.System);
+        Assert.InRange(t.DistanceAlongRouteM!.Value, 2700, 2860);   // 0.025° of longitude at 3° N ≈ 2.78 km
         Assert.Equal(1.60m, car.EstimateMyr);
         Assert.True(car.FareComplete);
 

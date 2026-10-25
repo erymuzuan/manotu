@@ -24,7 +24,7 @@ data class NavProgress(
 )
 
 /** Pure tracker: feed it fixes, it tells you where you are on the route. */
-class NavigationTracker(val route: Route) {
+class NavigationTracker(val route: Route, private val pin: GeoPoint? = null) {
     val geometry = RouteGeometry(Polyline.decode(route.polyline))
     private val legManeuvers = my.gimano.app.core.trip.RouteLegs.maneuvers(route)
     val maneuvers: List<Maneuver> = legManeuvers.map { it.maneuver }
@@ -58,7 +58,8 @@ class NavigationTracker(val route: Route) {
         val distToNext = if (next != null) (geometry.distanceAtIndex(next.beginShapeIndex) - along).coerceAtLeast(0.0) else remainingM
         val then = maneuvers.getOrNull(idx + 1)
         val leg = legManeuvers.getOrNull(idx)?.leg ?: 0
-        val arrived = remainingM < 25
+        // docs/driving.md §4: ≤ 30 m left along the route (on it), or ≤ 40 m in a straight line from the pin.
+        val arrived = ArrivalRule.arrived(remainingM, s.distanceFromRouteM, pin?.let { GeoMath.distanceM(p, it) }, leg >= legCount - 1)
         return NavProgress(
             snapped = s.point,
             bearing = s.segmentBearing,

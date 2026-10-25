@@ -42,6 +42,10 @@ data class MapRenderState(
     val navigating: Boolean = false,
     /** The route builder's lines and points; also event sketch routes (dashed) on the event screen. */
     val builder: BuilderDraw? = null,
+    /** Toll plazas along the drawn route (docs/driving.md §1). */
+    val tolls: List<GeoPoint> = emptyList(),
+    /** Dashed last metres (docs/driving.md §4): route end → entrance (blue dots), entrance → pin (grey dots). */
+    val lastMetres: List<my.gimano.app.core.nav.LastMetres.Line> = emptyList(),
 )
 
 /** One-shot camera instructions; [id] makes repeated identical commands re-apply. */
@@ -49,7 +53,8 @@ sealed interface CameraCommand {
     val id: Long
 
     data class MoveTo(val point: GeoPoint, val zoom: Double?, val animate: Boolean = true, override val id: Long = System.nanoTime()) : CameraCommand
-    data class Fit(val points: List<GeoPoint>, val topDp: Int, val bottomDp: Int, val sideDp: Int = 48, override val id: Long = System.nanoTime()) : CameraCommand
+    /** [startDp]: padding on the left instead of [sideDp] (the car's route list card covers the left). */
+    data class Fit(val points: List<GeoPoint>, val topDp: Int, val bottomDp: Int, val sideDp: Int = 48, val startDp: Int? = null, override val id: Long = System.nanoTime()) : CameraCommand
     data class Follow(val point: GeoPoint, val bearing: Double, val zoom: Double = 17.0, val tilt: Double = 50.0, val bottomDp: Int = 0, val topDp: Int = 0, override val id: Long = System.nanoTime()) : CameraCommand
     data class Reset2D(val point: GeoPoint, val zoom: Double = 15.0, override val id: Long = System.nanoTime()) : CameraCommand
 }

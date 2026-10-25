@@ -114,6 +114,15 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
         // ---- Bottom: alert card, speedometer, report, ETA bar ------------------------------
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
             val alert = nav.upcomingAlert
+            val toll = nav.toll
+            // Tinjau (docs/driving.md §2): while the camera shows the jam / closure ahead.
+            val tinjau = nav.camera?.tinjau
+            AnimatedVisibility(tinjau != null && !nav.arrived) {
+                if (tinjau != null) TinjauBanner(tinjau, Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+            }
+            AnimatedVisibility(toll != null && !nav.arrived) {
+                if (toll != null) TollBannerCard(toll, Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+            }
             val still = ui.stillClosed
             if (still != null && !nav.arrived && alert == null) my.gimano.app.ui.issues.StillClosedCard(still, vm::answerStillClosed,
                 Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
@@ -256,6 +265,10 @@ private fun EtaBar(nav: NavState, ui: UiState, settings: AppSettings, vm: MainVi
                     val eta = p?.let { Formatters.etaClock(now, it.remainingS, ZoneId.systemDefault(), settings.use24h, lang) } ?: "--:--"
                     Text(eta, style = GimanoType.etaClock, color = c.text, lineHeight = 36.sp)
                     Text(p?.let { Formatters.remainingLine(it.remainingS, it.remainingM, lang) } ?: "", fontSize = 15.sp, color = c.textMuted)
+                    // "Tol setakat ini RM x · anggaran RM y" (docs/driving.md §1), only on routes with tolls.
+                    nav.route?.let { r -> my.gimano.app.core.nav.TollText.tripLine(nav.tollsPaidMyr, r, nav.tollsCarriedMyr, lang) }?.let {
+                        Text(it, fontSize = 13.sp, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
                 IconButton(onClick = vm::overview, Modifier.size(52.dp)) { Icon(Icons.Filled.AltRoute, stringResource(R.string.overview), tint = c.text, modifier = Modifier.size(28.dp)) }
             }
@@ -310,16 +323,82 @@ private fun ArrivedCard(nav: NavState, vm: MainViewModel) {
     val c = Gimano.colors
     // Tracking already stopped on arrival; close the card by itself if the driver doesn't.
     LaunchedEffect(Unit) { delay(20_000); vm.stopNavigation() }
+    val lang = currentLang()
+    // docs/driving.md §4: which side the entrance is on, and how far from the road.
+    val side = remember(nav.route?.id, lang) {
+        val r = nav.route
+        val g = r?.let { runCatching { my.gimano.app.core.nav.RouteGeometry(my.gimano.app.core.geo.Polyline.decode(it.polyline)) }.getOrNull() }
+        val end = g?.points?.lastOrNull()
+        val travel = g?.takeIf { it.lengthM > 1 }?.let { my.gimano.app.core.geo.GeoMath.bearingDeg(it.pointAt(it.lengthM - 20).first, it.pointAt(it.lengthM).first) }
+        my.gimano.app.core.nav.ArrivalText.line(r?.arrival, end, travel, nav.destination?.point, lang)
+    }
+    val dest = nav.destination
+    val canReport = dest?.placeId != null && !dest.eventStop && !dest.placeId.startsWith("pin:") && !dest.placeId.startsWith("private:")
     SheetSurface(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Filled.SportsScore, null, tint = c.brand, modifier = Modifier.size(48.dp))
             Text(stringResource(R.string.arrived), style = GimanoType.title, color = c.text, modifier = Modifier.padding(top = 8.dp))
-            nav.destination?.let { Text(it.name, fontSize = 16.sp, color = c.textMuted, modifier = Modifier.padding(top = 4.dp)) }
+            dest?.let { Text(it.name, fontSize = 16.sp, color = c.textMuted, modifier = Modifier.padding(top = 4.dp)) }
+            side?.let {
+                Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.MeetingRoom, null, tint = c.brand, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(it, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.text)
+                }
+            }
             Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = vm::stopNavigation, Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(Radius.md),
-                colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn),
-            ) { Text(stringResource(R.string.done), fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (canReport) OutlinedButton(
+                    onClick = vm::wrongEntrance, Modifier.weight(1f).height(54.dp), shape = RoundedCornerShape(Radius.md),
+                ) { Text(stringResource(R.string.wrong_entrance), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.text, maxLines = 1) }
+                Button(
+                    onClick = vm::stopNavigation, Modifier.weight(1f).height(54.dp), shape = RoundedCornerShape(Radius.md),
+                    colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn),
+                ) { Text(stringResource(R.string.done), fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+            }
+        }
+    }
+}
+
+/** "Tol Sungai Besi · 900 m di hadapan · RM 2.10" (docs/driving.md §1). */
+@Composable
+fun TollBannerCard(b: my.gimano.app.core.nav.TollBanner, modifier: Modifier = Modifier) {
+    val c = Gimano.colors
+    val lang = currentLang()
+    val fare = b.kind == my.gimano.app.core.nav.TollKind.FARE
+    FloatingSurface(modifier.fillMaxWidth(), RoundedCornerShape(Radius.lg)) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(c.brandMist), contentAlignment = Alignment.Center) {
+                GIcon("toll", null, size = 28.dp)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(my.gimano.app.core.nav.TollText.title(b.toll.plaza, lang), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.text,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val detail = if (fare) {
+                    if (b.passed) null else Formatters.navDistance(b.distanceM) + if (lang == my.gimano.app.core.format.Lang.MS) " di hadapan" else " ahead"
+                } else my.gimano.app.core.nav.TollText.detail(b, lang)
+                detail?.let { Text(it, fontSize = 15.sp, color = c.textMuted, maxLines = 2) }
+            }
+            if (fare) {
+                Spacer(Modifier.width(10.dp))
+                Text(my.gimano.app.core.trip.TollBadge.rm(b.fareMyr ?: 0.0), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = c.brand)
+            }
+        }
+    }
+}
+
+/** "Sesak 4.8 km di hadapan · 1.2 km panjang · +6 min" while the Tinjau camera is out. */
+@Composable
+fun TinjauBanner(t: my.gimano.app.core.nav.TinjauInfo, modifier: Modifier = Modifier) {
+    val c = Gimano.colors
+    val lang = currentLang()
+    val type = when (t.problem.kind) { "jam" -> "traffic"; else -> t.problem.kind }
+    FloatingSurface(modifier.fillMaxWidth(), RoundedCornerShape(Radius.lg)) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            ReportTile(type, 44.dp)
+            Spacer(Modifier.width(12.dp))
+            Text(my.gimano.app.core.nav.TinjauText.line(t, lang), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = c.text, maxLines = 2)
         }
     }
 }

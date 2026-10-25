@@ -1473,6 +1473,35 @@ namespace Gimano.Core.Data.Migrations
                     b.ToTable("place_disputes", (string)null);
                 });
 
+            modelBuilder.Entity("Gimano.Core.Domain.PlaceEntrance", b =>
+                {
+                    b.Property<string>("PlaceId")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("place_id");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<Point>("Location")
+                        .IsRequired()
+                        .HasColumnType("geography (point, 4326)")
+                        .HasColumnName("location");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("source");
+
+                    b.HasKey("PlaceId")
+                        .HasName("pk_place_entrances");
+
+                    b.ToTable("place_entrances", (string)null);
+                });
+
             modelBuilder.Entity("Gimano.Core.Domain.PlaceFlag", b =>
                 {
                     b.Property<string>("PlaceId")

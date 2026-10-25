@@ -195,6 +195,20 @@ public sealed class WaterArea
 }
 
 /// <summary>
+/// Where a driver should arrive for a map place (docs/api.md "Arriving at the entrance"): an OSM entrance node on the
+/// building outline (<c>osm_entrance</c>), else the outline point nearest the closest named road (<c>outline</c>).
+/// Rebuilt by every import. A confirmed place_entrance_wrong correction still wins.
+/// </summary>
+public sealed class PlaceEntrance
+{
+    public required string PlaceId { get; set; }
+    public required Point Location { get; set; }
+    public required string Source { get; set; }
+    /// <summary>OSM entrance=* value (main, yes, service, …) for osm_entrance; null for outline.</summary>
+    public string? Kind { get; set; }
+}
+
+/// <summary>
 /// Military, strategic and other sensitive sites where no community content is accepted (docs/api.md "Restricted areas").
 /// OSM rows are rebuilt by every import; curated rows (shelters, safe houses, sites OSM doesn't tag) are kept and are
 /// checked on the server only: <see cref="Public"/> = false is never sent to phones.

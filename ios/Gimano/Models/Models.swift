@@ -407,6 +407,8 @@ struct Place: Codable, Sendable, Identifiable, Hashable {
     var confirmationsWeighted: Double?
     var required: Double?
     var heldForReview: Bool?
+    /// Where routes to this place end (its entrance); the display pin stays `lat`/`lng`.
+    var navigationPoint: NavigationPoint?
 
     var summary: PlaceSummary {
         var s = PlaceSummary(id: id, name: name, category: category, address: address, lat: lat, lng: lng, distanceM: distanceM, brand: brand,
@@ -615,6 +617,30 @@ struct ReverseGeocode: Codable, Sendable {
     var nearby: [PlaceSummary]?
 }
 
+/// Where a route to a place ends (docs/api.md "Arriving at the entrance"): a confirmed entrance correction, an OSM
+/// `entrance=*` node, or the outline point nearest the road.
+struct NavigationPoint: Codable, Sendable, Hashable {
+    enum Source: String, Codable, Sendable {
+        case confirmed
+        case osmEntrance = "osm_entrance"
+        case outline
+        case other
+
+        init(from decoder: any Decoder) throws {
+            self = Source(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .other
+        }
+    }
+
+    var lat: Double
+    var lng: Double
+    var issueId: String?
+    var source: Source?
+    /// OSM `entrance=*` value ("main", "yes", "service"…).
+    var kind: String?
+
+    var location: LatLng { LatLng(lat: lat, lng: lng) }
+}
+
 /// What the user picked as a destination, regardless of origin (search, saved, recent, map).
 struct Destination: Hashable, Sendable {
     var name: String
@@ -741,6 +767,8 @@ struct TollPlaza: Codable, Sendable, Hashable, Identifiable {
     var fareMyr: Double?
     var system: String?
     var source: String?
+    /// Metres from the route start to the plaza ("toll ahead" alert); older servers leave it out.
+    var distanceAlongRouteM: Double?
     var id: String { plazaId }
 }
 
@@ -770,6 +798,8 @@ struct Route: Codable, Sendable, Identifiable, Hashable {
     var alerts: [AlertOnRoute]?
     /// Road issues on or avoided by this route (complaints v1).
     var issues: [RouteIssue]?
+    /// A place destination routed to its entrance: where this route ends (docs/driving.md §4).
+    var arrival: NavigationPoint?
     /// Client-side only (demo mode): explains that a captured route was substituted. Not part of the API contract.
     var demoNote: String?
 

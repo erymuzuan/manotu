@@ -62,6 +62,7 @@ targets:
           - "Resources/Gimano-NoCloud.entitlements"
           - "Resources/Gimano-AppLinks.entitlements"
           - "Resources/Gimano-NoCloud-AppLinks.entitlements"
+          - "Resources/CarPlaySim/*.entitlements"
     dependencies:
       - package: MapLibre
       - package: GRDB

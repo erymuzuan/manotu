@@ -45,9 +45,20 @@ class MainActivity : AppCompatActivity() {
         if (!BuildConfig.DEBUG || i == null) return
         if (i.hasExtra("gimano.simulateDrive")) vm.setSimulate(i.getBooleanExtra("gimano.simulateDrive", false))
         if (i.hasExtra("gimano.demoMode")) vm.setDemoMode(i.getBooleanExtra("gimano.demoMode", false))
+        // `--ez gimano.resetSafety true`: forget the safety agreement (tests the car's "open the phone" message).
+        if (i.getBooleanExtra("gimano.resetSafety", false)) { vm.debugResetSafety(); i.removeExtra("gimano.resetSafety") }
         // `--es gimano.moveTo 3.0745,101.7065[,zoom]`: pan the map there (desk-testing restricted areas).
         i.getStringExtra("gimano.moveTo")?.split(",")?.mapNotNull { it.trim().toDoubleOrNull() }?.takeIf { it.size >= 2 }?.let {
             vm.debugMoveTo(my.gimano.app.core.geo.GeoPoint(it[0], it[1]), it.getOrNull(2) ?: 15.0)
+        }
+        // `--es gimano.debugDrive "fromLat,fromLng;toLat,toLng;placeId|-;name;cruiseKmh;startAlongM;jamAtM|-"`: replay a drive.
+        i.getStringExtra("gimano.debugDrive")?.split(";")?.let { f ->
+            fun pt(s: String?) = s?.split(",")?.mapNotNull { it.trim().toDoubleOrNull() }?.takeIf { it.size == 2 }?.let { my.gimano.app.core.geo.GeoPoint(it[0], it[1]) }
+            val from = pt(f.getOrNull(0)) ?: return@let
+            val to = pt(f.getOrNull(1)) ?: return@let
+            vm.debugDrive(from, to, f.getOrNull(2)?.takeIf { it.isNotBlank() && it != "-" }, f.getOrNull(3)?.takeIf { it.isNotBlank() } ?: "Destinasi",
+                f.getOrNull(4)?.toDoubleOrNull() ?: 100.0, f.getOrNull(5)?.toDoubleOrNull() ?: 0.0, f.getOrNull(6)?.toDoubleOrNull())
+            i.removeExtra("gimano.debugDrive")
         }
     }
 

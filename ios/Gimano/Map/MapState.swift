@@ -42,8 +42,14 @@ final class MapState {
     /// Horizontal accuracy (m) drawn as a circle around the puck.
     var puckAccuracyM: Double?
     var navigationPuck = false
+    /// While navigating: the animated arrow and camera modes the map draws every frame (docs/driving.md §2–3).
+    @ObservationIgnored var motion: DriveMotion?
     var routes: [RouteLine] = []
     var destination: LatLng?
+    /// Dotted last metres of the shown route: route end → entrance (blue), entrance → pin (grey).
+    var lastMetres = LastMetres()
+    /// Toll plazas on the shown route (docs/driving.md §1: plaza icon along the route).
+    var tolls: [LatLng] = []
     var alerts: [Report] = []
     var jams: [JamLine] = []
     var drivers: [Driver] = []

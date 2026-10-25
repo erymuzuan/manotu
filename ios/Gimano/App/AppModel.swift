@@ -79,6 +79,8 @@ enum MenuSheet: String, Identifiable {
 @MainActor
 @Observable
 final class AppModel {
+    /// The app's model, for the CarPlay scene (a second view of the same drive; docs/driving.md §5).
+    static weak var current: AppModel?
     let config: AppConfig
     let location = LocationService()
     let live = LiveMapStore()
@@ -266,6 +268,7 @@ final class AppModel {
         if let raw = UserDefaults.standard.string(forKey: "GimanoTheme"), let t = ThemeMode(rawValue: raw) { theme = t }
         #endif
         wireMap()
+        Self.current = self
         location.onFix = { [weak self] fix in self?.handleRealFix(fix) }
         rebuildRepository()
         moveToPinned()
@@ -324,6 +327,7 @@ final class AppModel {
         map.puck = position
         await refreshUserData()
         #if DEBUG
+        if UserDefaults.standard.bool(forKey: "GimanoCarPreview") { CarSurfacePreview.show(model: self) }
         await runDemoScene()
         #endif
     }
@@ -331,6 +335,19 @@ final class AppModel {
     #if DEBUG
     /// Screenshot / demo hook: `-GimanoDemoScene search|place|route|nav|report|menu`.
     private func runDemoScene() async {
+        // `-GimanoDriveTo "Name|lat,lng|placeId"`: plan a trip there from the (fake) location and start it (route replays).
+        if let raw = UserDefaults.standard.string(forKey: "GimanoDriveTo") {
+            let parts = raw.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            let ll = parts.count > 1 ? parts[1].split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) } : []
+            guard ll.count == 2 else { return }
+            let placeId = parts.count > 2 && !parts[2].isEmpty ? parts[2] : nil
+            try? await Task.sleep(for: .seconds(1.5))
+            planRoute(to: Destination(name: parts[0], address: "", location: LatLng(lat: ll[0], lng: ll[1]), placeId: placeId), remember: false)
+            for _ in 0..<60 where planner?.selected == nil { try? await Task.sleep(for: .milliseconds(500)) }
+            try? await Task.sleep(for: .seconds(1))
+            startNavigation()
+            return
+        }
         guard let scene = UserDefaults.standard.string(forKey: "GimanoDemoScene") else { return }
         let target = DemoData.places.first { $0.id == "demo:midvalley" }!
         let dest = Destination(name: target.name, address: target.address, location: target.location, placeId: target.id, category: target.category)
@@ -805,8 +822,9 @@ final class AppModel {
             }
         }
         // Only a fix that was just snapped (usable for guidance) may move the puck to the road; a poor fix shows raw.
-        if GpsQuality.usableForGuidance(fix), let nav = navigation, let snapped = nav.progress?.snap, snapped.distanceFromRouteM <= 30 {
-            // Keep the puck glued to the road while on route (≤ 30 m); otherwise show the raw fix (off-route logic runs on it).
+        if GpsQuality.usableForGuidance(fix), let nav = navigation, nav.puckSnapped, let snapped = nav.progress?.snap {
+            // Keep the puck glued to the road while on route (snap hysteresis: 25 m in, 40 m for 3 s out); otherwise the
+            // raw fix (off-route logic runs on it). While navigating the map draws the animated arrow from `nav.motion`.
             map.puck = snapped.point
         }
     }
@@ -874,17 +892,30 @@ final class AppModel {
                 map.destination = planner.destination.location
             }
             map.bubbleAnchors = Self.bubbleAnchors(for: planner.routes.map { ($0.id, Polyline.decode($0.polyline)) })
+            map.tolls = (planner.selected?.tolls ?? []).map { LatLng(lat: $0.lat, lng: $0.lng) }
+            if let r = planner.selected, r.demoNote == nil {
+                map.lastMetres = LastMetres.make(routeEnd: Polyline.decode(r.polyline).last, arrival: r.arrival?.location,
+                                                 pin: planner.destination.location)
+            } else {
+                map.lastMetres = LastMetres()
+            }
         case .navigating:
             guard let nav = navigation else { break }
+            map.tolls = nav.tollTracker.tolls.map { LatLng(lat: $0.plaza.lat, lng: $0.plaza.lng) }
+            map.lastMetres = nav.lastMetres
             map.routes = [RouteLine(id: nav.route.id, points: nav.geometry.points, selected: true, traffic: nav.route.trafficSegments ?? [])]
             map.destination = nav.route.demoNote != nil ? (nav.geometry.points.last ?? nav.destination.location) : nav.destination.location
             map.bubbleAnchors = [:]
         case .place(let p):
             map.routes = []
+            map.tolls = []
+            map.lastMetres = LastMetres()
             map.destination = p.location
             map.bubbleAnchors = [:]
         default:
             map.routes = []
+            map.tolls = []
+            map.lastMetres = LastMetres()
             map.destination = nil
             map.bubbleAnchors = [:]
         }
@@ -1153,8 +1184,23 @@ final class AppModel {
 
     @ObservationIgnored private var startingNavigation = false
 
+    /// "Start" on the car screen's trip preview. The agreement and the reminder card are never shown in the car: not
+    /// agreed → nil (the car says to open Manotu on the phone); otherwise guidance starts at once and the result says
+    /// whether the car should show the 5 s drive reminder.
+    func startNavigationFromCar() -> Bool? {
+        guard let planner, planner.selected != nil, planner.start.isGPS, navigation == nil, !needsSafetyAgreement else { return nil }
+        safetyCard = nil
+        beginNavigation()
+        return navigation != nil && reminderEnabled
+    }
+
     private func beginNavigation() {
-        guard let planner, let route = planner.selected else { return }
+        guard let planner, var route = planner.selected else { return }
+        #if DEBUG
+        // `-GimanoFakeJam 3000`: a 1.2 km standstill starting that many metres into the route (memory only, never sent),
+        // to see Tinjau and the traffic colours on a route replay.
+        if let at = UserDefaults.standard.string(forKey: "GimanoFakeJam"), let m = Double(at) { route = route.withDebugJam(atM: m) }
+        #endif
         let session = NavigationSession(destination: planner.destination, route: route, stops: planner.stops, vehicle: planner.vehicle,
                                         avoid: planner.avoid, repo: repo, voice: voice)
         Task {
@@ -1175,6 +1221,7 @@ final class AppModel {
             if self.shouldSimulate { self.startSimulator(on: r) }
         }
         navigation = session
+        map.motion = session.motion
         location.setNavigating(true, requestAlways: !shouldSimulate)
         go(.navigating)
         session.begin()
@@ -1208,7 +1255,16 @@ final class AppModel {
         }
         // Slow modes get a bigger speed-up so demos don't take an hour.
         let speedup = config.simulationSpeedup * (mode.isMotorized ? 1 : 4)
-        simulator.start(points: pts, speedKmh: speed, speedup: speedup) { [weak self] fix in
+        var tick = 0.5
+        var profile: (@Sendable (Double) -> Double)?
+        #if DEBUG
+        // Route replays (device checks of the toll alert, camera modes and arrival): `-GimanoSimSpeed route` drives at
+        // the maneuvers' own speeds (highway ≈ 100 km/h, streets slower); `-GimanoSimTick 1` gives one fix a second.
+        let d = UserDefaults.standard
+        if d.string(forKey: "GimanoSimSpeed") == "route" { profile = DriveSimulator.profile(for: route) }
+        if d.double(forKey: "GimanoSimTick") > 0 { tick = min(2, max(0.2, d.double(forKey: "GimanoSimTick"))) }
+        #endif
+        simulator.start(points: pts, speedKmh: speed, speedup: speedup, tick: tick, profile: profile) { [weak self] fix in
             self?.applyFix(fix)
         }
     }
@@ -1304,6 +1360,18 @@ final class AppModel {
         Task { await fetchRoutes() }
     }
 
+    /// "Wrong entrance?" on the arrival card: ends the drive and opens the existing `place_entrance_wrong` flow (move the
+    /// pin to where the entrance really is).
+    func reportWrongEntrance() {
+        guard let nav = navigation, let placeId = nav.destination.placeId, !placeId.hasPrefix("pin:"),
+              !placeId.hasPrefix(PrivatePlace.idPrefix) else { return }
+        let pin = nav.destination.location
+        let start = nav.route.arrival?.location ?? pin
+        stopNavigation()
+        entrancePlace = (placeId, pin)
+        startPinPick(.placeEntrance, start: start)
+    }
+
     func stopNavigation() {
         let deviation = navigation?.deviation
         let speedBefore = speedKmh
@@ -1311,6 +1379,7 @@ final class AppModel {
         simulator.stop()
         navigation?.stop()
         navigation = nil
+        map.motion = nil
         planner = nil
         location.setNavigating(false)
         UIApplication.shared.isIdleTimerDisabled = false

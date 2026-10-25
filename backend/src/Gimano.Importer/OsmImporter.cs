@@ -140,6 +140,7 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
             var lng = new double[neededIds.Length];
             var places = new List<Place>();
             var addresses = new List<AddressPoint>();
+            var entranceKinds = new Dictionary<long, string>();
             await using (var fs = File.OpenRead(o.PbfPath))
             {
                 foreach (var g in new PBFOsmStreamSource(fs))
@@ -153,6 +154,7 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
                     if (o.Places && n.Tags is { Count: > 0 })
                     {
                         var tags = ToDict(n.Tags);
+                        if (idx >= 0 && EntranceKind(tags) is { } ek) entranceKinds[n.Id.Value] = ek;
                         if (OsmCategoryMapper.Map(tags) is { } cat && OsmCategoryMapper.ShouldImport(cat, tags))
                             places.Add(ToPlace("n", n.Id.Value, cat, tags, la, lo));
                         if (IsAddress(tags)) addresses.Add(ToAddress("n" + n.Id.Value, tags, la, lo));
@@ -168,6 +170,8 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
                 return i >= 0 && (lat[i] != 0 || lng[i] != 0);
             }
 
+            var entrances = new List<(string PlaceId, GeoPoint At, string Kind)>();
+            var outlines = new List<(string PlaceId, List<GeoPoint> Ring)>();
             foreach (var w in poiWays)
             {
                 var pts = w.Nodes.Select(id => TryCoord(id, out var p) ? p : (GeoPoint?)null).Where(p => p is not null).Select(p => p!.Value).ToList();
@@ -175,6 +179,12 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
                 // Closed ways repeat the first node; drop it so the centroid isn't biased.
                 if (pts.Count > 1 && pts[0] == pts[^1]) pts.RemoveAt(pts.Count - 1);
                 places.Add(ToPlace("w", w.Id, w.Category, w.Tags, pts.Average(p => p.Lat), pts.Average(p => p.Lng)));
+                // Arriving at the entrance: an OSM entrance node on the outline, else (closed outlines) the outline point
+                // nearest the closest named road, worked out in SQL once the roads are in.
+                if (BestEntrance(w.Nodes, entranceKinds) is { } en && TryCoord(en, out var ep))
+                    entrances.Add(("w" + w.Id, ep, entranceKinds[en]));
+                else if (pts.Count >= 3 && w.Nodes[0] == w.Nodes[^1])
+                    outlines.Add(("w" + w.Id, pts));
             }
 
             foreach (var w in addrWays)
@@ -225,6 +235,7 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
             if (o.Places) await WriteAddressesAsync(addresses, ct);
             if (o.Places) await WriteBoundariesAsync(boundaries, boundaryWays, TryCoord, ct);
             if (o.Places) await WriteRestrictedAsync(restrictedWays, restrictedRels, boundaryWays, TryCoord, ct);
+            if (o.Places) await WriteEntrancesAsync(entrances, outlines, ct);
             else if (o.Roads) await DropRestrictedRoadsAsync(ct);
             if (o.Places && o.Roads) await EnrichAddressesAsync(ct);
         }
@@ -351,6 +362,79 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
         if (!int.TryParse(tags.GetValueOrDefault("admin_level"), out var level) || level is < 4 or > 8) return null;
         var outers = (r.Members ?? []).Where(m => m.Type == OsmGeoType.Way && m.Role is "outer" or "" or null).Select(m => m.Id).ToArray();
         return outers.Length == 0 ? null : (r.Id!.Value, name, level, outers);
+    }
+
+    /// <summary>OSM entrance=* (not exits, emergency-only or "no"); the value is kept to rank and word it ("main" first).</summary>
+    internal static string? EntranceKind(IReadOnlyDictionary<string, string> tags) =>
+        tags.TryGetValue("entrance", out var v) && v.Length is > 0 and <= 16 && v is not ("exit" or "emergency" or "no" or "staircase") ? v : null;
+
+    /// <summary>The best entrance node of an outline: main, then yes, then any other, then service.</summary>
+    internal static long? BestEntrance(long[] nodes, IReadOnlyDictionary<long, string> kinds)
+    {
+        static int Rank(string k) => k switch { "main" => 0, "yes" => 1, "service" => 3, _ => 2 };
+        long? best = null;
+        var bestRank = int.MaxValue;
+        foreach (var n in nodes)
+            if (kinds.TryGetValue(n, out var k) && Rank(k) < bestRank) { best = n; bestRank = Rank(k); }
+        return best;
+    }
+
+    private const string OutlineEntrancesSql = @"
+        INSERT INTO place_entrances (place_id, location, source, kind)
+        SELECT o.place_id, ST_ClosestPoint(ST_Boundary(o.geom::geometry), r.g)::geography, 'outline', NULL
+        FROM tmp_outlines o
+        JOIN places p ON p.id = o.place_id
+        CROSS JOIN LATERAL (
+            SELECT s.geom::geometry AS g, s.geom AS geog FROM road_segments s
+            WHERE s.name IS NOT NULL AND s.highway NOT IN ('service', 'track', 'footway', 'path', 'cycleway', 'pedestrian', 'steps', 'living_street')
+              AND ST_DWithin(s.geom, o.geom, 150)
+            ORDER BY s.geom <-> o.geom LIMIT 1) r
+        WHERE ST_Distance(p.location, r.geog) > 25
+        ON CONFLICT (place_id) DO NOTHING;
+        DROP TABLE tmp_outlines;
+        ANALYZE place_entrances;";
+
+    /// <summary>
+    /// place_entrances: OSM entrance nodes, then for outlines without one, the outline point nearest the closest named
+    /// drivable road within 150 m, when the place's pin is more than 25 m from that road (else the pin is good enough).
+    /// </summary>
+    private async Task WriteEntrancesAsync(List<(string PlaceId, GeoPoint At, string Kind)> entrances, List<(string PlaceId, List<GeoPoint> Ring)> outlines,
+        CancellationToken ct)
+    {
+        await using var conn = await dataSource.OpenConnectionAsync(ct);
+        await using (var trunc = new NpgsqlCommand("TRUNCATE place_entrances; CREATE TEMP TABLE tmp_outlines (place_id text PRIMARY KEY, geom geography(polygon, 4326));", conn))
+            await trunc.ExecuteNonQueryAsync(ct);
+        await using (var writer = await conn.BeginBinaryImportAsync("COPY place_entrances (place_id, location, source, kind) FROM STDIN (FORMAT BINARY)", ct))
+        {
+            foreach (var e in entrances.DistinctBy(e => e.PlaceId))
+            {
+                await writer.StartRowAsync(ct);
+                await writer.WriteAsync(e.PlaceId, NpgsqlDbType.Text, ct);
+                await writer.WriteAsync(e.At.ToPoint(), NpgsqlDbType.Geography, ct);
+                await writer.WriteAsync("osm_entrance", NpgsqlDbType.Text, ct);
+                await writer.WriteAsync(e.Kind, NpgsqlDbType.Text, ct);
+            }
+            await writer.CompleteAsync(ct);
+        }
+        await using (var writer = await conn.BeginBinaryImportAsync("COPY tmp_outlines (place_id, geom) FROM STDIN (FORMAT BINARY)", ct))
+        {
+            foreach (var (id, ring) in outlines.DistinctBy(x => x.PlaceId))
+            {
+                var coords = ring.Select(p => new NetTopologySuite.Geometries.Coordinate(p.Lng, p.Lat)).Append(new(ring[0].Lng, ring[0].Lat)).ToArray();
+                var poly = GeoMath.Factory.CreatePolygon(coords);
+                if (!poly.IsValid) continue;
+                if (!poly.Shell.IsCCW) poly = (NetTopologySuite.Geometries.Polygon)poly.Reverse();
+                await writer.StartRowAsync(ct);
+                await writer.WriteAsync(id, NpgsqlDbType.Text, ct);
+                await writer.WriteAsync(poly, NpgsqlDbType.Geography, ct);
+            }
+            await writer.CompleteAsync(ct);
+        }
+        await using (var cmd = new NpgsqlCommand(OutlineEntrancesSql, conn) { CommandTimeout = 1800 })
+            await cmd.ExecuteNonQueryAsync(ct);
+        await using var count = new NpgsqlCommand("SELECT source, count(*) FROM place_entrances GROUP BY source", conn);
+        await using var rd = await count.ExecuteReaderAsync(ct);
+        while (await rd.ReadAsync(ct)) logger.LogInformation("Place entrances: {Count} {Source}", rd.GetInt64(1), rd.GetString(0));
     }
 
     /// <summary>Restricted multipolygon relations (RestrictedAreaRules.IsRestricted) and their outer member ways.</summary>

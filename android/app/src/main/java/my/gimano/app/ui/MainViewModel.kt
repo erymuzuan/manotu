@@ -276,6 +276,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
     // Declared before the init block: refreshAccount() starts in init and can reach migrateLegacy() without
     // suspending (demo data answers at once), so the lock must already exist (startup NPE in 0.3.1-dev).
     private val migrationLock = kotlinx.coroutines.sync.Mutex()
+    private var navSeenActive = false
     val container: AppContainer get() = c
     private val repo = c.repo
     private val local = c.local
@@ -330,12 +331,13 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                     pinDestination = null
                     _ui.update { it.copy(namePin = s.destination) }
                 }
-                val p = s.progress
-                // Follow the puck even before there is route progress (poor fixes), so it never sits off-screen.
-                val target = s.puck ?: p?.snapped
-                if (s.active && target != null && _ui.value.following && _ui.value.screen == Screen.Navigating) {
-                    _ui.update { it.copy(camera = CameraCommand.Follow(target, s.puckBearing, zoom = if (p == null) 15.0 else if (s.mode.isMotorised) 17.0 else 18.0, tilt = if (p == null) 0.0 else 50.0, bottomDp = 170, topDp = 420)) }
+                // A drive started on the car screen (Android Auto) while the phone shows the map: show it here too.
+                if (s.active && !navSeenActive && _ui.value.screen == Screen.Home) {
+                    _ui.update { it.copy(screen = Screen.Navigating, following = true, navExpanded = false) }
                 }
+                navSeenActive = s.active
+                // The camera follows the puck on every frame in the map (DriveRenderer, docs/driving.md §2–3): no
+                // camera commands per fix, which fought the puck.
             }
         }
         if (!repo.isDemo) c.liveHub.start()
@@ -468,8 +470,8 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         _ui.update { it.copy(following = true) }
         val s = nav.value
         val p = s.progress
-        if (s.active && p != null) {
-            _ui.update { it.copy(camera = CameraCommand.Follow(s.puck ?: p.snapped, s.puckBearing, bottomDp = 170, topDp = 420)) }
+        if (s.active && (p != null || s.puck != null)) {
+            // Following again: the map's per-frame camera blends back to the arrow by itself.
         } else {
             _ui.update { it.copy(camera = CameraCommand.Reset2D(here(), 15.5)) }
         }
@@ -825,6 +827,18 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                 _ui.update { s -> s.copy(placeIssues = s.placeIssues.filterNot { it.id == i.id }) }
             }
         }
+    }
+
+    /**
+     * "Pintu masuk salah?" on the arrival card (docs/driving.md §4): ends the drive, opens the destination's place card
+     * and starts the existing place_entrance_wrong flow (pick the right entrance on the map).
+     */
+    fun wrongEntrance() {
+        val d = nav.value.destination ?: return
+        val id = d.placeId ?: return
+        stopNavigation()
+        showPlace(PlaceSummary(id, d.name, address = d.address, lat = d.point.lat, lng = d.point.lng))
+        pickEntrance()
     }
 
     /** "Pintu masuk / parkir salah": pick the right point with a green pin. */
@@ -1804,6 +1818,27 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
     }
 
     /** Debug builds only (MainActivity extra `gimano.moveTo`). */
+    /**
+     * DEBUG builds only: replay a drive along a freshly planned route (see MainActivity `gimano.debugDrive`), at
+     * [cruiseKmh] with slow turns, starting [startAlongM] metres in. [jamAtM] adds a 1.2 km level-4 jam there (+6 min) so
+     * the "Tinjau" camera can be seen at a desk. Nothing about it is sent anywhere (simulated drives send no pings).
+     */
+    fun debugDrive(from: GeoPoint, to: GeoPoint, placeId: String?, name: String, cruiseKmh: Double, startAlongM: Double, jamAtM: Double?) {
+        if (!my.gimano.app.BuildConfig.DEBUG) return
+        viewModelScope.launch {
+            val req = RouteRequest(LatLngDto(from.lat, from.lng), LatLngDto(to.lat, to.lng, placeId, name.takeIf { placeId != null }), vehicle = "car", alternatives = 0)
+            val route = runCatching { repo.routes(req).firstOrNull() }.onFailure { GLog.w("Debug", "debugDrive: ${it.javaClass.simpleName}") }.getOrNull() ?: return@launch
+            val r = if (jamAtM == null) route else {
+                val g = my.gimano.app.core.nav.RouteGeometry(my.gimano.app.core.geo.Polyline.decode(route.polyline))
+                val a = g.segmentAt(jamAtM); val b = g.segmentAt(jamAtM + 1_200) + 1
+                route.copy(trafficSegments = route.trafficSegments + TrafficSegment(a, b, 4), trafficDurationS = route.effectiveDurationS + 360)
+            }
+            c.navigation.debugSim = my.gimano.app.nav.NavigationController.DebugSim(cruiseKmh, startAlongM)
+            c.navigation.start(r, NavDestination(name, "", to, placeId), req, simulate = true)
+            _ui.update { it.copy(screen = Screen.Navigating, following = true, navExpanded = false, plan = null) }
+        }
+    }
+
     fun debugMoveTo(p: GeoPoint, zoom: Double) {
         if (!my.gimano.app.BuildConfig.DEBUG) return
         centeredOnce = true
