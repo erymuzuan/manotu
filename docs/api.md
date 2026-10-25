@@ -178,19 +178,24 @@ Clean-room flow, modelled on how big map apps let people add missing places:
 2. **Visibility** question: "Make this place discoverable by other Manotu users?"
    - **No** → private: stored **only on the device** (local DB, included in the user's backup) and never
      sent to the server.
-   - **Yes** → `pending`: automated checks run (below); if they pass, the place is shown to
-     others with an "Unverified" badge, and nearby users can confirm it ("Is this place
-     here?"). After **3 distinct confirmations**, or a moderator approval, it becomes `published`.
+   - **Yes** → the automated checks run (below), then the **AI check** (below), whose answer comes back in the same
+     response. A place that passes is `pending` with `listed: true`: in search and on the map for everyone with a
+     "Not verified yet" badge, and nearby users can confirm it ("Is this place here?"). After the required
+     confirmations (**1 in launch mode**, otherwise 3, 2 for Perak), or a moderator approval, it becomes `published`.
      **3 "Doesn't exist / Wrong location" votes** hide it for moderator review.
 3. Anyone can then **suggest an edit** (hours, phone, category, location); owner edits apply directly,
    other users' edits need 2 confirmations.
 
 ```
-POST   /places                        → 201 Place
+POST   /places                        → 201 Place   (owner view, with `screening`)
   { name, category, lat, lng, address?, description?, phone?, website?,
     openingHours?: "Mo-Fr 08:00-18:00; Sa 08:00-13:00",     // OSM opening_hours syntax
-    amenities?: string[] }                                   // always public; private places never reach the server
-PATCH  /places/{id}                   → Place        (owner only, community places only)
+    amenities?: string[],                                    // always public; private places never reach the server
+    notDuplicateOf?: string }                                // the `existing.id` of a 409 the user answered "No, mine is different"
+PATCH  /places/{id}                   → Place        (owner only, community places only; a changed place is checked again;
+                                                      a `rejected` place may be edited: "Edit and try again")
+POST   /places/{id}/appeal  (signed)  {note?: ≤ 200}  → Place   (owner only, `rejected` places, once per place → hidden,
+                                                      held for a maintainer; 409 if not rejected or already appealed)
 DELETE /places/{id}                   → 204          (owner only; published places become "closed", not deleted)
 POST   /places/{id}/suggest-edit      → 202 {suggestionId}   (any user; any place incl. OSM → stored as a map-data suggestion)
 POST   /places/{id}/verify  (signed)  {answer: yes|no|unsure, nameCorrect?, locationCorrect?,
@@ -202,9 +207,41 @@ GET    /places/pending-nearby?cell=<geohash6>   → PlaceSummary[] (pending, exc
 GET    /me/places/contributed         → PlaceSummary[]
 ```
 
+**AI check (Claude Haiku 5.5; design: canvas page "Add a place with an AI gate").** It sees only the public fields
+(name, category, description, opening hours, phone, website) and the names of public places within 150 m, never the
+user id, pseudonym, device or anyone's location. It answers publish / hold / reject with a confidence and fixed reason
+codes, and the server applies it by tier:
+
+| Contributor | AI: publish | AI: hold | AI: reject |
+|---|---|---|---|
+| New (account < 7 days or < 3 accepted places) | `pending` + `listed` only on high confidence, else held | held | `rejected` |
+| Baharu, Perak | `pending` + `listed` | held | `rejected` |
+| Emas | `published` (10 % audited) | held | held (never rejected automatically) |
+
+"Held" = `hidden` + `heldForReview: true`, decided by a maintainer within 24 h. An edit of a place others already
+confirmed is never rejected automatically: a doubtful edit is held. **3 AI rejections in 24 h pause adding for 24 h**
+(`403`, `code: "adding_paused"`, `pausedUntil`). The check spends at most **US$20 a week**; when it is off or the week's
+budget is used up, places follow the plain rules (`screening.state: "skipped"`: `pending`, not listed, 3 confirmations).
+
+The owner's `Place` (POST/PATCH/appeal responses, `GET /me/places/contributed`) carries
+`screening: {state, reasons, canAppeal, appealed}` (absent for other viewers):
+
+| `state` | Meaning | App (design) |
+|---|---|---|
+| `passed` | live (`pending` + listed, or `published`) | A4 "It's on the map", A5 Emas |
+| `held` | `hidden`, a maintainer decides (also after an appeal) | B2 "A person will check this one" |
+| `rejected` | `status: rejected`, only the owner sees it | B3 advert/scam, B4 someone's home (`reasons` say which) |
+| `checking` | no answer within 4 s; the worker finishes it, the result arrives in the Inbox. Hidden from others until then | B6 "Sent. We're still checking" |
+| `skipped` / `none` | not checked (off, over budget, older places, restricted-area holds) | as before |
+
+`reasons` ⊂ `spam, scam, gibberish, harassment, private_home, adult, illegal, duplicate, security, unclear,
+wrong_category` (and `ok` on a pass). The apps show their own copy for each code, never model text.
+Rate limits answer `429` with `Retry-After` and `retryAfterSeconds` (B5 "You can add more in 40 minutes").
+
 **Automated checks before `pending` → visible:**
 - duplicates: the same or a similar name (trigram ≥ 0.6) within 100 m of an OSM or community place is
-  rejected (409, with the existing place returned so the app can say "Is it this one?");
+  rejected (409, with the existing place returned so the app can say "Is it this one?"); sending the request again
+  with `notDuplicateOf: existing.id` lets it through to the AI check, which is told the user said it is different;
 - rate limit: 10 new places per user per day, 3 public ones per hour;
 - text filter (profanity/spam/URLs in names), Malay and English;
 - coordinates inside MY/SG/BN and not in water (OSM water polygons).
@@ -757,7 +794,12 @@ POST /me/inbox/read          {upTo: ISO time}   → 204   (everything created at
 ```
 
 `InboxItem = {id, kind, title, body, refType?, refId?, createdAt, read, count}`
-`kind ∈ place_published, place_rejected, place_expired, report_thanked, review_helpful, edit_accepted, feedback_status, announcement`
+`kind ∈ place_published, place_rejected, place_expired, report_thanked, review_helpful, edit_accepted, feedback_status, announcement,
+place_held, place_not_accepted, place_live`
+
+- `place_held` / `place_not_accepted`: the AI check held or didn't accept the user's place (also sent when the app
+  already showed the result). `place_live`: a place went on the map after the app stopped waiting (`checking`), or a
+  maintainer accepted a held or appealed place. All three: `refType: "place"`, `refId` = the community place id.
 
 - `report_thanked` and `review_helpful` are **aggregated per day** (Malaysia time) into one item, e.g. "24 drivers thanked
   you" (`count: 24`). Each new thank moves it to the top as unread.

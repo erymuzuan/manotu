@@ -18,7 +18,9 @@ public static class CommunityEndpoints
         var places = api.MapGroup("/places").WithTags("Community places").RequireAuthorization();
         places.MapGet("/pending-nearby", PendingNearby).WithSummary("Pending places in a geohash-6 cell and its 8 neighbours (excludes your own).");
         places.MapPost("", CreatePlace).RequireSignature().WithSummary("Add a missing place (always public: pending → published after 3 confirmations). 409 if a similar place exists within 100 m.");
-        places.MapPatch("/{id}", PatchPlace).RequireSignature().WithSummary("Owner only, community places only.");
+        places.MapPatch("/{id}", PatchPlace).RequireSignature().WithSummary("Owner only, community places only. A changed place is checked again.");
+        places.MapPost("/{id}/appeal", AppealPlace).RequireSignature()
+            .WithSummary("Owner only: ask a maintainer to review a place the AI check didn't accept (once per place; note ≤ 200 chars).");
         places.MapDelete("/{id}", DeletePlace).WithSummary("Owner only; published places become closed.");
         places.MapPost("/{id}/suggest-edit", SuggestEdit).RequireSignature();
         places.MapPost("/{id}/verify", Verify).RequireSignature();
@@ -65,6 +67,9 @@ public static class CommunityEndpoints
 
     private static async Task<Ok<PlaceDto>> PatchPlace(string id, PatchCommunityPlaceRequest req, HttpContext http, CommunityService svc, CancellationToken ct) =>
         TypedResults.Ok(await svc.PatchAsync(http.User.RequiredUserId(), id, req, ct));
+
+    private static async Task<Ok<PlaceDto>> AppealPlace(string id, AppealPlaceRequest req, HttpContext http, CommunityService svc, CancellationToken ct) =>
+        TypedResults.Ok(await svc.AppealAsync(http.User.RequiredUserId(), id, req, ct));
 
     private static async Task<NoContent> DeletePlace(string id, HttpContext http, CommunityService svc, CancellationToken ct)
     {

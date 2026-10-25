@@ -12,7 +12,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Gimano.Api.Services;
 
-public sealed class RateLimitedException(string message) : Exception(message);
+public sealed class RateLimitedException(string message, TimeSpan? retryAfter = null) : Exception(message)
+{
+    /// <summary>When the limit frees up again (sent as Retry-After and <c>retryAfterSeconds</c>).</summary>
+    public TimeSpan? RetryAfter { get; } = retryAfter;
+}
 
 /// <summary>409 with the existing place, so the app can ask "Is it this one?".</summary>
 public sealed class DuplicatePlaceException(PlaceSummary existing) : Exception($"A similar place already exists nearby: {existing.Name}.")
@@ -22,7 +26,7 @@ public sealed class DuplicatePlaceException(PlaceSummary existing) : Exception($
 
 /// <summary>Community places: add (always public), owner edit/delete, verification votes, suggested edits.</summary>
 public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gimano.Api.Identity.AttestationService attestation, TimeProvider clock,
-    RestrictedAreaService restricted)
+    RestrictedAreaService restricted, PlaceGate gate)
 {
     private static readonly TextFilter Filter = TextFilter.Default;
 
@@ -37,15 +41,25 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         var held = await restricted.EnsureAllowedAsync(at, ct) == RestrictedLevel.Near || RestrictedAreaRules.HasSensitiveTerm(name, req.Description);
 
         var now = clock.GetUtcNow();
-        if (user.SuspendedUntil > now)
-            throw new ForbiddenException($"Contributions are paused until {user.SuspendedUntil:yyyy-MM-dd HH:mm} UTC after several rejected places.");
+        if (user.SuspendedUntil is { } until && until > now)
+            throw new AddingPausedException(until, $"Adding places is paused until {until:yyyy-MM-dd HH:mm} UTC because several of your places were not accepted.");
         var perDay = Reputation.PublicPlacesPerDay(user.Tier);
-        var today = await db.CommunityPlaces.CountAsync(p => p.OwnerId == userId && p.CreatedAt > now.AddDays(-1), ct);
-        if (today >= perDay) throw new RateLimitedException($"At most {perDay} new places per day.");
-        var hour = await db.CommunityPlaces.CountAsync(p => p.OwnerId == userId && p.CreatedAt > now.AddHours(-1), ct);
-        if (hour >= CommunityRules.PublicPlacesPerHour) throw new RateLimitedException($"At most {CommunityRules.PublicPlacesPerHour} public places per hour.");
+        var dayStarts = await db.CommunityPlaces.Where(p => p.OwnerId == userId && p.CreatedAt > now.AddDays(-1)).Select(p => p.CreatedAt)
+            .OrderBy(t => t).ToListAsync(ct);
+        if (dayStarts.Count >= perDay)
+            throw new RateLimitedException($"At most {perDay} new places per day.", dayStarts[^perDay].AddDays(1) - now);
+        var hourStarts = dayStarts.Where(t => t > now.AddHours(-1)).ToList();
+        if (hourStarts.Count >= CommunityRules.PublicPlacesPerHour)
+            throw new RateLimitedException($"At most {CommunityRules.PublicPlacesPerHour} public places per hour.",
+                hourStarts[^CommunityRules.PublicPlacesPerHour].AddHours(1) - now);
 
-        if (await FindDuplicateAsync(name, at, null, ct) is { } dup) throw new DuplicatePlaceException(dup);
+        // "No, mine is a different place" (design B1): the same duplicate no longer blocks; the AI check is told.
+        string? saidDifferent = null;
+        if (await FindDuplicateAsync(name, at, null, ct) is { } dup)
+        {
+            if (!gate.Enabled || dup.Id != req.NotDuplicateOf) throw new DuplicatePlaceException(dup);
+            saidDifferent = dup.Id;
+        }
 
         var place = new CommunityPlace
         {
@@ -54,11 +68,12 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
             Website = req.Website?.Trim(), OpeningHours = req.OpeningHours?.Trim(),
             Amenities = (req.Amenities ?? []).Select(a => a.Trim()).Where(a => a.Length is > 0 and <= 40).Distinct().Take(30).ToList(),
             Country = CountryResolver.Resolve(at.Lat, at.Lng), OwnerId = userId, Owner = user, CreatedAt = now, UpdatedAt = now,
-            RequiredConfirmations = Reputation.RequiredConfirmations(user.Tier),
-            Rural = await IsRuralAsync(at, ct),
+            RequiredConfirmations = Reputation.RequiredConfirmations(user.Tier, gate.LaunchMode),
+            Rural = await IsRuralAsync(at, ct), SaidDifferentFrom = saidDifferent,
         };
         if (held) { place.Status = PlaceStatus.Hidden; place.HeldForReview = true; }
-        // Emas contributors publish immediately; 10 % are also sent for local audit.
+        // The AI check decides (design page "Add a place"); without it, Emas contributors publish immediately as before.
+        else if (gate.Enabled) place.ScreeningState = ScreeningState.Checking;
         else if (user.Tier == Tier.Emas)
         {
             place.Status = PlaceStatus.Published;
@@ -70,12 +85,48 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         db.CommunityPlaces.Add(place);
         await db.SaveChangesAsync(ct);
         await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(place.Id), ct);
+        // About 2 s; past 4 s the app shows "We're still checking" and the worker finishes it (design A3, B6).
+        if (place.ScreeningState == ScreeningState.Checking) await gate.RunAsync(place, isEdit: false, PlaceScreening.SyncBudget, late: false, ct);
         return Dto(place);
     }
+
+    /// <summary>
+    /// "Ask for a review" (design C1): a rejected place goes to a maintainer with the owner's note. Once per place; the note is
+    /// filtered like other text and shown only to maintainers.
+    /// </summary>
+    public async Task<PlaceDto> AppealAsync(Guid userId, string id, AppealPlaceRequest req, CancellationToken ct)
+    {
+        var place = await OwnedAsync(userId, id, ct);
+        if (place.Status != PlaceStatus.Rejected) throw new ConflictException("Only a place that was not accepted can be sent for review.");
+        if (place.AppealedAt is not null) throw new ConflictException("This place was already sent for review.");
+        var note = req.Note?.Trim();
+        if (note is { Length: > PlaceScreening.MaxAppealLength })
+            throw new ValidationException("note", $"note max {PlaceScreening.MaxAppealLength} chars.");
+        if (Filter.Check(note, rejectLinks: true) != TextVerdict.Ok) throw new ValidationException("note", "Please keep the note friendly and without links.");
+        var now = clock.GetUtcNow();
+        place.AppealNote = string.IsNullOrEmpty(note) ? null : note;
+        place.AppealedAt = now;
+        place.Status = PlaceStatus.Hidden;
+        place.HeldForReview = true;
+        place.ScreeningState = ScreeningState.Held;
+        place.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+        await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(place.Id), ct);
+        return Dto(place);
+    }
+
+    /// <summary>A new place has never been checked or confirmed; anything else is an edit (PlaceScreening.ForEdit).</summary>
+    internal static bool IsEdit(CommunityPlace p) => p.ResolvedAt is not null || p.ScreenedAt is not null;
 
     public async Task<PlaceDto> PatchAsync(Guid userId, string id, PatchCommunityPlaceRequest req, CancellationToken ct)
     {
         var place = await OwnedAsync(userId, id, ct);
+        if (place.Status == PlaceStatus.Rejected && place.AppealedAt is not null)
+            throw new ConflictException("This place is waiting for a maintainer's review.");
+        var changed = (req.Name is not null && req.Name.Trim() != place.Name) || (req.Description is not null && req.Description.Trim() != place.Description)
+            || (req.Category is { } nc && nc != place.Category) || req.Lat is not null || req.Lng is not null
+            || (req.Phone is not null && req.Phone.Trim() != place.Phone) || (req.Website is not null && req.Website.Trim() != place.Website)
+            || (req.OpeningHours is not null && req.OpeningHours.Trim() != place.OpeningHours);
         if (req.Name is not null) place.Name = CheckName(req.Name);
         CheckOptional(req.Description, req.Phone, req.Website, req.OpeningHours, req.Address);
         var held = RestrictedAreaRules.HasSensitiveTerm(req.Name, req.Description);
@@ -95,10 +146,14 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         if (req.Website is not null) place.Website = req.Website.Trim();
         if (req.OpeningHours is not null) place.OpeningHours = req.OpeningHours.Trim();
         if (req.Amenities is not null) place.Amenities = req.Amenities.Select(a => a.Trim()).Where(a => a.Length is > 0 and <= 40).Distinct().Take(30).ToList();
-        if (held && place.Status is PlaceStatus.Pending or PlaceStatus.Published) { place.Status = PlaceStatus.Hidden; place.HeldForReview = true; }
+        if (held && place.Status is PlaceStatus.Pending or PlaceStatus.Published or PlaceStatus.Rejected) { place.Status = PlaceStatus.Hidden; place.HeldForReview = true; }
         place.UpdatedAt = clock.GetUtcNow();
+        // An edit is checked again (design A4, B3 "Edit and try again"); a held place waits for its maintainer instead.
+        var recheck = changed && gate.Enabled && !place.HeldForReview && place.Status is PlaceStatus.Pending or PlaceStatus.Published or PlaceStatus.Rejected;
+        if (recheck) place.ScreeningState = ScreeningState.Checking;
         await db.SaveChangesAsync(ct);
         await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(place.Id), ct);
+        if (recheck) await gate.RunAsync(place, IsEdit(place), PlaceScreening.SyncBudget, late: false, ct);
         return Dto(place);
     }
 
@@ -151,7 +206,7 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         if (attestationOk == false && attestation.Mode == AttestationMode.Enforce)
             throw new ForbiddenException("Device check failed; votes from this device can't be counted.");
 
-        var weight = Reputation.VoteWeight(Reputation.CapForLegacy(voter.Tier, hasKey), voter.JoinedAt, now, answer, hasKey);
+        var weight = Reputation.VoteWeight(Reputation.CapForLegacy(voter.Tier, hasKey), voter.JoinedAt, now, answer, hasKey, gate.LaunchMode);
         db.PlaceVotes.Add(new PlaceVote
         {
             PlaceId = id, VoterId = userId, Answer = answer, NameCorrect = req.NameCorrect, LocationCorrect = req.LocationCorrect ?? req.CorrectLocation,
@@ -230,7 +285,7 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         var cells = Geohash.WithNeighbours(cell).ToHashSet();
         var poly = Geohash.NeighbourhoodBounds(cell).ToPolygon();
         var rows = await db.CommunityPlaces.AsNoTracking()
-            .Where(p => (p.Status == PlaceStatus.Pending || (p.Status == PlaceStatus.Published && p.AuditOpen))
+            .Where(p => ((p.Status == PlaceStatus.Pending && p.ScreeningState != ScreeningState.Checking) || (p.Status == PlaceStatus.Published && p.AuditOpen))
                         && p.OwnerId != userId && p.Location.Intersects(poly)
                         && !db.PlaceVotes.Any(v => v.PlaceId == p.Id && v.VoterId == userId))
             .OrderByDescending(p => p.CreatedAt).Take(100).ToListAsync(ct);
@@ -283,6 +338,7 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         {
             Status = p.Status,
             HeldForReview = p.HeldForReview,
+            Screening = ScreeningDto(p),
             ConfirmationsWeighted = p.Status == PlaceStatus.Pending || p.AuditOpen ? Math.Round(p.WeightedYes, 2) : null,
             Required = p.Status == PlaceStatus.Pending || p.AuditOpen ? RequiredFor(p) : null,
         }).ToList();
@@ -354,6 +410,12 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
     private async Task<User> RequireUserAsync(Guid userId, CancellationToken ct) =>
         Moderation.EnsureMayContribute(await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct) ?? throw new UnauthorizedAccessException("This account was deleted."));
 
+    /// <summary>The owner's view, with the AI check's state.</summary>
     private PlaceDto Dto(CommunityPlace p) =>
-        PlaceService.ToDto(p, null, null, null, [], TimeZoneInfo.ConvertTime(clock.GetUtcNow(), ValhallaMapper.MalaysiaTime).DateTime);
+        PlaceService.ToDto(p, null, null, null, [], TimeZoneInfo.ConvertTime(clock.GetUtcNow(), ValhallaMapper.MalaysiaTime).DateTime)
+            with { Status = p.Status, HeldForReview = p.HeldForReview, Screening = ScreeningDto(p) };
+
+    internal static PlaceScreeningDto ScreeningDto(CommunityPlace p) => new(p.ScreeningState,
+        string.IsNullOrEmpty(p.ScreeningReasons) ? [] : p.ScreeningReasons.Split(','),
+        CanAppeal: p.Status == PlaceStatus.Rejected && p.AppealedAt is null, Appealed: p.AppealedAt is not null);
 }

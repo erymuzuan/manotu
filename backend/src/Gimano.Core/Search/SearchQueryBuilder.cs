@@ -289,6 +289,8 @@ public static class SearchQueryBuilder
         {
             new JsonObject { ["term"] = new JsonObject { ["source"] = "osm" } },
             new JsonObject { ["term"] = new JsonObject { ["status"] = "published" } },
+            // Pending places the AI check passed (shown as "not verified yet").
+            new JsonObject { ["term"] = new JsonObject { ["listed"] = true } },
         };
         if (viewer is { } v)
             should.Add(new JsonObject
@@ -372,6 +374,7 @@ public static class SearchQueryBuilder
                 ["popularity"] = new JsonObject { ["type"] = "float" },
                 ["source"] = new JsonObject { ["type"] = "keyword" },
                 ["status"] = new JsonObject { ["type"] = "keyword" },
+                ["listed"] = new JsonObject { ["type"] = "boolean" },
                 ["ownerId"] = new JsonObject { ["type"] = "keyword" },
                 ["rating"] = new JsonObject { ["type"] = "float" },
                 ["reviewCount"] = new JsonObject { ["type"] = "integer" },
@@ -411,6 +414,7 @@ public static class SearchQueryBuilder
         ["popularity"] = 1 + Boost(agg),
         ["source"] = "community",
         ["status"] = GimanoJson.ToWire(p.Status),
+        ["listed"] = p.Status == PlaceStatus.Pending && p.Listed,
         ["ownerId"] = p.OwnerId?.ToString("D"),
         ["rating"] = agg?.Rating,
         ["reviewCount"] = agg?.ReviewCount ?? 0,

@@ -6,6 +6,7 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL.NetTopologySuite" />
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="NetTopologySuite" />
+    <PackageReference Include="Anthropic" />
     <PackageReference Include="OpenSearch.Net" />
     <PackageReference Include="RabbitMQ.Client" />
     <PackageReference Include="SkiaSharp" />

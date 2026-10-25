@@ -286,7 +286,7 @@ public sealed class PostgresIntegrationIssueTests : IAsyncLifetime
         Gimano.Api.Services.CommunityService Community(GimanoDbContext db) => new(db, new Bus(),
             new Gimano.Api.Identity.AttestationService(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(), null!, db, new Clock(T0),
                 NullLogger<Gimano.Api.Identity.AttestationService>.Instance), new Clock(T0),
-                new Gimano.Api.Services.RestrictedAreaService(db, new()));
+                new Gimano.Api.Services.RestrictedAreaService(db, new()), TestGates.Off(db, new Clock(T0)));
 
         // Three different users report the place → hidden; a repeat report by the same user doesn't count.
         foreach (var u in users.Skip(1).Take(3).Append(users[1]))
@@ -338,7 +338,7 @@ public sealed class PostgresIntegrationIssueTests : IAsyncLifetime
         Gimano.Api.Services.CommunityService Svc(GimanoDbContext db) => new(db, new Bus(),
             new Gimano.Api.Identity.AttestationService(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(), null!, db, new Clock(T0),
                 NullLogger<Gimano.Api.Identity.AttestationService>.Instance), new Clock(T0),
-                new Gimano.Api.Services.RestrictedAreaService(db, new()));
+                new Gimano.Api.Services.RestrictedAreaService(db, new()), TestGates.Off(db, new Clock(T0)));
 
         await using (var db = NewDb())
             await Assert.ThrowsAsync<ValidationException>(() => Svc(db).VerifyAsync(users[0].Id, "c" + new string('a', 32), legacy, null, default));
@@ -497,7 +497,7 @@ public sealed class PostgresIntegrationIssueTests : IAsyncLifetime
         Gimano.Api.Services.CommunityService Community(GimanoDbContext db) => new(db, new Bus(),
             new Gimano.Api.Identity.AttestationService(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(), null!, db, new Clock(T0),
                 NullLogger<Gimano.Api.Identity.AttestationService>.Instance), new Clock(T0),
-                new Gimano.Api.Services.RestrictedAreaService(db, new()));
+                new Gimano.Api.Services.RestrictedAreaService(db, new()), TestGates.Off(db, new Clock(T0)));
         CreatePlaceRequest At(string name, double lat, string? description = null) =>
             new(name, PlaceCategory.Convenience, lat, Lng, null, description, null, null, null, null);
 

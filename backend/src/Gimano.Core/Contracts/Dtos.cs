@@ -33,7 +33,7 @@ public sealed record PlaceSummary(
     string Id, string Name, PlaceCategory Category, string Address, double Lat, double Lng, double? DistanceM, string? Brand,
     PlaceSource Source = PlaceSource.Osm, PlaceStatus? Status = null, double? Rating = null, int ReviewCount = 0, string? ThumbnailUrl = null,
     double? ConfirmationsWeighted = null, double? Required = null, ChainGroup? ChainGroup = null, bool? OpenNow = null,
-    double? AnchorDistanceM = null, PlaceBadge? Badge = null, bool HeldForReview = false);
+    double? AnchorDistanceM = null, PlaceBadge? Badge = null, bool HeldForReview = false, PlaceScreeningDto? Screening = null);
 
 /// <summary>
 /// A place's open complaint, for the card/list badge: "Dilaporkan tutup · sahkan?" (suspected place_closed_perm),
@@ -50,7 +50,7 @@ public sealed record PlaceDto(
     IReadOnlyList<string> Amenities, IReadOnlyDictionary<string, string> Tags, string? OsmType, long? OsmId,
     PlaceSource Source = PlaceSource.Osm, PlaceStatus? Status = null, double? Rating = null, int ReviewCount = 0, string? ThumbnailUrl = null,
     string? Description = null, AddedBy? AddedBy = null, int VerifiedCount = 0, IReadOnlyList<PhotoDto>? Photos = null,
-    PlaceBadge? Badge = null, NavigationPoint? NavigationPoint = null, bool HeldForReview = false);
+    PlaceBadge? Badge = null, NavigationPoint? NavigationPoint = null, bool HeldForReview = false, PlaceScreeningDto? Screening = null);
 
 /// <summary>
 /// Route here instead of the display pin. source: confirmed (a confirmed place_entrance_wrong, IssueId set), osm_entrance
@@ -63,9 +63,19 @@ public sealed record AddedBy(string DisplayName, string? AuthorRef = null);
 
 // ---- Community places --------------------------------------------------------
 
+/// <param name="NotDuplicateOf">The id from a 409 "Is it already on the map?" that the user said is a different place.</param>
 public sealed record CreatePlaceRequest(
     string Name, PlaceCategory? Category, double Lat, double Lng, string? Address, string? Description,
-    string? Phone, string? Website, string? OpeningHours, IReadOnlyList<string>? Amenities);
+    string? Phone, string? Website, string? OpeningHours, IReadOnlyList<string>? Amenities, string? NotDuplicateOf = null);
+
+/// <summary>Ask a person to review a place the AI check didn't accept (once per place).</summary>
+public sealed record AppealPlaceRequest(string? Note);
+
+/// <summary>
+/// The AI check, for the owner (absent for other viewers). state: none | checking | passed | held | rejected | skipped;
+/// reasons: fixed codes the apps translate; canAppeal: rejected and not yet appealed.
+/// </summary>
+public sealed record PlaceScreeningDto(Community.ScreeningState State, IReadOnlyList<string> Reasons, bool CanAppeal, bool Appealed);
 
 public sealed record PatchCommunityPlaceRequest(
     string? Name, PlaceCategory? Category, double? Lat, double? Lng, string? Address, string? Description,

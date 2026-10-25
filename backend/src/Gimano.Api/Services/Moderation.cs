@@ -67,7 +67,12 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
             {
                 var flags = await db.PlaceFlags.AsNoTracking().Where(f => f.PlaceId == p.Id).Select(f => new ModerationFlag(f.Reason, f.CreatedAt)).ToListAsync(ct);
                 items.Add(new ModerationItem(ModerationKind.Place, p.Id, p.Id, GimanoJson.ToWire(p.Status), p.FlagCount, flags,
-                    string.Join(" · ", new[] { p.Name, p.Description, p.Website }.Where(x => !string.IsNullOrWhiteSpace(x))), null,
+                    string.Join(" · ", new[]
+                    {
+                        p.Name, p.Description, p.Website,
+                        p.ScreeningReasons is { Length: > 0 } r ? $"[AI check: {r}]" : null,
+                        p.AppealedAt is not null ? $"[Review asked: {p.AppealNote ?? "no note"}]" : null,
+                    }.Where(x => !string.IsNullOrWhiteSpace(x))), null,
                     p.Owner?.DisplayName, handles.For(p.OwnerId), p.Owner?.BannedAt is not null, p.CreatedAt, p.HeldForReview));
             }
         }
@@ -104,6 +109,7 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
     public async Task RestoreAsync(ModerationKind kind, string id, CancellationToken ct)
     {
         string placeId;
+        string? acceptedScreened = null;
         switch (kind)
         {
             case ModerationKind.Review:
@@ -127,7 +133,14 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
             {
                 var c = await db.CommunityPlaces.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException("Place not found.");
                 // Back to what it was before the flags: published once verified, otherwise still waiting for verification.
-                if (c.Status == PlaceStatus.Hidden) c.Status = c.ResolvedAt is null ? PlaceStatus.Pending : PlaceStatus.Published;
+                if (c.Status is PlaceStatus.Hidden or PlaceStatus.Rejected) c.Status = c.ResolvedAt is null ? PlaceStatus.Pending : PlaceStatus.Published;
+                // A place the AI check held or rejected that a maintainer accepts goes live like a passed one, and its owner hears it.
+                if (c.ScreeningState is Core.Community.ScreeningState.Held or Core.Community.ScreeningState.Rejected)
+                {
+                    c.ScreeningState = Core.Community.ScreeningState.Passed;
+                    c.Listed = c.Status == PlaceStatus.Pending;
+                    acceptedScreened = c.Id;
+                }
                 c.FlagCount = 0; c.HeldForReview = false; c.UpdatedAt = clock.GetUtcNow(); placeId = c.Id;
                 await db.PlaceFlags.Where(f => f.PlaceId == id).ExecuteDeleteAsync(ct);
                 break;
@@ -135,6 +148,8 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
         }
         await db.SaveChangesAsync(ct);
         await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(placeId), ct);
+        if (acceptedScreened is not null)
+            await bus.PublishAsync(RoutingKeys.PlaceScreened, new PlaceScreenedEvent(acceptedScreened, Core.Community.ScreeningState.Passed, Late: true), ct);
     }
 
     /// <summary>

@@ -15,7 +15,7 @@ public sealed class InboxGenerator(RabbitMqConnection connection, IServiceScopeF
     protected override string QueueName => "gimano.worker.inbox";
     protected override IReadOnlyList<string> RoutingKeyBindings =>
         [RoutingKeys.ReportThanked, RoutingKeys.ReviewHelpful, RoutingKeys.PlaceVerified, RoutingKeys.SuggestionApplied, RoutingKeys.FeedbackStatusChanged,
-         RoutingKeys.IssueChanged];
+         RoutingKeys.IssueChanged, RoutingKeys.PlaceScreened];
 
     protected override async Task HandleAsync(JsonElement message, string routingKey, CancellationToken ct)
     {
@@ -46,6 +46,21 @@ public sealed class InboxGenerator(RabbitMqConnection connection, IServiceScopeF
                 {
                     PlaceStatus.Published => InboxKind.PlacePublished, PlaceStatus.Hidden => InboxKind.PlaceRejected,
                     PlaceStatus.Expired => InboxKind.PlaceExpired, _ => (InboxKind?)null,
+                };
+                if (p?.OwnerId is { } uid && kind is { } k) await AddAsync(db, uid, k, p.Name, "place", e.PlaceId, ct);
+                break;
+            }
+            case RoutingKeys.PlaceScreened:
+            {
+                // The app shows a result it waited for; the Inbox also keeps it, and carries the late ones (design C2).
+                var e = message.Deserialize<PlaceScreenedEvent>(o)!;
+                var p = await db.CommunityPlaces.AsNoTracking().Where(x => x.Id == e.PlaceId).Select(x => new { x.OwnerId, x.Name }).FirstOrDefaultAsync(ct);
+                var kind = e.State switch
+                {
+                    Core.Community.ScreeningState.Held => InboxKind.PlaceHeld,
+                    Core.Community.ScreeningState.Rejected => InboxKind.PlaceNotAccepted,
+                    Core.Community.ScreeningState.Passed when e.Late => InboxKind.PlaceLive,
+                    _ => (InboxKind?)null,
                 };
                 if (p?.OwnerId is { } uid && kind is { } k) await AddAsync(db, uid, k, p.Name, "place", e.PlaceId, ct);
                 break;

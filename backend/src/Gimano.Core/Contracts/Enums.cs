@@ -52,7 +52,8 @@ public enum AgentRunStatus { Running, WaitingForReview, Done, Cancelled, Failed 
 public enum PlaceSource { Osm, Community }
 
 /// <summary>Community place lifecycle. Only <c>pending</c>/<c>published</c> appear in PlaceSummary.status.</summary>
-public enum PlaceStatus { Pending, Published, Hidden, Closed, Expired }
+/// <summary>Rejected: the AI check didn't accept it (owner only; may be edited or appealed once).</summary>
+public enum PlaceStatus { Pending, Published, Hidden, Closed, Expired, Rejected }
 
 public enum ReviewStatus { Published, Hidden }
 
@@ -63,7 +64,7 @@ public enum FlagReason { Spam, Offensive, OffTopic, ConflictOfInterest, Other, S
 public enum PhotoStatus { Processing, Published, Rejected }
 
 public enum InboxKind { PlacePublished, PlaceRejected, ReportThanked, ReviewHelpful, EditAccepted, FeedbackStatus, Announcement, PlaceExpired,
-    IssueConfirmed, IssueRefuted, IssueResolved }
+    IssueConfirmed, IssueRefuted, IssueResolved, PlaceHeld, PlaceNotAccepted, PlaceLive }
 
 /// <summary>Road and place complaints (docs/complaints.md, docs/api.md "Issues").</summary>
 public enum IssueKind

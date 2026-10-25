@@ -11,7 +11,8 @@ namespace Gimano.Worker.Vetting;
 /// more than 30 days ago are deleted (resolved votes become permanently unlinkable). Every 24 h: tiers recomputed for
 /// everyone active in the last 90 days (demotion/suspension expiry).
 /// </summary>
-public sealed class VettingMaintenance(IServiceScopeFactory scopes, IEventPublisher bus, TimeProvider clock, ILogger<VettingMaintenance> logger)
+public sealed class VettingMaintenance(IServiceScopeFactory scopes, IEventPublisher bus, TimeProvider clock, ILogger<VettingMaintenance> logger,
+    Microsoft.Extensions.Options.IOptions<VettingOptions> vetting)
     : BackgroundService
 {
     private DateTimeOffset _lastNightly = DateTimeOffset.MinValue;
@@ -32,8 +33,9 @@ public sealed class VettingMaintenance(IServiceScopeFactory scopes, IEventPublis
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GimanoDbContext>();
 
-        var cutoff = now - Reputation.PendingExpiry;
-        var expired = await db.CommunityPlaces.Where(p => p.Status == PlaceStatus.Pending && p.CreatedAt < cutoff).Take(500).ToListAsync(ct);
+        var cutoff = now - Reputation.PendingExpiryFor(vetting.Value.LaunchMode);
+        var expired = await db.CommunityPlaces.Where(p => p.Status == PlaceStatus.Pending && p.ScreeningState != Core.Community.ScreeningState.Checking
+            && p.CreatedAt < cutoff).Take(500).ToListAsync(ct);
         foreach (var p in expired)
         {
             await Ledger.ResolveAsync(db, p, PlaceStatus.Expired, now, ct);

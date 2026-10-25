@@ -313,3 +313,14 @@ public sealed class CrashReport
     public DateTimeOffset? OccurredAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>AI spend for one week (Malaysia time, from Monday): the place check's budget ledger. No content, no users.</summary>
+public sealed class AiUsageWeek
+{
+    public DateOnly WeekStart { get; set; }
+    public int Calls { get; set; }
+    public long InputTokens { get; set; }
+    public long OutputTokens { get; set; }
+    public decimal CostUsd { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}

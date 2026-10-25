@@ -199,6 +199,39 @@ namespace Gimano.Core.Data.Migrations
                     b.ToTable("agent_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("Gimano.Core.Domain.AiUsageWeek", b =>
+                {
+                    b.Property<DateOnly>("WeekStart")
+                        .HasColumnType("date")
+                        .HasColumnName("week_start");
+
+                    b.Property<int>("Calls")
+                        .HasColumnType("integer")
+                        .HasColumnName("calls");
+
+                    b.Property<decimal>("CostUsd")
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)")
+                        .HasColumnName("cost_usd");
+
+                    b.Property<long>("InputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("input_tokens");
+
+                    b.Property<long>("OutputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("output_tokens");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("WeekStart")
+                        .HasName("pk_ai_usage_weeks");
+
+                    b.ToTable("ai_usage_weeks", (string)null);
+                });
+
             modelBuilder.Entity("Gimano.Core.Domain.Announcement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -409,6 +442,15 @@ namespace Gimano.Core.Data.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("amenities");
 
+                    b.Property<string>("AppealNote")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("appeal_note");
+
+                    b.Property<DateTimeOffset?>("AppealedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("appealed_at");
+
                     b.Property<bool>("AuditOpen")
                         .HasColumnType("boolean")
                         .HasColumnName("audit_open");
@@ -441,6 +483,10 @@ namespace Gimano.Core.Data.Migrations
                     b.Property<bool>("HeldForReview")
                         .HasColumnType("boolean")
                         .HasColumnName("held_for_review");
+
+                    b.Property<bool>("Listed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("listed");
 
                     b.Property<Point>("Location")
                         .IsRequired()
@@ -481,6 +527,31 @@ namespace Gimano.Core.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("rural");
 
+                    b.Property<string>("SaidDifferentFrom")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("said_different_from");
+
+                    b.Property<DateTimeOffset?>("ScreenedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("screened_at");
+
+                    b.Property<string>("ScreeningConfidence")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("screening_confidence");
+
+                    b.Property<string>("ScreeningReasons")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("screening_reasons");
+
+                    b.Property<string>("ScreeningState")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("screening_state");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(12)
@@ -520,6 +591,10 @@ namespace Gimano.Core.Data.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Name"), "gin");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Name"), new[] { "gin_trgm_ops" });
+
+                    b.HasIndex("ScreeningState")
+                        .HasDatabaseName("ix_community_places_screening_state")
+                        .HasFilter("screening_state = 'Checking'");
 
                     b.HasIndex("OwnerId", "CreatedAt")
                         .HasDatabaseName("ix_community_places_owner_id_created_at");

@@ -127,6 +127,9 @@ services:
       Feedback__ContactKey: ${FEEDBACK_CONTACT_KEY:-}
       # Maintainer view (/api/v1/admin/*, header X-Admin-Key); empty = disabled
       Admin__Key: ${ADMIN_KEY:-}
+      # AI place check (Claude Haiku 5.5, at most US$20 a week); empty key = off.
+      Screening__ApiKey: ${CLAUDE_API_KEY:-}
+      Screening__WeeklyBudgetUsd: ${SCREENING_WEEKLY_BUDGET_USD:-20}
       Attestation__Mode: ${ATTESTATION_MODE:-log}
       # Search aliases: the repo file is mounted in dev, so edits apply within a minute (no rebuild)
       Search__AliasesPath: /data/search/aliases.csv
@@ -179,6 +182,8 @@ services:
       Digest__AcsConnectionString: ${DIGEST_ACS_CONNECTION_STRING:-}
       Digest__To__0: ${DIGEST_TO:-}
       Digest__BackOfficeUrl: ${BACKOFFICE_PUBLIC_URL:-http://100.101.150.9:5090}
+      Screening__ApiKey: ${CLAUDE_API_KEY:-}
+      Screening__WeeklyBudgetUsd: ${SCREENING_WEEKLY_BUDGET_USD:-20}
     volumes: ["media:/data/media"]
     depends_on:
       api: { condition: service_started }   # the API applies EF migrations on start

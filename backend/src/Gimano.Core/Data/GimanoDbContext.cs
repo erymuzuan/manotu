@@ -48,6 +48,7 @@ public sealed class GimanoDbContext(DbContextOptions<GimanoDbContext> options) :
     public DbSet<SegmentTraversalCount> SegmentTraversalCounts => Set<SegmentTraversalCount>();
     public DbSet<AgentToken> AgentTokens => Set<AgentToken>();
     public DbSet<AuditEntry> AuditLog => Set<AuditEntry>();
+    public DbSet<AiUsageWeek> AiUsageWeeks => Set<AiUsageWeek>();
     public DbSet<AgentRun> AgentRuns => Set<AgentRun>();
     public DbSet<ReplyDraft> ReplyDrafts => Set<ReplyDraft>();
     public DbSet<AppBuild> AppBuilds => Set<AppBuild>();
@@ -179,6 +180,18 @@ public sealed class GimanoDbContext(DbContextOptions<GimanoDbContext> options) :
             e.HasIndex(x => x.Name).HasMethod("gin").HasOperators("gin_trgm_ops");
             e.HasIndex(x => new { x.OwnerId, x.CreatedAt });
             e.HasOne(x => x.Owner).WithMany().HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.SetNull);
+            e.Property(x => x.ScreeningState).HasConversion<string>().HasMaxLength(10);
+            e.Property(x => x.ScreeningConfidence).HasConversion<string>().HasMaxLength(8);
+            e.Property(x => x.ScreeningReasons).HasMaxLength(80);
+            e.Property(x => x.SaidDifferentFrom).HasMaxLength(40);
+            e.Property(x => x.AppealNote).HasMaxLength(200);
+            e.HasIndex(x => x.ScreeningState).HasFilter("screening_state = 'Checking'");
+        });
+
+        b.Entity<AiUsageWeek>(e =>
+        {
+            e.HasKey(x => x.WeekStart);
+            e.Property(x => x.CostUsd).HasPrecision(12, 6);
         });
 
         b.Entity<PlaceVote>(e =>

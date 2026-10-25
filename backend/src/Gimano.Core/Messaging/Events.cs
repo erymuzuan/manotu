@@ -23,6 +23,7 @@ public static class RoutingKeys
     public const string SuggestionApplied = "suggestion.applied";
     public const string FeedbackStatusChanged = "feedback.status";
     public const string IssueChanged = "issue.changed";
+    public const string PlaceScreened = "place.screened";
 }
 
 public sealed record ReportVotedEvent(Guid ReportId, bool StillThere, Guid UserId);
@@ -37,6 +38,8 @@ public sealed record PhotoUploadedEvent(Guid PhotoId);
 public sealed record ReportThankedEvent(Guid ReportId);
 public sealed record ReviewHelpfulEvent(Guid ReviewId);
 public sealed record PlaceVerifiedEvent(string PlaceId, PlaceStatus Status);
+/// <summary>The AI check decided (<paramref name="Late"/>: after the app stopped waiting, so the owner hears it in the Inbox).</summary>
+public sealed record PlaceScreenedEvent(string PlaceId, Community.ScreeningState State, bool Late);
 public sealed record SuggestionAppliedEvent(Guid SuggestionId);
 public sealed record FeedbackStatusEvent(Guid FeedbackId, FeedbackStatus Status);
 
