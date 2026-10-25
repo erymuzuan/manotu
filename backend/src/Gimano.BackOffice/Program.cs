@@ -137,6 +137,11 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
+// Explicitly after the re-executing handlers: the implicit ones run before them, so a re-executed /not-found or /Error
+// (pages under [Authorize] in _Imports, opened with [AllowAnonymous]) would reach the endpoint without authorization
+// having run, and every 404 became a 500.
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets();

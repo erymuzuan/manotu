@@ -9,7 +9,11 @@ COPY data/moderation/ /data/moderation/
 COPY data/search/ /data/search/
 COPY backend/src/Gimano.Core/ src/Gimano.Core/
 COPY backend/src/Gimano.BackOffice/ src/Gimano.BackOffice/
-RUN dotnet publish src/Gimano.BackOffice/Gimano.BackOffice.csproj -c Release -o /app --no-restore /p:UseAppHost=false
+# No --no-restore: the SDK adds Microsoft.AspNetCore.App.Internal.Assets (blazor.web.js) only when it sees .razor files,
+# and the cached restore above ran before the sources were copied. Without it the page loads but nothing is interactive.
+RUN dotnet publish src/Gimano.BackOffice/Gimano.BackOffice.csproj -c Release -o /app /p:UseAppHost=false
+# Fail the build rather than ship a back office without its framework script.
+RUN test -f /app/wwwroot/_framework/blazor.web.js
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
