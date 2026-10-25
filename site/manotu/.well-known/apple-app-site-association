@@ -4,6 +4,8 @@
       {
         "appIDs": ["TEAMID.my.manotu.app"],
         "components": [
+          { "/": "/p", "comment": "Public place links (docs/place-links.md)" },
+          { "/": "/p/", "comment": "Public place links (docs/place-links.md)" },
           { "/": "/j/*", "comment": "Event short links (docs/events.md §5.6)" },
           { "/": "/a/*", "comment": "Event invitation links (docs/events.md §5.1)" }
         ]
