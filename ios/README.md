@@ -230,3 +230,28 @@ The phone must be unlocked, and it needs Tailscale on to reach WS556.
 
 Map data © OpenStreetMap contributors (ODbL), shown on the map. Tiles: OpenFreeMap. Renderer: MapLibre Native (BSD).
 Nunito font: SIL Open Font License 1.1 (`Resources/Fonts/Nunito-OFL.txt`).
+
+### CarPlay development checks
+
+Run `scripts/carplay-tests.sh <simulator-UDID>` from `ios/` to build and check the scene manifest and
+phone/car map-state mirroring. Get a device ID from `xcrun simctl list devices available`.
+These tests do **not** establish that Apple has granted CarPlay access or that head-unit interaction works.
+
+For map-only debugging, use the existing `-GimanoCarPreview YES` launch argument. That preview is not a
+CarPlay template session. Where supported by the installed Simulator, Apple documents
+**I/O → External Displays → CarPlay** and `defaults write com.apple.iphonesimulator CarPlayExtraOptions -bool YES`.
+The separate CarPlay Simulator app uses a physical iPhone; do not confuse the two tools.
+
+Before device testing, verify `com.apple.developer.carplay-maps` is present in **both** the signed app
+and its embedded provisioning profile. Apple must approve the entitlement and the profile must be regenerated;
+adding a key to source alone does not grant access. Do not use provisioning updates to silently switch teams.
+On 25 October 2026 the owner explicitly requested the CarPlay entitlement under STAFY COMPANY LIMITED
+(98KY9PMPX3), overriding the individual-team instruction for this task. Submission/approval is a separate step.
+
+After approval, test destination search, favourites, alternative routes, guidance, off-route recalculation,
+arrival, stop navigation, disconnect/reconnect, locked-phone operation and audio interruptions. Verify only
+one voice prompt plays and no private places/history are uploaded. Check day/night and minimum, portrait,
+standard and wide displays. Keep evidence of actual head-unit tests separate from map-only previews.
+
+References: [Apple simulator guidance](https://developer.apple.com/documentation/carplay/using-the-carplay-simulator)
+and [entitlement process](https://developer.apple.com/documentation/carplay/requesting-carplay-entitlements).
