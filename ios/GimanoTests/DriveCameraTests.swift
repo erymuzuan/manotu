@@ -6,7 +6,7 @@ private let origin = LatLng(lat: 3.10, lng: 101.60)
 private func east(_ m: Double, north: Double = 0) -> LatLng { Geo.offset(origin, northM: north, eastM: m) }
 
 /// 10 km straight east, a right turn at 6 km (then 1 km south).
-private func cameraRoute(traffic: [TrafficSegment] = [], alerts: [AlertOnRoute] = []) -> (Route, RouteGeometry) {
+func cameraRoute(traffic: [TrafficSegment] = [], alerts: [AlertOnRoute] = []) -> (Route, RouteGeometry) {
     let corner = east(6000)
     let end = Geo.offset(corner, northM: -1000, eastM: 0)
     let pts = TestGeometry.densify([origin, corner, end], stepM: 50)

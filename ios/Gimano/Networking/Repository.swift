@@ -31,6 +31,8 @@ protocol GimanoRepository: PlaceCardDataSource, DepartureTimesSource {
 
     func live(bbox: BBox) async throws -> LiveResponse
     func createReport(_ report: NewReport) async throws -> Report
+    /// `DELETE /reports/{id}` (signed): Undo within 2 min of a quick report (docs/driving.md §6.4); later 409.
+    func deleteReport(id: String) async throws
     func vote(reportId: String, stillThere: Bool) async throws -> Report
     func thank(reportId: String) async throws
     func sendLocations(_ batch: LocationBatch) async throws
@@ -313,6 +315,10 @@ final class LiveRepository: GimanoRepository {
         try await authed { try await self.client.send("POST", "reports", body: report) }
     }
 
+    func deleteReport(id: String) async throws {
+        try await authed { try await self.client.sendNoContent("DELETE", "reports/\(id)", body: Optional<Empty>.none) }
+    }
+
     func vote(reportId: String, stillThere: Bool) async throws -> Report {
         try await authed { try await self.client.send("POST", "reports/\(reportId)/votes", body: VoteRequest(stillThere: stillThere)) }
     }
@@ -562,6 +568,10 @@ final class FallbackRepository: GimanoRepository {
     }
     func live(bbox: BBox) async throws -> LiveResponse { try await run({ try await $0.live(bbox: bbox) }, demoOp: { try await $0.live(bbox: bbox) }) }
     func createReport(_ report: NewReport) async throws -> Report { try await run(gapFallback: false, { try await $0.createReport(report) }, demoOp: { try await $0.createReport(report) }) }
+    /// A report kept in the demo store (auto mode fell back) is withdrawn there; anything else goes to the server.
+    func deleteReport(id: String) async throws {
+        if id.hasPrefix("demo-") { try await demo.deleteReport(id: id) } else { try await live.deleteReport(id: id) }
+    }
     func vote(reportId: String, stillThere: Bool) async throws -> Report {
         try await run({ try await $0.vote(reportId: reportId, stillThere: stillThere) }, demoOp: { try await $0.vote(reportId: reportId, stillThere: stillThere) })
     }

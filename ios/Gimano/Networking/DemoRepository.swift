@@ -569,6 +569,12 @@ actor DemoRepository: GimanoRepository {
         return r
     }
 
+    func deleteReport(id: String) async throws {
+        guard let i = reports.firstIndex(where: { $0.id == id }) else { throw APIError.http(status: 404, problem: nil) }
+        reports.remove(at: i)
+        user.points = max(0, (user.points ?? 0) - 6)
+    }
+
     func vote(reportId: String, stillThere: Bool) async throws -> Report {
         guard let i = reports.firstIndex(where: { $0.id == reportId }) else { throw APIError.http(status: 404, problem: nil) }
         if stillThere {

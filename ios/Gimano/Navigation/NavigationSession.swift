@@ -236,9 +236,18 @@ final class NavigationSession {
 
     func dismissAlert() { approachingAlert = nil }
 
+    #if DEBUG
+    /// `-GimanoFakeAlertAhead`: shows a sample "Still there?" card (device screenshots; its answer is never sent).
+    func debugShowAlert(_ a: AlertOnRoute) {
+        handledAlerts.insert(a.id)
+        approachingAlert = a
+    }
+    #endif
+
     func vote(stillThere: Bool) {
         guard let a = approachingAlert else { return }
         approachingAlert = nil
+        if a.id.hasPrefix("debug-") { return }
         Task { _ = try? await repo.vote(reportId: a.id, stillThere: stillThere) }
     }
 

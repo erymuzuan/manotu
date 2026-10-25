@@ -6,6 +6,9 @@ struct DriveView: View {
     @Environment(AppModel.self) private var model
     @State private var expanded = false
     @State private var showAlternatives = false
+    /// Hold-to-report fan (docs/driving.md §6.4).
+    @State private var fan = QuickFanState()
+    static let space = "drive"
 
     var body: some View {
         if let nav = model.navigation {
@@ -109,6 +112,11 @@ struct DriveView: View {
                         .font(.system(size: 1))
                         .opacity(0.01)
                         .accessibilityIdentifier("navDebug")
+                    // Hidden for UI tests: the last quick report sent / withdrawn (public report ids only).
+                    Text(verbatim: model.quickReportLog)
+                        .font(.system(size: 1))
+                        .opacity(0.01)
+                        .accessibilityIdentifier("quickReportLog")
                     HStack {
                         Spacer()
                         VStack(spacing: 12) {
@@ -126,23 +134,29 @@ struct DriveView: View {
                 .animation(.snappy, value: nav.motion.tinjauProblem?.id)
 
                 VStack(spacing: 12) {
+                    if let q = model.quickReport, !q.isUndone {
+                        QuickReportCard(q: q)
+                            .padding(.horizontal, 10)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                     if nav.approachingAlert == nil, let issue = model.stillClosedPrompt {
                         StillClosedCard(issue: issue)
                             .padding(.horizontal, Tokens.Space.gutter)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     if let alert = nav.approachingAlert {
-                        AlertCard(report: alert.report, distanceM: nav.distanceToAlert(alert),
-                                  onStillThere: { Task { if await model.ensureRulesAccepted() { nav.vote(stillThere: true) } } },
-                                  onNotThere: { Task { if await model.ensureRulesAccepted() { nav.vote(stillThere: false) } } },
-                                  onClose: { nav.dismissAlert() })
+                        StillThereCard(report: alert.report, distanceM: nav.distanceToAlert(alert),
+                                       onStillThere: { Task { if await model.ensureRulesAccepted() { nav.vote(stillThere: true) } } },
+                                       onGone: { Task { if await model.ensureRulesAccepted() { nav.vote(stillThere: false) } } },
+                                       onDismiss: { nav.dismissAlert() })
+                            .id(alert.id)
                             .padding(.horizontal, Tokens.Space.gutter)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     HStack(alignment: .bottom) {
                         Speedometer(speedKmh: nav.speedKmh)
                         Spacer()
-                        ReportFab { model.showReport = true }
+                        HoldReportButton(fan: $fan, onTap: { model.showReport = true }, onSend: { model.sendQuickReport($0) })
                     }
                     .padding(.horizontal, Tokens.Space.gutter)
                     HStack {
@@ -154,6 +168,13 @@ struct DriveView: View {
                     BottomBar(nav: nav, expanded: $expanded, showAlternatives: $showAlternatives)
                 }
                 .animation(.snappy, value: nav.approachingAlert?.id)
+                .animation(.snappy, value: model.quickReport?.startedAt)
+
+                if fan.isOpen {
+                    QuickFanOverlay(fan: fan)
+                        .transition(.opacity)
+                        .zIndex(5)
+                }
 
                 if nav.arrived {
                     ArrivedCard(destination: nav.destination, info: nav.arrivalInfo, onDone: { model.stopNavigation() },
@@ -167,8 +188,30 @@ struct DriveView: View {
                         .transition(.move(edge: .bottom))
                 }
             }
+            .coordinateSpace(name: DriveView.space)
+            #if DEBUG
+            // Device screenshots: `-GimanoQuickFan open|hazard|…` shows the fan (nothing is sent);
+            // `-GimanoQuickReportCard hazard|…` shows a sample "reported" card (never sent).
+            .task {
+                let d = UserDefaults.standard
+                if let v = d.string(forKey: "GimanoQuickFan") {
+                    try? await Task.sleep(for: .seconds(4))
+                    fan.isOpen = true
+                    fan.selected = ReportType(rawValue: v)
+                }
+                if let v = d.string(forKey: "GimanoQuickReportCard"), let t = ReportType(rawValue: v) {
+                    try? await Task.sleep(for: .seconds(4))
+                    model.debugShowQuickReportCard(t)
+                }
+            }
+            #endif
             // Glanceable while driving: the largest text sizes are capped so the banner, sound button, cards and Stop stay on screen.
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .sheet(isPresented: Binding(get: { model.quickReportDetails != nil }, set: { if !$0 { model.quickReportDetails = nil } })) {
+                if let q = model.quickReportDetails {
+                    QuickReportDetailsSheet(q: q).presentationDetents([.medium])
+                }
+            }
             .sheet(isPresented: Binding(get: { model.showShareSheet }, set: { model.showShareSheet = $0 })) {
                 if let s = model.driveShare { ShareDriveSheet(session: s, nav: nav).presentationDetents([.medium]) }
             }
@@ -424,7 +467,51 @@ struct TollBanner: View {
     }
 }
 
-/// "Still there? / Not there" card for an alert ahead or one tapped on the map.
+/// "Still there?" while driving (docs/driving.md §6.1, board NavSahkan): the confirm card with the report's icon,
+/// "kind · street · age", Still there / Gone / Not sure, and the 10 s ring ("Not sure" and the ring send nothing).
+struct StillThereCard: View {
+    let report: Report
+    var distanceM: Double?
+    let onStillThere: () -> Void
+    let onGone: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ConfirmCard(
+            title: Text("Still there?"),
+            subtitle: Text(verbatim: AlertConfirmText.subtitle(report, distanceM: distanceM)),
+            choices: [
+                .init(id: "alertVote.still", title: "Still there", style: .primary, glyph: .check, action: onStillThere),
+                .init(id: "alertVote.gone", title: "Gone", style: .pale, glyph: .cross, action: onGone),
+                .init(id: "alertVote.unsure", title: "Not sure", style: .outlined, glyph: .question, action: onDismiss),
+            ],
+            tile: .report(report.type),
+            onTimeout: onDismiss)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("alertCard")
+    }
+}
+
+/// Subtitle of the "Still there?" card: "Police · Visible · Jalan SS 2/3 · 5 min ago" (the distance ahead when the
+/// report has no street).
+enum AlertConfirmText {
+    static func subtitle(_ r: Report, distanceM: Double?, now: Date = .now) -> String {
+        var parts = [String(localized: r.type.title)]
+        if let sub = r.type.subtypeTitle(r.subtype) { parts.append(String(localized: sub)) }
+        if let street = r.street?.trimmingCharacters(in: .whitespaces), !street.isEmpty {
+            parts.append(street)
+        } else if let distanceM {
+            parts.append(String(localized: "\(ManeuverFormatter.distance(distanceM)) ahead"))
+        }
+        let f = RelativeDateTimeFormatter()
+        f.dateTimeStyle = .named
+        f.unitsStyle = .full
+        parts.append(f.localizedString(for: min(r.createdAt, now), relativeTo: now))
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// "Still there? / Not there" card for an alert tapped on the map.
 struct AlertCard: View {
     let report: Report
     var distanceM: Double?

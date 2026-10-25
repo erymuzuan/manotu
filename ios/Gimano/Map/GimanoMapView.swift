@@ -63,6 +63,11 @@ struct GimanoMapView: UIViewRepresentable {
         private var lastLastMetres = LastMetres()
         private var lastPuckMove = Date.distantPast
         private var lastHomeInset: Double = 0
+        /// Travelled route (docs/driving.md §6.3): the selected route's geometry, how far the arrow has got, and which
+        /// vertex the traffic colours were last clipped at.
+        private var selectedLine: (id: String, points: [LatLng], cumulative: [Double], traffic: [TrafficSegment])?
+        private var travelled = TravelledProgress()
+        private var trafficClippedAt = -1
         private var lastPlaceInset: Double = 0
 
         init(state: MapState) {
@@ -118,6 +123,7 @@ struct GimanoMapView: UIViewRepresentable {
             if lastMetres != lastLastMetres { updateLastMetres(lastMetres); lastLastMetres = lastMetres }
             syncDisplayLink()
             if !isDrivenByMotion {
+                clearTravelled()
                 updatePuck(puck, heading: heading, nav: navPuck, style: style)
                 updateAccuracy(puck, accuracyM: accuracy)
             }
@@ -290,6 +296,9 @@ struct GimanoMapView: UIViewRepresentable {
                 if lastDrawn == nil { source("puck-accuracy")?.shape = nil }
                 lastDrawn = (f.point, f.heading)
             }
+            if let g = selectedLine, travelled.update(routeKey: g.id, alongM: f.alongM, at: CACurrentMediaTime()) {
+                drawTravelled()
+            }
             guard case .navigation = state.camera, map.bounds.height > 0 else { return }
             let size = map.bounds.size
             let altitude = MLNAltitudeForZoomLevel(f.zoom, CGFloat(f.pitch), f.point.lat, size)
@@ -388,6 +397,11 @@ struct GimanoMapView: UIViewRepresentable {
                 style.addLayer(lineLayer("route-traffic-\(level)", source: traffic, color: Tokens.Palette.traffic(level: level), width: 9,
                                          predicate: NSPredicate(format: "level == %d", level)))
             }
+            // Travelled part, above the blue route and its traffic: light grey on a white casing.
+            let travelledSource = MLNShapeSource(identifier: "route-travelled", shape: nil)
+            style.addSource(travelledSource)
+            style.addLayer(lineLayer("route-travelled-casing", source: travelledSource, color: UIColor(hex: TravelledRoute.casingHex), width: 13))
+            style.addLayer(lineLayer("route-travelled", source: travelledSource, color: UIColor(hex: TravelledRoute.lineHex), width: 9))
 
             // Last metres: round dots (zero-length dashes with round caps), blue to the entrance, grey on to the pin.
             for (id, color) in [("blue", Tokens.Palette.routeActive.resolvedColor(with: traits)), ("grey", UIColor(hex: 0x8A94A6))] {
@@ -469,6 +483,8 @@ struct GimanoMapView: UIViewRepresentable {
             let alts = routes.filter { !$0.selected }.map { polyline($0.points, attrs: ["id": $0.id]) }
             source("routes-alt")?.shape = MLNShapeCollectionFeature(shapes: alts)
             if let s = routes.first(where: \.selected) {
+                selectedLine = (s.id, s.points, Geo.cumulativeDistances(s.points), s.traffic)
+                trafficClippedAt = -1
                 source("route-sel")?.shape = MLNShapeCollectionFeature(shapes: [polyline(s.points, attrs: ["id": s.id])])
                 let segs: [MLNPolylineFeature] = s.traffic.compactMap { t in
                     let from = max(0, t.fromIndex), to = min(s.points.count - 1, t.toIndex)
@@ -476,9 +492,41 @@ struct GimanoMapView: UIViewRepresentable {
                     return polyline(Array(s.points[from...to]), attrs: ["level": t.level])
                 }
                 source("route-traffic")?.shape = MLNShapeCollectionFeature(shapes: segs)
+                // A new route (reroute) starts with nothing travelled; a traffic refresh keeps what was travelled.
+                if isDrivenByMotion, travelled.routeKey == s.id { drawTravelled() }
             } else {
+                selectedLine = nil
                 source("route-sel")?.shape = nil
                 source("route-traffic")?.shape = nil
+            }
+            if selectedLine?.id != travelled.routeKey { source("route-travelled")?.shape = nil }
+        }
+
+        /// Redraws the travelled line up to the arrow and clips the traffic colours to the part ahead.
+        private func drawTravelled() {
+            guard let g = selectedLine else { return }
+            let split = TravelledRoute.split(points: g.points, cumulative: g.cumulative, alongM: travelled.alongM)
+            source("route-travelled")?.shape = split.behind.count > 1 ? polyline(split.behind) : nil
+            if split.aheadFromIndex != trafficClippedAt {
+                trafficClippedAt = split.aheadFromIndex
+                let segs = TravelledRoute.trafficAhead(points: g.points, segments: g.traffic, split: split)
+                    .map { polyline($0.points, attrs: ["level": $0.level]) }
+                source("route-traffic")?.shape = MLNShapeCollectionFeature(shapes: segs)
+            }
+        }
+
+        private func clearTravelled() {
+            guard travelled.routeKey != nil else { return }
+            travelled = TravelledProgress()
+            source("route-travelled")?.shape = nil
+            // Back to the whole route's traffic (route preview).
+            if let s = lastRoutes.first(where: \.selected) {
+                let segs: [MLNPolylineFeature] = s.traffic.compactMap { t in
+                    let from = max(0, t.fromIndex), to = min(s.points.count - 1, t.toIndex)
+                    guard to > from, t.level > 0 else { return nil }
+                    return polyline(Array(s.points[from...to]), attrs: ["level": t.level])
+                }
+                source("route-traffic")?.shape = MLNShapeCollectionFeature(shapes: segs)
             }
         }
 

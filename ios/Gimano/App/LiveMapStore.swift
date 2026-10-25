@@ -75,6 +75,12 @@ final class LiveMapStore {
         revision += 1
     }
 
+    /// A report withdrawn with Undo.
+    func remove(reportId: String) {
+        guard alerts.removeValue(forKey: reportId) != nil else { return }
+        revision += 1
+    }
+
     func apply(_ e: LiveEvent) {
         switch e {
         case .alertCreated(let r), .alertUpdated(let r): alerts[r.id] = r

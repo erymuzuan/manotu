@@ -35,6 +35,13 @@ final class DrivingCardsUITests: XCTestCase {
         return e
     }
 
+    /// The card never covers the maneuver banner (docs/driving.md §6.1).
+    func assertBelowBanner(_ card: XCUIElement) {
+        let banner = app.staticTexts.matching(identifier: "maneuverDistance").firstMatch.frame
+        // The banner's dark box ends ~45 pt below its distance text's bottom ("then" strip aside).
+        XCTAssertLessThan(banner.maxY + 40, card.frame.minY, "card \(card.frame) vs banner text \(banner)")
+    }
+
     func startDrive() {
         wait(app.buttons["whereTo"]).tap()
         let f = wait(app.textFields["searchField"]); f.tap(); f.typeText("Mid Valley")
@@ -60,10 +67,42 @@ final class DrivingCardsUITests: XCTestCase {
         XCTAssertEqual(frames[0].height, frames[1].height, accuracy: 0.5)
         XCTAssertEqual(frames[1].height, frames[2].height, accuracy: 0.5)
         XCTAssertEqual(frames[0].width, frames[2].width, accuracy: 1)
+        XCTAssertEqual(frames[0].minY, frames[2].minY, accuracy: 1, "one row of buttons")
+        assertBelowBanner(card)
         // No answer: gone after the 10 s ring.
         sleep(11)
         XCTAssertFalse(card.exists, "the ring dismisses the card with no answer")
         shot("2-confirm-timed-out")
+    }
+
+    func test_3_StillThereCard() {
+        launch(["-GimanoFakeAlertAhead", "YES"])
+        startDrive()
+        let card = app.descendants(matching: .any).matching(identifier: "alertCard").firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 20), "Still there? card")
+        sleep(1)
+        shot("8-still-there-card")
+        let ids = ["alertVote.still", "alertVote.gone", "alertVote.unsure"]
+        let frames = ids.map { app.buttons[$0].frame }
+        let labels = ids.map { app.buttons[$0].label }
+        note("8-still-there-metrics", "buttons \(frames.map { String(format: "%.0fx%.0f @%.0f", $0.width, $0.height, $0.minY) }) labels \(labels)")
+        for f in frames { XCTAssertGreaterThanOrEqual(f.height, 83.5, "84 pt buttons") }
+        XCTAssertEqual(frames[0].height, frames[2].height, accuracy: 0.5)
+        XCTAssertEqual(frames[0].width, frames[1].width, accuracy: 1)
+        assertBelowBanner(card)
+        sleep(11)
+        XCTAssertFalse(card.exists, "the ring dismisses the card with no answer")
+    }
+
+    /// docs/driving.md §6.3: after a while on the simulated drive, the road behind the arrow is light grey on white
+    /// and only the part ahead is blue (with a debug jam ahead in traffic colours).
+    func test_4_TravelledRoute() {
+        launch(["-GimanoFakeJam", "900"])
+        startDrive()
+        sleep(25)
+        shot("9-travelled-route")
+        sleep(15)
+        shot("10-travelled-route-later")
     }
 
     func test_2_SoundSelector() {

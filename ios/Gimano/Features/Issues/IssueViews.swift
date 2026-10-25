@@ -221,21 +221,34 @@ struct ConfirmCard: View {
         let action: () -> Void
     }
 
+    /// What the title tile shows: the amber no-entry sign (road issues) or the report's own duotone icon (road alerts).
+    enum Tile { case noEntry, report(ReportType) }
+
     let title: Text
     let subtitle: Text
     let choices: [Choice]
+    var tile: Tile = .noEntry
     var seconds: Int = ConfirmCountdown.seconds
     let onTimeout: () -> Void
     @State private var start = Date()
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 12) {
-                NoEntryGlyph()
-                    .frame(width: 32, height: 32)
-                    .frame(width: 52, height: 52)
-                    .background(Color.amberTile, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Group {
+                    switch tile {
+                    case .noEntry:
+                        NoEntryGlyph()
+                            .frame(width: 32, height: 32)
+                            .frame(width: 52, height: 52)
+                            .background(Color.amberTile, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    case .report(let t):
+                        GimanoIcon(icon: t.gIcon, size: 32, stroke: t.strokeColor, fill: t.fillColor)
+                            .frame(width: 52, height: 52)
+                            .background(t.tileColor, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                }
+                .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     title.font(Tokens.Font.nunito(22, .black, relativeTo: .title2)).foregroundStyle(Color.textPrimary)
                     subtitle.font(Tokens.Font.nunito(14, .bold, relativeTo: .subheadline)).foregroundStyle(Color.tileLabel)
@@ -245,18 +258,20 @@ struct ConfirmCard: View {
                 .accessibilityElement(children: .combine)
                 CountdownRing(start: start, seconds: seconds, onDone: onTimeout)
             }
-            // Three equal buttons side by side; at accessibility text sizes they stack full width so a label never
-            // breaks inside a word.
-            let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(alignment: .top, spacing: 8))
-            layout {
+            // Three equal buttons side by side, always (docs/driving.md §6.1): a stacked card at accessibility sizes
+            // would cover the maneuver banner, so the card's text stops growing at xxxLarge and long labels shrink.
+            HStack(alignment: .top, spacing: 8) {
                 ForEach(choices) { c in
                     Button(action: c.action) {
                         VStack(spacing: 6) {
-                            ChoiceGlyph(glyph: c.glyph).frame(width: 30, height: 30)
+                            ChoiceGlyph(glyph: c.glyph, onPrimary: c.style == .primary).frame(width: 30, height: 30)
+                            // The full label on at most 2 lines: the font shrinks before anything is cut.
                             Text(c.title)
                                 .font(Tokens.Font.nunito(15, .black, relativeTo: .body))
                                 .multilineTextAlignment(.center)
-                                .lineLimit(nil)
+                                .lineLimit(ConfirmCountdown.maxLabelLines)
+                                .minimumScaleFactor(ConfirmCountdown.minLabelScale)
+                                .allowsTightening(true)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.horizontal, 6)
@@ -283,6 +298,7 @@ struct ConfirmCard: View {
         .padding(16)
         .background(Color.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: Color(red: 11 / 255, green: 27 / 255, blue: 58 / 255).opacity(0.22), radius: 11, y: 6)
+        .dynamicTypeSize(...ConfirmCountdown.maxTypeSize)
         .onAppear { start = Date() }
     }
 }
@@ -292,6 +308,11 @@ enum ConfirmCountdown {
     static let seconds = 10
     /// Answer buttons are at least this tall (board NavSahkan: 84 pt).
     static let buttonHeight: CGFloat = 84
+    /// Labels: at most 2 lines, shrinking down to this scale before anything would be cut (docs/driving.md §6.1).
+    static let maxLabelLines = 2
+    static let minLabelScale: CGFloat = 0.6
+    /// The card's text grows with Dynamic Type up to here, so it stays one row of buttons below the maneuver banner.
+    static let maxTypeSize = DynamicTypeSize.xxxLarge
     /// Whole seconds left (shown in the ring), never below 0.
     static func remaining(elapsed: TimeInterval, total: Int = seconds) -> Int { max(0, Int((Double(total) - elapsed).rounded(.up))) }
     /// Ring fill 1 → 0.
@@ -333,6 +354,8 @@ private struct CountdownRing: View {
 
 private struct ChoiceGlyph: View {
     let glyph: ConfirmCard.Choice.Glyph
+    /// On the blue primary button the glyph is white.
+    var onPrimary = false
 
     var body: some View {
         Canvas { ctx, size in
@@ -342,9 +365,16 @@ private struct ChoiceGlyph: View {
             func fill(_ d: String) -> Path { let p = SVGPath.parse(d).fill; return Path(p.copy(using: &t) ?? p) }
             let disc = fill("M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20z")
             switch glyph {
-            case .cross:
+            case .cross where onPrimary:
                 ctx.fill(disc, with: .color(.white.opacity(0.25)))
                 ctx.stroke(stroke("M8 8l8 8M16 8l-8 8"), with: .color(.white), style: StrokeStyle(lineWidth: 2.6 * s, lineCap: .round))
+            case .cross:
+                ctx.fill(disc, with: .color(Color.brandTint))
+                ctx.stroke(stroke("M8 8l8 8M16 8l-8 8"), with: .color(Color.brand), style: StrokeStyle(lineWidth: 2.6 * s, lineCap: .round))
+            case .check where onPrimary:
+                ctx.fill(disc, with: .color(.white.opacity(0.25)))
+                ctx.stroke(stroke("m7 12.5 3.2 3.2L17 9"), with: .color(.white),
+                           style: StrokeStyle(lineWidth: 2.6 * s, lineCap: .round, lineJoin: .round))
             case .check:
                 ctx.fill(disc, with: .color(Color.brandTint))
                 ctx.stroke(stroke("m7 12.5 3.2 3.2L17 9"), with: .color(Color.brand),
