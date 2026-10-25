@@ -257,6 +257,11 @@ class DemoRepository(
         return r
     }
 
+    override suspend fun deleteReport(reportId: String) {
+        latency()
+        reports.removeAll { it.id == reportId }
+    }
+
     /**
      * One seeded road issue on the demo drive SS2 → Masjid Negara (the left turn into Jalan SS 2/24, ~770 m in), so a
      * simulated drive shows the "Masih ditutup?" card (canvas NavSahkan). Demo data only, never sent anywhere.

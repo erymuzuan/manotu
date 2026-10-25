@@ -109,6 +109,12 @@ private object Ids {
     const val L_LAST_METRES = "g-l-last-metres"
     const val L_LAST_ENTRANCE = "g-l-last-entrance"
     const val DRIVE_PUCK = "g-drive-puck"
+    const val TRAVELLED = "g-travelled"
+    const val TRAVELLED_TAIL = "g-travelled-tail"
+    const val L_TRAV_CASE = "g-l-trav-case"
+    const val L_TRAV_TAIL_CASE = "g-l-trav-tail-case"
+    const val L_TRAV = "g-l-trav"
+    const val L_TRAV_TAIL = "g-l-trav-tail"
     const val L_DRIVE_PUCK = "g-l-drive-puck"
     const val L_DRIVE_PUCK_ACC = "g-l-drive-puck-acc"
     const val L_TOLLS = "g-l-tolls"
@@ -407,7 +413,7 @@ private fun Style.addBelowLabels(layer: Layer, below: String?) {
 private fun installLayers(style: Style, c: GimanoColors, icons: Map<String, Bitmap>) {
     icons.forEach { (k, v) -> style.addImage(k, v) }
     val empty = FeatureCollection.fromFeatures(emptyList())
-    listOf(Ids.ROUTES, Ids.ROUTE_TRAFFIC, Ids.JAMS, Ids.DRIVERS, Ids.ALERTS, Ids.PUCK, Ids.PINS, Ids.BUILD_LINES, Ids.BUILD_PTS, Ids.TOLLS, Ids.DRIVE_PUCK, Ids.LAST_METRES).forEach {
+    listOf(Ids.ROUTES, Ids.ROUTE_TRAFFIC, Ids.JAMS, Ids.DRIVERS, Ids.ALERTS, Ids.PUCK, Ids.PINS, Ids.BUILD_LINES, Ids.BUILD_PTS, Ids.TOLLS, Ids.DRIVE_PUCK, Ids.LAST_METRES, Ids.TRAVELLED, Ids.TRAVELLED_TAIL).forEach {
         style.addSource(GeoJsonSource(it, empty))
     }
     val below = firstSymbolLayerId(style)
@@ -443,6 +449,18 @@ private fun installLayers(style: Style, c: GimanoColors, icons: Map<String, Bitm
     style.addBelowLabels(LineLayer(Ids.L_TRAFFIC, Ids.ROUTE_TRAFFIC).withProperties(
         PF.lineColor(trafficColor), PF.lineWidth(width(5f)), PF.lineCap(Property.LINE_CAP_ROUND), PF.lineJoin(Property.LINE_JOIN_ROUND),
     ), below)
+    // Travelled part (docs/driving.md §6.3): light grey on a white casing, over the blue route and its traffic colours,
+    // so those show only ahead. Stable part + per-frame tail (TravelledTrail): casings first, then the grey lines.
+    listOf(Ids.L_TRAV_CASE to Ids.TRAVELLED, Ids.L_TRAV_TAIL_CASE to Ids.TRAVELLED_TAIL).forEach { (id, src) ->
+        style.addBelowLabels(LineLayer(id, src).withProperties(
+            PF.lineColor(Color.White.toArgb()), PF.lineWidth(width(12.5f)), PF.lineCap(Property.LINE_CAP_ROUND), PF.lineJoin(Property.LINE_JOIN_ROUND),
+        ), below)
+    }
+    listOf(Ids.L_TRAV to Ids.TRAVELLED, Ids.L_TRAV_TAIL to Ids.TRAVELLED_TAIL).forEach { (id, src) ->
+        style.addBelowLabels(LineLayer(id, src).withProperties(
+            PF.lineColor(TravelledGrey.toArgb()), PF.lineWidth(width(8f)), PF.lineCap(Property.LINE_CAP_ROUND), PF.lineJoin(Property.LINE_JOIN_ROUND),
+        ), below)
+    }
     // Route builder: road legs solid, sketches dashed, unmatched drawn parts dashed orange, the raw drawn line faint.
     val kind = { k: String -> Expression.eq(Expression.get("kind"), k) }
     style.addBelowLabels(LineLayer(Ids.L_B_CASE, Ids.BUILD_LINES).withFilter(Expression.any(kind("routed"), kind("sketch"))).withProperties(
@@ -533,6 +551,11 @@ internal suspend fun runDriveFrames(
 ) {
     var wasFollowing = false
     var lastFrame = 0L
+    val style = map.style
+    val travelled = style?.getSourceAs<GeoJsonSource>(Ids.TRAVELLED)
+    val travelledTail = style?.getSourceAs<GeoJsonSource>(Ids.TRAVELLED_TAIL)
+    var trailShown = false
+    try {
     var blendFrom: CameraPosition? = null
     var blendStart = 0L
     while (true) {
@@ -544,6 +567,15 @@ internal suspend fun runDriveFrames(
         val inset = topInsetPx()
         val visible = (hPx - inset - bottomInsetPx()).coerceAtLeast(hPx * 0.3)
         val f = d.frame(now, visible / density) ?: continue
+        val t = f.trail
+        if (t != null) {
+            t.stable?.let { travelled?.setGeoJson(lineOrEmpty(it)) }
+            travelledTail?.setGeoJson(lineOrEmpty(t.tail))
+            trailShown = true
+        } else if (trailShown) {
+            travelled?.setGeoJson(lineOrEmpty(emptyList())); travelledTail?.setGeoJson(lineOrEmpty(emptyList()))
+            trailShown = false
+        }
         src.setGeoJson(Feature.fromGeometry(pt(f.point)).apply {
             addNumberProperty("bearing", f.bearing)
             addNumberProperty("acc0", (f.accuracyM ?: 0.0) / (156543.03 * kotlin.math.cos(Math.toRadians(f.point.lat))))
@@ -574,9 +606,19 @@ internal suspend fun runDriveFrames(
         map.moveCamera(CameraUpdateFactory.newCameraPosition(
             CameraPosition.Builder().target(target).zoom(zoom).tilt(tilt).bearing(bearing).padding(0.0, top, 0.0, bottom).build()))
     }
+    } finally {
+        // Drive over (or the style changed): no grey line left behind on the map.
+        travelled?.setGeoJson(lineOrEmpty(emptyList())); travelledTail?.setGeoJson(lineOrEmpty(emptyList()))
+    }
 }
 
 private fun pt(p: GeoPoint) = Point.fromLngLat(p.lng, p.lat)
+
+/** #C3CAD6, the travelled part of the route (§6.3). */
+private val TravelledGrey = Color(0xFFC3CAD6)
+
+private fun lineOrEmpty(points: List<GeoPoint>): FeatureCollection =
+    FeatureCollection.fromFeatures(if (points.size < 2) emptyList() else listOf(Feature.fromGeometry(LineString.fromLngLats(points.map(::pt)))))
 
 /**
  * Restricted areas, under the labels and the route lines: a translucent grey hatch, a dashed grey outline (zoom ≥ 12)

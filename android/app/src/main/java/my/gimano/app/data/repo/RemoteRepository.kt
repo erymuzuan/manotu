@@ -172,6 +172,7 @@ class RemoteRepository(
         authed { live(String.format(Locale.US, "%.5f,%.5f,%.5f,%.5f", minLng, minLat, maxLng, maxLat)) }
     override suspend fun createReport(body: CreateReportRequest) = authed { createReport(body) }
     override suspend fun vote(reportId: String, stillThere: Boolean) = authed { vote(reportId, VoteRequest(stillThere)) }
+    override suspend fun deleteReport(reportId: String) { authed { deleteReport(reportId) }.orThrow() }
     override suspend fun thank(reportId: String) { authed { thank(reportId) }.orThrow() }
     override suspend fun postLocations(batch: LocationBatch) { authed { postLocations(batch) }.orThrow() }
 

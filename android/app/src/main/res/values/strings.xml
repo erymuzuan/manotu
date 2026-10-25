@@ -1295,4 +1295,18 @@
     <string name="car_still_there">Still there?</string>
     <string name="car_yes">Yes</string>
     <string name="car_gone">Gone</string>
+    <!-- docs/driving.md §6.1 / §6.4 -->
+    <string name="confirm_still_there">Still there</string>
+    <string name="confirm_gone">Gone</string>
+    <string name="qr_hint_title">Slide to an option, release to report</string>
+    <string name="qr_hint_sub">Tap only = full list · release outside = cancel</string>
+    <string name="qr_release_sub">Release to report at your position</string>
+    <string name="qr_reported">%1$s reported</string>
+    <string name="qr_just_now">just now</string>
+    <string name="qr_undo">Undo</string>
+    <string name="qr_undone">Report withdrawn</string>
+    <string name="qr_undo_failed">Couldn\'t undo: the report stays</string>
+    <string name="qr_close">Close report options</string>
+    <string name="report_fab_desc">Report. Hold for quick report options.</string>
+    <string name="report_rate_limited">Too many reports. Try again in a while.</string>
 </resources>

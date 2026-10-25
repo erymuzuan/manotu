@@ -28,6 +28,8 @@ interface GimanoRepository : my.gimano.app.data.share.ShareApi {
     suspend fun live(minLng: Double, minLat: Double, maxLng: Double, maxLat: Double): LiveResponse
     suspend fun createReport(body: CreateReportRequest): Report
     suspend fun vote(reportId: String, stillThere: Boolean): Report
+    /** Undo a quick report (docs/driving.md §6.4): withdraws your own report, within 2 minutes. */
+    suspend fun deleteReport(reportId: String): Unit = throw UnsupportedOperationException()
     suspend fun thank(reportId: String)
     suspend fun postLocations(batch: LocationBatch)
 

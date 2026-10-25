@@ -121,6 +121,10 @@ interface GimanoApi {
     @POST("reports/{id}/votes")
     suspend fun vote(@Path("id") id: String, @Body body: VoteRequest): Report
 
+    /** Undo a quick report within 2 min (docs/api.md, signed): 204; later 409. */
+    @DELETE("reports/{id}")
+    suspend fun deleteReport(@Path("id") id: String): Response<ResponseBody>
+
     @POST("reports/{id}/thanks")
     suspend fun thank(@Path("id") id: String): Response<ResponseBody>
 

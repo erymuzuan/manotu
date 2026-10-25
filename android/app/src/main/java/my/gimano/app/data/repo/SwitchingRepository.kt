@@ -107,6 +107,7 @@ class SwitchingRepository(
     override suspend fun createReport(body: CreateReportRequest) = pick { createReport(body) }
     override suspend fun vote(reportId: String, stillThere: Boolean) = pick { vote(reportId, stillThere) }
     override suspend fun thank(reportId: String) = pick { thank(reportId) }
+    override suspend fun deleteReport(reportId: String) = pick { deleteReport(reportId) }
     /** Fire-and-forget traffic probes: a dropped batch (tunnel, no coverage) must never switch the app to demo data mid-drive. */
     override suspend fun postLocations(batch: LocationBatch) = if (isDemo) demo.postLocations(batch) else remote.postLocations(batch)
     override suspend fun createIssue(body: CreateIssueRequest) = write { createIssue(body) }

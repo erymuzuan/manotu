@@ -35,7 +35,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
+import android.os.SystemClock
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.unit.Dp
+import my.gimano.app.core.drive.Countdown
+import my.gimano.app.core.drive.LabelFit
 import my.gimano.app.R
 import my.gimano.app.ui.theme.Gimano
 
@@ -97,36 +101,89 @@ private fun ConfirmButton(o: ConfirmOption) {
             Icon(o.icon, null, tint = if (o.style == ConfirmStyle.PALE) c.brand else fg, modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.height(6.dp))
-        // Full label, up to 2 lines; never ellipsized (the row grows instead).
-        Text(o.label, color = fg, fontSize = 15.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, lineHeight = 18.sp)
+        // Full label, up to 2 lines, never ellipsized: the font shrinks first (15 → 11 sp), then the row grows.
+        FitLabel(o.label, fg)
+    }
+}
+
+/** Up to 2 lines at 15 sp; on overflow one size smaller at a time down to 11 sp; at 11 sp it wraps freely (never cut). */
+@Composable
+private fun FitLabel(label: String, color: Color) {
+    var sp by remember(label) { mutableFloatStateOf(LabelFit.MAX_SP) }
+    val atMin = LabelFit.shrink(sp) == null
+    Text(
+        label, color = color, fontSize = sp.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center,
+        lineHeight = (sp * 1.2f).sp, maxLines = if (atMin) Int.MAX_VALUE else LabelFit.MAX_LINES, softWrap = true,
+        onTextLayout = { r -> if (r.hasVisualOverflow) LabelFit.shrink(sp)?.let { sp = it } },
+    )
+}
+
+/**
+ * The 10 s countdown ring (canvas NavSahkan): a draining arc and the seconds left; at 0 it calls [onTimeout]
+ * (no answer). Tapping it dismisses early (also no answer).
+ */
+@Composable
+fun CountdownRing(key: Any, totalMs: Long = Countdown.CONFIRM_MS, onTimeout: () -> Unit, modifier: Modifier = Modifier, size: Dp = 48.dp, onDark: Boolean = false, tappable: Boolean = true) {
+    val c = Gimano.colors
+    val countdown = remember(key) { Countdown(totalMs, SystemClock.uptimeMillis()) }
+    var now by remember(key) { mutableLongStateOf(SystemClock.uptimeMillis()) }
+    val done by rememberUpdatedState(onTimeout)
+    LaunchedEffect(key) {
+        while (!countdown.expired(now)) { withFrameMillis { }; now = SystemClock.uptimeMillis() }
+        done()
+    }
+    val left = countdown.secondsLeft(now)
+    val label = stringResource(R.string.confirm_dismiss_in, left)
+    val track = if (onDark) Color.White.copy(alpha = 0.35f) else c.brandMist
+    val arcColor = if (onDark) Color.White else c.brand
+    Box(
+        modifier.size(size).clip(CircleShape)
+            .then(if (tappable) Modifier.clickable(role = Role.Button) { done() }.semantics { contentDescription = label } else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(size * 0.84f)) {
+            val stroke = (size.toPx() / 12f).coerceAtLeast(3.dp.toPx())
+            val inset = stroke / 2
+            val arc = Size(this.size.width - stroke, this.size.height - stroke)
+            drawArc(track, 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(stroke))
+            drawArc(arcColor, -90f, 360f * countdown.fraction(now), false, Offset(inset, inset), arc, style = Stroke(stroke, cap = StrokeCap.Round))
+        }
+        Text("$left", color = if (onDark) Color.White else c.brandInk, fontSize = (size.value / 3.2f).sp, fontWeight = FontWeight.Black)
     }
 }
 
 /**
- * The 10 s countdown ring (canvas NavSahkan): shows the seconds left; at 0 it calls [onTimeout] (no answer).
- * Tapping it dismisses early (also no answer).
+ * The driving confirm card (docs/driving.md §6.1, canvas NavSahkan): icon tile, question, "kind · street · age",
+ * the 10 s ring, then three equal 84 dp buttons. Used for "Still closed?" (road issues) and "Still there?" (alerts).
+ * At very large text the tile is dropped and the subtitle kept to 2 lines, so the card never rides up over the
+ * maneuver banner.
  */
 @Composable
-fun CountdownRing(key: Any, seconds: Int = 10, onTimeout: () -> Unit, modifier: Modifier = Modifier) {
+fun ConfirmCard(
+    key: Any,
+    title: String,
+    subtitle: String,
+    options: List<ConfirmOption>,
+    onTimeout: () -> Unit,
+    modifier: Modifier = Modifier,
+    tile: @Composable () -> Unit,
+) {
     val c = Gimano.colors
-    var left by remember(key) { mutableIntStateOf(seconds) }
-    val done by rememberUpdatedState(onTimeout)
-    LaunchedEffect(key) {
-        while (left > 0) { delay(1_000); left-- }
-        done()
-    }
-    val label = stringResource(R.string.confirm_dismiss_in, left)
-    Box(
-        modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button) { done() }.semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.size(40.dp)) {
-            val stroke = 4.dp.toPx()
-            val inset = stroke / 2
-            val arc = Size(size.width - stroke, size.height - stroke)
-            drawArc(c.surfaceAlt, 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(stroke))
-            drawArc(c.brand, -90f, 360f * left / seconds, false, Offset(inset, inset), arc, style = Stroke(stroke, cap = StrokeCap.Round))
+    androidx.compose.material3.Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = c.surface, shadowElevation = 10.dp) {
+        Column(Modifier.padding(16.dp)) {
+            val big = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.5f
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!big) { tile(); Spacer(Modifier.width(12.dp)) }
+                Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                    Text(title, fontSize = 22.sp, fontWeight = FontWeight.Black, color = c.text, lineHeight = 25.sp)
+                    Text(subtitle, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.textMuted,
+                        maxLines = if (big) 2 else 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.width(8.dp))
+                CountdownRing(key, onTimeout = onTimeout)
+            }
+            Spacer(Modifier.height(14.dp))
+            ConfirmButtons(options)
         }
-        Text("$left", color = c.brandInk, fontSize = 15.sp, fontWeight = FontWeight.Black)
     }
 }

@@ -35,7 +35,6 @@ import my.gimano.app.nav.NavState
 import my.gimano.app.ui.MainViewModel
 import my.gimano.app.ui.UiState
 import my.gimano.app.ui.common.*
-import my.gimano.app.ui.report.AlertCard
 import my.gimano.app.ui.report.currentLang
 import my.gimano.app.ui.theme.Gimano
 import my.gimano.app.ui.theme.GimanoType
@@ -61,6 +60,7 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
         onDispose { view.keepScreenOn = false }
     }
 
+    val fan = remember { my.gimano.app.ui.report.QuickFanState() }
     Box(Modifier.fillMaxSize()) {
         // ---- Top: turn banner + "then" strip --------------------------------------------
         Column(Modifier.align(Alignment.TopStart).fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 10.dp, vertical = 6.dp)) {
@@ -128,14 +128,18 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
                 Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
             AnimatedVisibility(alert != null && !nav.arrived) {
                 if (alert != null) {
-                    AlertCard(
-                        alert.toReport(), null,
-                        onVote = { v -> vm.vote(alert.toReport(), v) },
-                        onClose = { vm.dismissNavAlert(alert.id) },
-                        distanceAheadM = nav.alertDistanceM?.coerceAtLeast(0.0),
+                    // "Still there?" confirm card (docs/driving.md §6.1): not sure / 10 s timeout = no vote.
+                    my.gimano.app.ui.report.StillThereCard(
+                        alert.toReport(), nav.alertDistanceM?.coerceAtLeast(0.0),
+                        onAnswer = { v -> if (v == null) vm.dismissNavAlert(alert.id) else vm.vote(alert.toReport(), v) },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     )
                 }
+            }
+            // After a hold-to-report: "Hazard reported · street · just now", Details, 5 s Undo (docs/driving.md §6.4).
+            ui.quickReport?.let { q ->
+                my.gimano.app.ui.report.QuickReportSentCard(q, onDetails = vm::quickReportDetails, onUndo = vm::undoQuickReport,
+                    onTimeout = { vm.closeQuickReport(q.key) }, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
             }
             // Hidden while the trip sheet is expanded so it can't ride up over the sound/End buttons.
             if (!ui.navExpanded) Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.Bottom) {
@@ -150,7 +154,8 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
                     Attribution()
                 }
                 Spacer(Modifier.weight(1f))
-                ReportFab { vm.openReport(true) }
+                // Tap = the full sheet; hold = the quick fan (docs/driving.md §6.4).
+                my.gimano.app.ui.report.HoldReportFab(fan, onTap = { vm.openReport(true) }, onSend = vm::quickReport)
             }
             when {
                 nav.arrived -> ArrivedCard(nav, vm)
@@ -159,6 +164,7 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
             }
         }
     }
+    if (fan.open) my.gimano.app.ui.report.QuickFanOverlay(fan)
     if (ui.confirmStop) StopDialog(vm)
     if (ui.passengerPrompt) PassengerDialog(vm)
 }

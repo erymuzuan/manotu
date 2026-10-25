@@ -9,6 +9,7 @@ import my.gimano.app.core.nav.PuckAnimator
 import my.gimano.app.core.nav.RouteGeometry
 import my.gimano.app.core.nav.TinjauPlanner
 import my.gimano.app.core.nav.TinjauZoom
+import my.gimano.app.core.nav.TravelledTrail
 
 /**
  * Steady arrow + camera for one map view (phone or car surface), docs/driving.md §2–3. Fed every navigation state;
@@ -20,11 +21,14 @@ class DriveRenderer {
         val point: GeoPoint, val bearing: Double, val zoom: Double, val tilt: Double,
         /** Where the arrow sits, as a fraction of the map height from the top. */
         val anchorY: Double, val accuracyM: Double?, val mode: CameraMode?,
+        /** The grey "travelled" line behind the arrow (§6.3); null = none (no route, or not on it). */
+        val trail: TravelledTrail.Update? = null,
     )
 
     private var routeId: String? = null
     private var geometry: RouteGeometry? = null
     private var animator = PuckAnimator(null)
+    private var trail: TravelledTrail? = null
     private val heading = HeadingFilter()
     private val zoom = Easer(15.0)
     private val tilt = Easer(0.0)
@@ -50,6 +54,8 @@ class DriveRenderer {
             routeId = route?.id
             geometry = route?.let { runCatching { RouteGeometry(Polyline.decode(it.polyline)) }.getOrNull() }
             animator = PuckAnimator(geometry)
+            // A reroute starts a new trail: only the new route shows, nothing travelled on it yet.
+            trail = geometry?.takeIf { it.points.size >= 2 }?.let { TravelledTrail(it) }
             lastFixMs = null
         }
         motorised = s.mode.isMotorised
@@ -98,11 +104,12 @@ class DriveRenderer {
         val g = geometry
         val target = if (pose.alongM != null && g != null) g.bearingAhead(pose.alongM, 20.0) else fallbackBearing
         val b = heading.update(target, nowMs)
-        return Frame(pose.point, b, zoom.value(nowMs), tilt.value(nowMs), anchor.value(nowMs), accuracyM, mode)
+        val t = pose.alongM?.let { a -> trail?.update(a) }
+        return Frame(pose.point, b, zoom.value(nowMs), tilt.value(nowMs), anchor.value(nowMs), accuracyM, mode, t)
     }
 
     fun reset() {
-        routeId = null; geometry = null; animator = PuckAnimator(null); heading.reset()
+        routeId = null; geometry = null; animator = PuckAnimator(null); trail = null; heading.reset()
         lastFixMs = null; mode = null; modeKey = null; started = false; pendingTinjau = null
     }
 

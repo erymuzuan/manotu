@@ -138,34 +138,21 @@ fun DeviationSheet(d: Deviation, onAnswer: (answer: String?, neverAgain: Boolean
 /** "Masih ditutup?" in the alert-ahead spot while driving. */
 @Composable
 fun StillClosedCard(i: Issue, onAnswer: (String?) -> Unit, modifier: Modifier = Modifier) {
-    val c = Gimano.colors
-    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(Radius.lg), color = c.surface, shadowElevation = 8.dp) {
-        Column(Modifier.padding(16.dp)) {
-            // Very large text: no icon tile and a 2-line subtitle, so the card doesn't ride up over the turn banner.
-            val big = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.5f
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!big) {
-                    Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Amber), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Block, null, tint = AmberInk, modifier = Modifier.size(28.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.still_closed_q), fontSize = 22.sp, fontWeight = FontWeight.Black, color = c.text)
-                    // "kind · street · age" (canvas NavSahkan).
-                    Text(confirmLine(i.kind, i.subtype, i.road, i.createdAt), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.textMuted,
-                        maxLines = if (big) 2 else 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                }
-                Spacer(Modifier.width(8.dp))
-                // 10 s, then it goes away with no answer (as does tapping the ring).
-                my.gimano.app.ui.common.CountdownRing(i.id, onTimeout = { onAnswer(null) })
-            }
-            Spacer(Modifier.height(12.dp))
-            my.gimano.app.ui.common.ConfirmButtons(listOf(
-                my.gimano.app.ui.common.ConfirmOption(stringResource(R.string.still_closed_yes), my.gimano.app.ui.common.ConfirmIcons.yes, my.gimano.app.ui.common.ConfirmStyle.SOLID) { onAnswer("still") },
-                my.gimano.app.ui.common.ConfirmOption(stringResource(R.string.still_closed_open), my.gimano.app.ui.common.ConfirmIcons.cleared, my.gimano.app.ui.common.ConfirmStyle.PALE) { onAnswer("cleared") },
-                my.gimano.app.ui.common.ConfirmOption(stringResource(R.string.not_sure), my.gimano.app.ui.common.ConfirmIcons.unsure, my.gimano.app.ui.common.ConfirmStyle.OUTLINED) { onAnswer("unsure") },
-            ))
+    // "kind · street · age" (canvas NavSahkan); 10 s, then it goes away with no answer (as does tapping the ring).
+    my.gimano.app.ui.common.ConfirmCard(
+        key = i.id,
+        title = stringResource(R.string.still_closed_q),
+        subtitle = confirmLine(i.kind, i.subtype, i.road, i.createdAt),
+        options = listOf(
+            my.gimano.app.ui.common.ConfirmOption(stringResource(R.string.still_closed_yes), my.gimano.app.ui.common.ConfirmIcons.yes, my.gimano.app.ui.common.ConfirmStyle.SOLID) { onAnswer("still") },
+            my.gimano.app.ui.common.ConfirmOption(stringResource(R.string.still_closed_open), my.gimano.app.ui.common.ConfirmIcons.cleared, my.gimano.app.ui.common.ConfirmStyle.PALE) { onAnswer("cleared") },
+            my.gimano.app.ui.common.ConfirmOption(stringResource(R.string.not_sure), my.gimano.app.ui.common.ConfirmIcons.unsure, my.gimano.app.ui.common.ConfirmStyle.OUTLINED) { onAnswer("unsure") },
+        ),
+        onTimeout = { onAnswer(null) },
+        modifier = modifier,
+    ) {
+        Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Amber), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Block, null, tint = AmberInk, modifier = Modifier.size(30.dp))
         }
     }
 }

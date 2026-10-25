@@ -58,7 +58,7 @@ private fun modeTitle(m: SoundMode) = stringResource(when (m) { SoundMode.ON -> 
 private fun modeSub(m: SoundMode) = stringResource(when (m) { SoundMode.ON -> R.string.sound_full_sub; SoundMode.ALERTS_ONLY -> R.string.sound_alerts_sub; SoundMode.OFF -> R.string.sound_mute_sub })
 
 @Composable
-private fun SoundGlyph(m: SoundMode, size: Dp) {
+fun SoundGlyph(m: SoundMode, size: Dp) {
     val c = Gimano.colors
     when (m) {
         SoundMode.ON -> TwoToneIcon("sound_full", null, size = size)
@@ -73,7 +73,7 @@ private fun SoundGlyph(m: SoundMode, size: Dp) {
 /**
  * Sound FAB (canvas NavBunyiKeadaan): one icon per mode (speaker + waves / bell / crossed speaker with an orange
  * ring). Tap opens the "BUNYI" panel; long-press is quick mute (or back to the last non-mute mode).
- * TalkBack reads "Sound: Alerts only" and announces changes (live region).
+ * TalkBack reads "Sound: Alerts only"; the new choice is announced by the 2 s toast ([SoundToastPill], a live region).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -104,7 +104,6 @@ fun SoundFab(
                 .semantics {
                     contentDescription = desc
                     stateDescription = title
-                    liveRegion = LiveRegionMode.Polite
                 },
             contentAlignment = Alignment.Center,
         ) { SoundGlyph(mode, size * 0.47f) }
@@ -192,5 +191,23 @@ private fun SoundPanel(mode: SoundMode, voiceVolume: Int, onDismiss: () -> Unit,
                 }
             }
         }
+    }
+}
+
+/**
+ * The 2 s sound toast (canvas NavBunyiKeadaan): a navy pill with the new mode's icon, "Alerts only · voice directions
+ * off". A polite live region, so TalkBack announces the new choice.
+ */
+@Composable
+fun SoundToastPill(mode: SoundMode, text: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier.clip(RoundedCornerShape(999.dp)).background(Color(0xFF0B1F4A))
+            .semantics { liveRegion = LiveRegionMode.Polite; contentDescription = text }
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SoundGlyph(mode, 24.dp)
+        Spacer(Modifier.width(10.dp))
+        Text(text, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
