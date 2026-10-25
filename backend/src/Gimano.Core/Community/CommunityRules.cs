@@ -30,13 +30,20 @@ public static class CommunityRules
         public const int HelpfulReceived = 1;
     }
 
-    /// <summary>Who can see a community place (GET by id, nearby): pending and published for everyone (so nearby users can verify), hidden/closed only for the owner.</summary>
-    public static bool IsVisibleTo(PlaceStatus status, Guid? ownerId, Guid? viewer) =>
-        status is PlaceStatus.Pending or PlaceStatus.Published || (viewer is not null && ownerId == viewer);
+    /// <summary>
+    /// Who can see a community place (GET by id, nearby): pending and published for everyone (so nearby users can verify), except a
+    /// new place the AI is still checking; hidden, rejected and closed only for the owner.
+    /// </summary>
+    public static bool IsVisibleTo(PlaceStatus status, Guid? ownerId, Guid? viewer, ScreeningState screening = ScreeningState.None) =>
+        status == PlaceStatus.Published || (status == PlaceStatus.Pending && screening != ScreeningState.Checking)
+        || (viewer is not null && ownerId == viewer);
 
-    /// <summary>Who sees it in text search: published for everyone; the owner also sees their own pending places.</summary>
-    public static bool IsSearchableBy(PlaceStatus status, Guid? ownerId, Guid? viewer) =>
-        status == PlaceStatus.Published || (status == PlaceStatus.Pending && viewer is not null && ownerId == viewer);
+    /// <summary>
+    /// Who sees it in text search: published for everyone, and pending places the AI check passed ("listed", shown as not verified
+    /// yet); the owner also sees their own pending places.
+    /// </summary>
+    public static bool IsSearchableBy(PlaceStatus status, Guid? ownerId, Guid? viewer, bool listed = false) =>
+        status == PlaceStatus.Published || (status == PlaceStatus.Pending && (listed || (viewer is not null && ownerId == viewer)));
 
     public static bool InServiceArea(double lat, double lng) => lat is > 0.8 and < 7.5 && lng is > 99.5 and < 119.5;
 

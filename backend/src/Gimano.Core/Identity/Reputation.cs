@@ -73,9 +73,9 @@ public static class Reputation
     /// Vote weight: 0 while the account is under 7 days or for "unsure"; else baharu 1, perak 1.5, emas 2.
     /// Key-less legacy accounts weigh at most 1 (their requests can't be signed).
     /// </summary>
-    public static double VoteWeight(Tier tier, DateTimeOffset accountCreated, DateTimeOffset now, VoteAnswer answer, bool hasKey = true)
+    public static double VoteWeight(Tier tier, DateTimeOffset accountCreated, DateTimeOffset now, VoteAnswer answer, bool hasKey = true, bool launchMode = false)
     {
-        if (answer == VoteAnswer.Unsure || now - accountCreated < NewAccountNoWeight) return 0;
+        if (answer == VoteAnswer.Unsure || now - accountCreated < (launchMode ? LaunchNewAccountNoWeight : NewAccountNoWeight)) return 0;
         var w = tier switch { Tier.Emas => 2, Tier.Perak => 1.5, _ => 1.0 };
         return hasKey ? w : Math.Min(w, 1);
     }
@@ -90,6 +90,16 @@ public static class Reputation
         Tier.Perak => 2,
         _ => 3,
     };
+
+    // Launch mode (Vetting:LaunchMode, design page "Review", board "Launch mode"): while there are few verifiers, a place the
+    // AI check passed needs one confirmation, new accounts' votes count after a day, and pending places wait 90 days.
+    public static readonly TimeSpan LaunchNewAccountNoWeight = TimeSpan.FromDays(1);
+    public static readonly TimeSpan LaunchPendingExpiry = TimeSpan.FromDays(90);
+
+    public static double RequiredConfirmations(Tier contributorTier, bool launchMode) =>
+        launchMode && contributorTier != Tier.Emas ? 1 : RequiredConfirmations(contributorTier);
+
+    public static TimeSpan PendingExpiryFor(bool launchMode) => launchMode ? LaunchPendingExpiry : PendingExpiry;
 
     public static int PublicPlacesPerDay(Tier tier) => tier == Tier.Baharu ? 5 : 10;
 
@@ -122,4 +132,12 @@ public static class Reputation
 
     /// <summary>10 % of Emas places are also sent for local audit.</summary>
     public static bool PickForAudit(Func<double> random) => random() < AuditShare;
+}
+
+/// <summary>Vetting switches (appsettings "Vetting").</summary>
+public sealed class VettingOptions
+{
+    public const string Section = "Vetting";
+    /// <summary>Launch mode: see <see cref="Reputation.RequiredConfirmations(Tier, bool)"/>. On until enough people verify.</summary>
+    public bool LaunchMode { get; set; } = true;
 }

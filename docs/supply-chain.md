@@ -22,6 +22,7 @@ adds or changes a dependency; a reviewer checks it against the rule in `AGENTS.m
 | CBOR (backend, App Attest) | System.Formats.Cbor | MIT | .NET Foundation |
 | Device attestation | Google Play Integrity API / Apple App Attest | platform services | Google / Apple (verdicts only; no SDK on the server) |
 | Images | SkiaSharp / Skia | MIT / BSD-3 | .NET Foundation / Skia project |
+| Place check (server only) | Anthropic API, Claude Haiku 5.5 (NuGet `Anthropic`, MIT) | proprietary hosted service | Anthropic (US); owner decision 25 Oct 2026, see below |
 | Font | Nunito | SIL OFL | Open-source type project |
 
 **Not used:** no advertising, analytics or tracking SDKs, and no closed-source map, traffic or
@@ -53,3 +54,17 @@ not these libraries. Apple platform frameworks and services are also proprietary
 the complete app binary or dependency stack as “100% open source” or “no closed-source SDKs”.
 No advertising or tracking SDKs are approved. The private-data rules in `AGENTS.md` remain in force.
 A Google-free build is not promised by this decision. Revisit these exceptions when dependencies change.
+
+## Approved AI service (25 October 2026)
+
+The server screens **new and edited public places** with Claude Haiku 5.5 through the Anthropic API (docs/api.md,
+"Community places", AI check). Boundaries:
+
+- Server only: no SDK or model in the apps.
+- It receives only what the contributor publishes to everyone (name, category, description, opening hours, business
+  phone, website) and the names of public places within 150 m. Never a user id, pseudonym, device, location history or
+  anything private. "Just for me" places never leave the phone, so they are never screened.
+- Haiku 5.5 only (hard-coded), at most US$20 a week (`Screening:WeeklyBudgetUsd`, clamped), off without a key.
+- Submission text is not logged; the server keeps the decision's reason codes and confidence on the place, and weekly
+  token and dollar totals (no content) in `ai_usage_weeks`.
+- The privacy policy must name Anthropic as a processor of public place submissions before the key is set in production.

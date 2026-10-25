@@ -42,7 +42,7 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
         if (q.Country is { } c) query = query.Where(p => p.Country == c);
 
         var community = db.CommunityPlaces.AsNoTracking().Where(p => EF.Functions.ILike(p.Name, pattern)
-            && (p.Status == PlaceStatus.Published || (p.Status == PlaceStatus.Pending && q.Viewer != null && p.OwnerId == q.Viewer)));
+            && (p.Status == PlaceStatus.Published || (p.Status == PlaceStatus.Pending && (p.Listed || (q.Viewer != null && p.OwnerId == q.Viewer)))));
         if (q.Category is { } cat2) community = community.Where(p => p.Category == cat2);
 
         if (q.Lat is { } lat && q.Lng is { } lng)
@@ -92,7 +92,7 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
 
         // Pending places are shown nearby so that people there can verify them ("Is this place here?").
         var cq = db.CommunityPlaces.AsNoTracking().Where(p => p.Location.IsWithinDistance(pt, radiusM)
-            && (p.Status == PlaceStatus.Published || p.Status == PlaceStatus.Pending));
+            && (p.Status == PlaceStatus.Published || (p.Status == PlaceStatus.Pending && p.ScreeningState != ScreeningState.Checking)));
         if (category is { } c2) cq = cq.Where(p => p.Category == c2);
         var crow = await cq.OrderBy(p => p.Location.Distance(pt)).Take(limit).ToListAsync(ct);
 
@@ -137,7 +137,7 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
         if (CommunityPlace.IsCommunityId(id))
         {
             var c = await db.CommunityPlaces.AsNoTracking().Include(x => x.Owner).FirstOrDefaultAsync(x => x.Id == id, ct);
-            if (c is null || !CommunityRules.IsVisibleTo(c.Status, c.OwnerId, viewer)) return null;
+            if (c is null || !CommunityRules.IsVisibleTo(c.Status, c.OwnerId, viewer, c.ScreeningState)) return null;
             return ToDto(c, lat, lng, agg, photos, local, handles.For(c.OwnerId));
         }
 

@@ -40,6 +40,8 @@ builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = config.GetVa
 
 // Infrastructure
 builder.Services.AddGimanoData(config).AddGimanoSearch(config).AddGimanoMessaging(config);
+// AI place check (Claude Haiku 5.5, weekly budget) and vetting launch mode.
+Gimano.Core.Community.ScreeningSetup.AddGimanoScreening(builder.Services, config);
 builder.Services.AddHttpClient<ValhallaClient>(c =>
 {
     c.BaseAddress = new Uri((config["Valhalla:Url"] ?? "http://localhost:8002").TrimEnd('/') + "/");

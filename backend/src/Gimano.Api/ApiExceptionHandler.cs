@@ -41,6 +41,24 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problems, ILogger
             return await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = http, ProblemDetails = pd });
         }
 
+        if (exception is AddingPausedException paused)
+        {
+            http.Response.StatusCode = StatusCodes.Status403Forbidden;
+            var pd = new ProblemDetails { Status = 403, Title = "Adding paused", Detail = paused.Message };
+            pd.Extensions["code"] = "adding_paused";
+            pd.Extensions["pausedUntil"] = paused.Until;
+            return await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = http, ProblemDetails = pd });
+        }
+        if (exception is RateLimitedException { RetryAfter: { } after } limited)
+        {
+            var seconds = (int)Math.Ceiling(Math.Max(1, after.TotalSeconds));
+            http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            http.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var pd = new ProblemDetails { Status = 429, Title = "Too many requests", Detail = limited.Message };
+            pd.Extensions["retryAfterSeconds"] = seconds;
+            return await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = http, ProblemDetails = pd });
+        }
+
         var (status, title) = exception switch
         {
             RateLimitedException => (StatusCodes.Status429TooManyRequests, "Too many requests"),

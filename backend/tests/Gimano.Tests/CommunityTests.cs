@@ -79,7 +79,7 @@ public class SearchVisibilityTests
         if (q["term"] is JsonObject term)
         {
             var (field, value) = term.First();
-            return doc[field]?.GetValue<string>() == value!.GetValue<string>();
+            return doc[field]?.ToJsonString() == value!.ToJsonString();
         }
         var b = q["bool"]!;
         var filters = b["filter"]?.AsArray() ?? [];
@@ -87,9 +87,9 @@ public class SearchVisibilityTests
         return filters.All(f => Matches(f!, doc)) && (should.Count == 0 || should.Any(s => Matches(s!, doc)));
     }
 
-    private static JsonObject Doc(PlaceStatus status, Guid owner) => SearchQueryBuilder.ToDocument(new CommunityPlace
+    private static JsonObject Doc(PlaceStatus status, Guid owner, bool listed = false) => SearchQueryBuilder.ToDocument(new CommunityPlace
     {
-        Name = "Kedai Mak Teh", Location = new GeoPoint(3.1, 101.6).ToPoint(), Status = status, OwnerId = owner,
+        Name = "Kedai Mak Teh", Location = new GeoPoint(3.1, 101.6).ToPoint(), Status = status, OwnerId = owner, Listed = listed,
     });
 
     private static JsonObject Osm() => SearchQueryBuilder.ToDocument(new Place
@@ -98,7 +98,7 @@ public class SearchVisibilityTests
     });
 
     [Fact]
-    public void OpenSearch_filter_returns_osm_published_and_own_pending_only()
+    public void OpenSearch_filter_returns_osm_published_listed_and_own_pending_only()
     {
         var asOther = SearchQueryBuilder.Visibility(Other);
         var asOwner = SearchQueryBuilder.Visibility(Owner);
@@ -111,6 +111,9 @@ public class SearchVisibilityTests
         Assert.True(Matches(asOwner, Doc(PlaceStatus.Pending, Owner)));
         Assert.False(Matches(asOwner, Doc(PlaceStatus.Hidden, Owner)));
         Assert.False(Matches(asOwner, Doc(PlaceStatus.Closed, Owner)));
+        // Pending places the AI check passed are listed for everyone; "listed" never survives a status change.
+        Assert.True(Matches(anonymous, Doc(PlaceStatus.Pending, Owner, listed: true)));
+        Assert.False(Matches(anonymous, Doc(PlaceStatus.Hidden, Owner, listed: true)));
     }
 
     [Fact]

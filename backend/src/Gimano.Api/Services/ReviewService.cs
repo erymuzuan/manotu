@@ -135,7 +135,7 @@ public sealed class ReviewService(GimanoDbContext db, IEventPublisher bus, TimeP
         if (CommunityPlace.IsCommunityId(placeId))
         {
             var p = await db.CommunityPlaces.AsNoTracking().FirstOrDefaultAsync(x => x.Id == placeId, ct) ?? throw new NotFoundException("Place not found.");
-            if (!CommunityRules.IsVisibleTo(p.Status, p.OwnerId, userId) || p.Status == PlaceStatus.Hidden) throw new NotFoundException("Place not found.");
+            if (!CommunityRules.IsVisibleTo(p.Status, p.OwnerId, userId, p.ScreeningState) || p.Status is PlaceStatus.Hidden or PlaceStatus.Rejected) throw new NotFoundException("Place not found.");
             if (p.OwnerId == userId && clock.GetUtcNow() - p.CreatedAt < CommunityRules.SelfReviewBlock)
                 throw new ForbiddenException("You can review a place you added only after 24 hours.");
         }

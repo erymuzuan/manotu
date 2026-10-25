@@ -39,6 +39,20 @@ public sealed class CommunityPlace
     /// <summary>Near a restricted area or with sensitive words: hidden until a maintainer decides (docs/api.md "Restricted areas").</summary>
     public bool HeldForReview { get; set; }
 
+    // AI check (docs/api.md "Community places", Gimano.Core.Community.PlaceScreening).
+    public Community.ScreeningState ScreeningState { get; set; }
+    /// <summary>Reason codes, comma-separated (e.g. "spam" or "private_home").</summary>
+    public string? ScreeningReasons { get; set; }
+    public Community.ScreeningConfidence? ScreeningConfidence { get; set; }
+    public DateTimeOffset? ScreenedAt { get; set; }
+    /// <summary>Passed the check while still waiting for confirmations: shown in search with "not verified yet".</summary>
+    public bool Listed { get; set; }
+    /// <summary>The nearby place the contributor said this is not (answer to "Is it already on the map?").</summary>
+    public string? SaidDifferentFrom { get; set; }
+    /// <summary>The owner's note when asking a person to review a rejected place (once per place).</summary>
+    public string? AppealNote { get; set; }
+    public DateTimeOffset? AppealedAt { get; set; }
+
     public static string NewId() => "c" + Guid.CreateVersion7().ToString("N");
     public static bool IsCommunityId(string id) => id.Length == 33 && id[0] == 'c';
 }

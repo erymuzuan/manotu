@@ -173,6 +173,11 @@ services:
       Attestation__Android__PackageName: ${ATTESTATION_ANDROID_PACKAGE:-}
       Attestation__Android__ServiceAccountJson: ${ATTESTATION_ANDROID_SA_JSON:-}
       Attestation__Ios__AppId: ${ATTESTATION_IOS_APP_ID:-}
+      # AI place check (docs/api.md "Community places"; docs/supply-chain.md): Claude Haiku 5.5, at most US$20 a week.
+      # Empty key = off (places follow the plain vetting rules). Launch mode: 1 confirmation, 90-day expiry.
+      Screening__ApiKey: ${CLAUDE_API_KEY:-}
+      Screening__WeeklyBudgetUsd: ${SCREENING_WEEKLY_BUDGET_USD:-20}
+      Vetting__LaunchMode: ${VETTING_LAUNCH_MODE:-true}
       Logging__LogLevel__Microsoft.AspNetCore: Warning
     ports: ["${API_BIND:?Set API_BIND (the host's LAN IP) in deploy/.env.prod}:${API_PORT:-5080}:8080"]
     volumes: ["media:/data/media"]
@@ -199,6 +204,10 @@ services:
       Digest__To__0: ${DIGEST_TO:-}
       Digest__SendAtHour: ${DIGEST_SEND_AT_HOUR:-8}
       Digest__BackOfficeUrl: ${BACKOFFICE_PUBLIC_URL:-http://127.0.0.1:5090}
+      # The worker finishes AI checks that took longer than 4 s (same key and budget as the api).
+      Screening__ApiKey: ${CLAUDE_API_KEY:-}
+      Screening__WeeklyBudgetUsd: ${SCREENING_WEEKLY_BUDGET_USD:-20}
+      Vetting__LaunchMode: ${VETTING_LAUNCH_MODE:-true}
     volumes: ["media:/data/media"]
     networks: [gimano]
     depends_on:
