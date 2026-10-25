@@ -108,3 +108,51 @@ Platform gates: CarPlay needs the CarPlay navigation entitlement under Erymuzuan
 STAFY); until Apple grants it, CarPlay is built and tested in the CarPlay Simulator only and is excluded from device and
 AltStore builds. Android Auto needs the navigation category and Google's quality review; test with the Desktop Head
 Unit (DHU) and Android Auto developer mode / unknown sources on the test phone.
+
+## 6. Confirm card, sound selector, travelled route, hold-to-report
+
+Design: canvas page **Driving**, first row (boards "Issues from the S24 drive + rules" to "Sent at once"). Found on the
+S24 drive: the "Still closed?" buttons were cut off, and the sound button toggled blindly on each tap.
+
+### 6.1 Confirm card ("Still closed?" / "Still there?")
+
+- Three equal buttons, **84 dp/pt tall**, icon above a **full label** (max 2 lines, never truncated; shrink the font
+  before cutting): primary "Still closed" / "Masih ditutup" (blue), "It's open" / "Sudah dibuka" (light blue),
+  "Not sure" / "Tak pasti" (outlined). The same layout for road alerts: "Still there" / "Gone" / "Not sure".
+- Title row: icon tile, question ("Still closed?"), subtitle (kind · street · age, e.g. "No turn · Jalan SS 2/3 ·
+  5 h ago"), and a **10 s countdown ring**; when it runs out the card closes with no answer.
+- Language follows the phone (BM/EN). The card sits above the trip bar and never covers the maneuver banner.
+
+### 6.2 Sound selector
+
+- Tapping the sound button opens a small panel (not a toggle): **Full sound** ("Directions + alerts"), **Alerts only**
+  ("Police, closures, hazards"), **Mute** ("No sound"), with the current choice marked, plus a **voice volume** slider
+  (app's own voice volume, 0–100 %).
+- Choosing an option, or tapping outside, closes the panel. A **2 s toast** confirms the change ("Alerts only: voice
+  directions off").
+- **Button states**: a distinct icon per mode; Mute has an orange ring. **Long-press = quick mute** (toggle Mute / back to
+  the previous mode).
+- The choice is remembered across trips (on the phone only). Accessibility: the button announces the current mode;
+  TalkBack/VoiceOver announce the new choice.
+
+### 6.3 Travelled route
+
+- The part of the route behind the arrow is redrawn **light grey (#C3CAD6) on a white casing** as you pass it; the road
+  ahead stays blue. It follows the animated arrow position (§3), so it moves smoothly.
+- After a reroute, only the new route shows (the old one, travelled or not, is removed).
+- Traffic colours apply only to the part ahead.
+
+### 6.4 Hold-to-report
+
+- **Tap** the report button: opens the full report sheet, as today.
+- **Hold** it (~300 ms): 8 coloured quick actions fan out around the button.
+  - Inner ring: Hazard (amber), Police (blue), Accident (red).
+  - Outer ring: Traffic (orange), Closure (grey), Blocked lane (purple), Weather (teal), Animal (green).
+- **Slide** onto one: it grows, its label shows in a banner at the top ("Hazard · release to report at your position"),
+  and the phone gives a haptic tick. **Release** on it to send at once at the current position (default subtype);
+  **release outside** to cancel. "Map issue" stays in the full sheet only.
+- After sending: a card "Hazard reported · Jalan SS 2/55 · just now" with **Details** (opens the subtype sheet for
+  that report, optional) and **Undo** for **5 s** (Undo deletes the report on the server, or cancels it if not yet sent).
+- The existing rules still apply: restricted areas refuse reports (docs/safety.md), rate limits, signed requests.
+- Accessibility: the fan is also reachable without a gesture (the full sheet); VoiceOver/TalkBack users get the sheet
+  on tap.
