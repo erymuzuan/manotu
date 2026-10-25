@@ -11,6 +11,16 @@
         }
       }
     },
+    "%@ from the road" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ dari jalan"
+          }
+        }
+      }
+    },
     "%@ from you" : {
       "localizations" : {
         "ms" : {
@@ -27,6 +37,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ kilometer"
+          }
+        }
+      }
+    },
+    "%@ long" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ panjang"
           }
         }
       }
@@ -87,6 +107,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ bintang"
+          }
+        }
+      }
+    },
+    "%@ toll" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol %@"
           }
         }
       }
@@ -663,6 +693,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kemalangan"
+          }
+        }
+      }
+    },
+    "Accident %@ ahead" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kemalangan %@ di hadapan"
           }
         }
       }
@@ -3859,6 +3899,26 @@
         }
       }
     },
+    "Entrance on your left" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pintu masuk di sebelah kiri"
+          }
+        }
+      }
+    },
+    "Entrance on your right" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pintu masuk di sebelah kanan"
+          }
+        }
+      }
+    },
     "Entrance or parking wrong" : {
       "localizations" : {
         "ms" : {
@@ -4490,6 +4550,16 @@
         }
       }
     },
+    "Gone" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiada"
+          }
+        }
+      }
+    },
     "Good" : {
       "localizations" : {
         "ms" : {
@@ -4566,6 +4636,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Google Drive: belum dikonfigurasi dalam binaan ini"
+          }
+        }
+      }
+    },
+    "Got it" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faham"
           }
         }
       }
@@ -4676,6 +4756,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bahaya"
+          }
+        }
+      }
+    },
+    "Hazard %@ ahead" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bahaya %@ di hadapan"
           }
         }
       }
@@ -5828,6 +5918,26 @@
         }
       }
     },
+    "Main entrance on your left" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pintu masuk utama di sebelah kiri"
+          }
+        }
+      }
+    },
+    "Main entrance on your right" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pintu masuk utama di sebelah kanan"
+          }
+        }
+      }
+    },
     "Major" : {
       "localizations" : {
         "ms" : {
@@ -6894,12 +7004,32 @@
         }
       }
     },
+    "No saved places yet" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada tempat disimpan"
+          }
+        }
+      }
+    },
     "No sound" : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tiada bunyi"
+          }
+        }
+      }
+    },
+    "No tolls" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanpa tol"
           }
         }
       }
@@ -7342,6 +7472,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Buka Manotu untuk masa terbaik bertolak ke %@ (tiba %@)"
+          }
+        }
+      }
+    },
+    "Open Manotu on your phone to start" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buka Manotu di telefon untuk bermula"
           }
         }
       }
@@ -8972,6 +9112,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ditutup"
+          }
+        }
+      }
+    },
+    "Road closed %@ ahead" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jalan ditutup %@ di hadapan"
           }
         }
       }
@@ -11192,6 +11342,26 @@
         }
       }
     },
+    "The place is on your left" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat ini di sebelah kiri"
+          }
+        }
+      }
+    },
+    "The place is on your right" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat ini di sebelah kanan"
+          }
+        }
+      }
+    },
     "The plan has changed" : {
       "localizations" : {
         "ms" : {
@@ -11674,6 +11844,26 @@
         }
       }
     },
+    "Toll ahead · fare unknown" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol di hadapan · harga tidak diketahui"
+          }
+        }
+      }
+    },
+    "Toll entry · pay at the exit" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol masuk · bayar di tol keluar"
+          }
+        }
+      }
+    },
     "Toll plaza" : {
       "localizations" : {
         "ms" : {
@@ -11700,6 +11890,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tol"
+          }
+        }
+      }
+    },
+    "Tolls %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol %@"
+          }
+        }
+      }
+    },
+    "Tolls from %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol dari %@"
+          }
+        }
+      }
+    },
+    "Tolls so far %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol setakat ini %@"
+          }
+        }
+      }
+    },
+    "Tolls so far %@ · estimate %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol setakat ini %@ · anggaran %@"
           }
         }
       }
@@ -11750,6 +11980,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Trafik"
+          }
+        }
+      }
+    },
+    "Traffic %@ ahead" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesak %@ di hadapan"
           }
         }
       }
@@ -12756,6 +12996,16 @@
         }
       }
     },
+    "Wrong entrance?" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pintu masuk salah?"
+          }
+        }
+      }
+    },
     "Wrong passphrase." : {
       "localizations" : {
         "ms" : {
@@ -12951,7 +13201,7 @@
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Anda telah tiba"
+            "value" : "Anda sudah tiba"
           }
         }
       }

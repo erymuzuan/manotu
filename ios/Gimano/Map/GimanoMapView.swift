@@ -10,8 +10,22 @@ struct GimanoMapView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(state: state) }
 
     func makeUIView(context: Context) -> MLNMapView {
+        let map = Self.makeMap(state: state, coordinator: context.coordinator)
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        for g in map.gestureRecognizers ?? [] where (g as? UITapGestureRecognizer)?.numberOfTapsRequired == 2 {
+            tap.require(toFail: g)
+        }
+        map.addGestureRecognizer(tap)
+        let long = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        map.addGestureRecognizer(long)
+        context.coordinator.observe()
+        return map
+    }
+
+    /// A configured MapLibre view drawing `state` through `coordinator` (the phone map, and the CarPlay surface).
+    static func makeMap(state: MapState, coordinator: Coordinator) -> MLNMapView {
         let map = MLNMapView(frame: .zero, styleURL: state.styleURL)
-        map.delegate = context.coordinator
+        map.delegate = coordinator
         map.logoView.isHidden = true
         // We show our own "© OpenStreetMap contributors" label (see OSMAttribution) which links to the full notice.
         map.attributionButton.isHidden = true
@@ -20,23 +34,14 @@ struct GimanoMapView: UIViewRepresentable {
         map.allowsRotating = true
         map.setCenter(DemoRepository.defaultLocation.coordinate, zoomLevel: 14, animated: false)
         map.accessibilityIdentifier = "map"
-
-        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
-        for g in map.gestureRecognizers ?? [] where (g as? UITapGestureRecognizer)?.numberOfTapsRequired == 2 {
-            tap.require(toFail: g)
-        }
-        map.addGestureRecognizer(tap)
-        let long = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
-        map.addGestureRecognizer(long)
-
-        context.coordinator.map = map
-        context.coordinator.observe()
+        coordinator.map = map
         return map
     }
 
     func updateUIView(_ map: MLNMapView, context: Context) {}
 
     static func dismantleUIView(_ map: MLNMapView, coordinator: Coordinator) {
+        coordinator.stopDisplayLink()
         coordinator.map = nil
     }
 
@@ -54,6 +59,8 @@ struct GimanoMapView: UIViewRepresentable {
         private var lastPrivate: [LatLng] = []
         private var lastRestrictedRevision = -1
         private var lastDestination: LatLng?
+        private var lastTolls: [LatLng] = []
+        private var lastLastMetres = LastMetres()
         private var lastPuckMove = Date.distantPast
         private var lastHomeInset: Double = 0
         private var lastPlaceInset: Double = 0
@@ -81,10 +88,11 @@ struct GimanoMapView: UIViewRepresentable {
             let privatePins = state.privatePins
             let restrictedRevision = state.restrictedRevision
             let destination = state.destination
+            let tolls = state.tolls
+            let lastMetres = state.lastMetres
             let puck = state.puck
             let heading = state.puckHeading
             let accuracy = state.puckAccuracyM
-            _ = state.zoom
             let navPuck = state.navigationPuck
             let cameraRevision = state.cameraRevision
             let camera = state.camera
@@ -106,8 +114,13 @@ struct GimanoMapView: UIViewRepresentable {
             if privatePins != lastPrivate { updatePrivate(privatePins); lastPrivate = privatePins }
             if restrictedRevision != lastRestrictedRevision { updateRestricted(state.restrictedAreas); lastRestrictedRevision = restrictedRevision }
             if destination != lastDestination { updateDestination(destination, style: style); lastDestination = destination }
-            updatePuck(puck, heading: heading, nav: navPuck, style: style)
-            updateAccuracy(puck, accuracyM: accuracy)
+            if tolls != lastTolls { updatePoints(tolls, source: "tolls"); lastTolls = tolls }
+            if lastMetres != lastLastMetres { updateLastMetres(lastMetres); lastLastMetres = lastMetres }
+            syncDisplayLink()
+            if !isDrivenByMotion {
+                updatePuck(puck, heading: heading, nav: navPuck, style: style)
+                updateAccuracy(puck, accuracyM: accuracy)
+            }
 
             if homeInset != lastHomeInset {
                 lastHomeInset = homeInset
@@ -128,7 +141,7 @@ struct GimanoMapView: UIViewRepresentable {
             if cameraRevision != appliedCameraRevision {
                 appliedCameraRevision = cameraRevision
                 applyCamera(camera, puck: puck, heading: heading, animated: true)
-            } else if let puck, state.isFollowing {
+            } else if let puck, state.isFollowing, !isDrivenByMotion {
                 followPuck(camera, puck: puck, heading: heading)
             }
             projectBubbles()
@@ -149,9 +162,15 @@ struct GimanoMapView: UIViewRepresentable {
                 cam.pitch = 0
                 map.setCamera(cam, animated: animated)
             case .navigation:
-                let h = map.bounds.height
-                map.setContentInset(UIEdgeInsets(top: h * 0.35, left: 0, bottom: 0, right: 0), animated: false, completionHandler: nil)
-                if let puck { followPuck(.navigation, puck: puck, heading: heading, duration: 0.6) }
+                if isDrivenByMotion {
+                    // The display link moves the camera every frame; the first frame eases in from wherever the map is.
+                    map.setContentInset(.zero, animated: false, completionHandler: nil)
+                    easeInUntil = 0
+                } else {
+                    let h = map.bounds.height
+                    map.setContentInset(UIEdgeInsets(top: h * 0.35, left: 0, bottom: 0, right: 0), animated: false, completionHandler: nil)
+                    if let puck { followPuck(.navigation, puck: puck, heading: heading, duration: 0.6) }
+                }
             case .overview(let bbox):
                 map.setContentInset(.zero, animated: false, completionHandler: nil)
                 let bounds = MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: bbox.minLat, longitude: bbox.minLng),
@@ -206,12 +225,86 @@ struct GimanoMapView: UIViewRepresentable {
 
         fileprivate func regionChanged(final: Bool) {
             guard let map else { return }
-            projectBubbles()
-            if final {
-                let b = map.visibleCoordinateBounds
-                state.visibleBBox = BBox(minLng: b.sw.longitude, minLat: b.sw.latitude, maxLng: b.ne.longitude, maxLat: b.ne.latitude)
-                state.zoom = map.zoomLevel
+            if !state.bubbleAnchors.isEmpty || !state.bubblePoints.isEmpty { projectBubbles() }
+            guard final else { return }
+            // While the camera follows the arrow every frame, publish the viewport at most once a second: these writes
+            // are observed (live-data subscriptions) and must never feed back into the per-frame camera (apply() no
+            // longer reads them).
+            let now = CACurrentMediaTime()
+            if isDrivenByMotion, now - lastRegionPublish < 1 { return }
+            lastRegionPublish = now
+            let b = map.visibleCoordinateBounds
+            let bbox = BBox(minLng: b.sw.longitude, minLat: b.sw.latitude, maxLng: b.ne.longitude, maxLat: b.ne.latitude)
+            if state.visibleBBox != bbox { state.visibleBBox = bbox }
+            if abs(state.zoom - map.zoomLevel) > 0.01 { state.zoom = map.zoomLevel }
+            if !isDrivenByMotion { updateAccuracy(state.puck, accuracyM: state.puckAccuracyM) }
+        }
+
+        // MARK: per-frame arrow and camera (docs/driving.md §2–3)
+
+        private var displayLink: CADisplayLink?
+        private var lastRegionPublish: CFTimeInterval = 0
+        private var lastDrawn: (LatLng, Double)?
+        /// The camera eases (animated) back onto the arrow until this time, then follows it frame by frame; 0 = ease next.
+        private var easeInUntil: CFTimeInterval = 0
+
+        /// Navigating with a motion model: the display link draws the arrow and moves the camera.
+        var isDrivenByMotion: Bool { state.navigationPuck && state.motion != nil }
+
+        func syncDisplayLink() {
+            if isDrivenByMotion {
+                guard displayLink == nil else { return }
+                let link = CADisplayLink(target: FrameTarget(self), selector: #selector(FrameTarget.tick(_:)))
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+                link.add(to: .main, forMode: .common)
+                displayLink = link
+                lastDrawn = nil
+                lastRegionPublish = 0
+                easeInUntil = 0
+            } else if let link = displayLink {
+                link.invalidate()
+                displayLink = nil
             }
+        }
+
+        func stopDisplayLink() {
+            displayLink?.invalidate()
+            displayLink = nil
+        }
+
+        /// Top padding that puts the arrow `puckY` of the way down the map.
+        /// Edge padding that puts the arrow `puckY` of the way down the map (the car screen also keeps it clear of the
+        /// guidance panel on the left).
+        var puckPadding: (CGSize, Double) -> UIEdgeInsets = { size, y in
+            UIEdgeInsets(top: max(0, (2 * y - 1) * size.height), left: 0, bottom: 0, right: 0)
+        }
+
+        func drawFrame(_ link: CADisplayLink) {
+            guard let map, style != nil, let motion = state.motion, let f = motion.frame(at: CACurrentMediaTime()) else { return }
+            // Only the arrow changes per frame; route, traffic and alerts are redrawn only when they change (apply()).
+            if lastDrawn.map({ Geo.distance($0.0, f.point) > 0.05 || abs(Geo.angleDelta($0.1, f.heading)) > 0.2 }) ?? true {
+                let p = MLNPointFeature()
+                p.coordinate = f.point.coordinate
+                p.attributes = ["icon": "puck-nav", "heading": f.heading]
+                source("puck")?.shape = p
+                if lastDrawn == nil { source("puck-accuracy")?.shape = nil }
+                lastDrawn = (f.point, f.heading)
+            }
+            guard case .navigation = state.camera, map.bounds.height > 0 else { return }
+            let size = map.bounds.size
+            let altitude = MLNAltitudeForZoomLevel(f.zoom, CGFloat(f.pitch), f.point.lat, size)
+            let cam = MLNMapCamera(lookingAtCenter: f.point.coordinate, altitude: altitude, pitch: CGFloat(f.pitch), heading: f.heading)
+            let padding = puckPadding(size, f.puckY)
+            let now = CACurrentMediaTime()
+            if easeInUntil == 0 {
+                // Start / recentre: one short animated move onto the arrow, then per-frame following.
+                easeInUntil = now + 0.7
+                map.setCamera(cam, withDuration: 0.7, animationTimingFunction: CAMediaTimingFunction(name: .easeInEaseOut),
+                              edgePadding: padding, completionHandler: nil)
+                return
+            }
+            guard now >= easeInUntil else { return }
+            map.setCamera(cam, withDuration: 0, animationTimingFunction: nil, edgePadding: padding, completionHandler: nil)
         }
 
         // MARK: style setup
@@ -279,7 +372,9 @@ struct GimanoMapView: UIViewRepresentable {
             let drivers = MLNShapeSource(identifier: "drivers", shape: nil)
             let puck = MLNShapeSource(identifier: "puck", shape: nil)
             let priv = MLNShapeSource(identifier: "private", shape: nil)
-            [jams, alt, sel, traffic, dest, alerts, drivers, puck, priv].forEach { style.addSource($0) }
+            let tolls = MLNShapeSource(identifier: "tolls", shape: nil)
+            let lastM = MLNShapeSource(identifier: "last-metres", shape: nil)
+            [jams, alt, sel, traffic, dest, alerts, drivers, puck, priv, tolls, lastM].forEach { style.addSource($0) }
 
             for level in 1...4 {
                 style.addLayer(lineLayer("jam-\(level)", source: jams, color: Tokens.Palette.traffic(level: level), width: 5, opacity: 0.8,
@@ -294,6 +389,14 @@ struct GimanoMapView: UIViewRepresentable {
                                          predicate: NSPredicate(format: "level == %d", level)))
             }
 
+            // Last metres: round dots (zero-length dashes with round caps), blue to the entrance, grey on to the pin.
+            for (id, color) in [("blue", Tokens.Palette.routeActive.resolvedColor(with: traits)), ("grey", UIColor(hex: 0x8A94A6))] {
+                let dots = lineLayer("last-metres-\(id)", source: lastM, color: color, width: 5,
+                                     predicate: NSPredicate(format: "kind == %@", id))
+                dots.lineDashPattern = NSExpression(forConstantValue: [0, 2])
+                style.addLayer(dots)
+            }
+
             let driverLayer = MLNSymbolStyleLayer(identifier: "drivers", source: drivers)
             driverLayer.iconImageName = NSExpression(forConstantValue: "driver")
             driverLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
@@ -305,6 +408,13 @@ struct GimanoMapView: UIViewRepresentable {
             privLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
             privLayer.iconAnchor = NSExpression(forConstantValue: "bottom")
             style.addLayer(privLayer)
+
+            let tollLayer = MLNSymbolStyleLayer(identifier: "tolls", source: tolls)
+            tollLayer.iconImageName = NSExpression(forConstantValue: "toll")
+            tollLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
+            tollLayer.iconAnchor = NSExpression(forConstantValue: "bottom")
+            tollLayer.minimumZoomLevel = 9
+            style.addLayer(tollLayer)
 
             let alertLayer = MLNSymbolStyleLayer(identifier: "alerts", source: alerts)
             alertLayer.iconImageName = NSExpression(forKeyPath: "icon")
@@ -341,6 +451,7 @@ struct GimanoMapView: UIViewRepresentable {
             style.addLayer(puckLayer)
 
             lastRoutes = []; lastJams = []; lastAlerts = []; lastDrivers = []; lastDestination = nil; lastPrivate = []; lastRestrictedRevision = -1
+            lastTolls = []; lastLastMetres = LastMetres()
             appliedCameraRevision = -1
             apply()
         }
@@ -401,6 +512,22 @@ struct GimanoMapView: UIViewRepresentable {
                 return f
             }
             source("private")?.shape = MLNShapeCollectionFeature(shapes: features)
+        }
+
+        private func updateLastMetres(_ m: LastMetres) {
+            var lines: [MLNPolylineFeature] = []
+            if m.blue.count > 1 { lines.append(polyline(m.blue, attrs: ["kind": "blue"])) }
+            if m.grey.count > 1 { lines.append(polyline(m.grey, attrs: ["kind": "grey"])) }
+            source("last-metres")?.shape = lines.isEmpty ? nil : MLNShapeCollectionFeature(shapes: lines)
+        }
+
+        private func updatePoints(_ pts: [LatLng], source id: String) {
+            let features: [MLNPointFeature] = pts.map { p in
+                let f = MLNPointFeature()
+                f.coordinate = p.coordinate
+                return f
+            }
+            source(id)?.shape = MLNShapeCollectionFeature(shapes: features)
         }
 
         private func updateRestricted(_ rings: [[LatLng]]) {
@@ -476,6 +603,7 @@ struct GimanoMapView: UIViewRepresentable {
             style.setImage(driverImage(), forName: "driver")
             style.setImage(destinationImage(), forName: "dest")
             style.setImage(privateImage(), forName: "private")
+            style.setImage(tollImage(), forName: "toll")
         }
 
         private static func symbol(_ name: String, size: CGFloat, color: UIColor) -> UIImage? {
@@ -551,6 +679,23 @@ struct GimanoMapView: UIViewRepresentable {
             }
         }
 
+        /// Toll plaza on the route: small white pebble with the duotone toll glyph.
+        static func tollImage() -> UIImage {
+            UIGraphicsImageRenderer(size: CGSize(width: 32, height: 38)).image { ctx in
+                let c = ctx.cgContext
+                c.setShadow(offset: CGSize(width: 0, height: 1.5), blur: 3, color: UIColor(hex: 0x0B1B3A, alpha: 0.25).cgColor)
+                UIColor.white.setFill()
+                UIBezierPath(roundedRect: CGRect(x: 2, y: 2, width: 28, height: 28), cornerRadius: 10).fill()
+                let tail = UIBezierPath()
+                tail.move(to: CGPoint(x: 11, y: 29)); tail.addLine(to: CGPoint(x: 16, y: 36)); tail.addLine(to: CGPoint(x: 21, y: 29)); tail.close()
+                tail.fill()
+                c.setShadow(offset: .zero, blur: 0, color: nil)
+                UIColor(hex: 0xE3ECFA).setFill()
+                UIBezierPath(roundedRect: CGRect(x: 4.5, y: 4.5, width: 23, height: 23), cornerRadius: 8).fill()
+                GIcon.toll.draw(in: c, rect: CGRect(x: 7, y: 7, width: 18, height: 18), stroke: UIColor(hex: 0x0A2E6E), fill: UIColor(hex: 0x8FB0E8))
+            }
+        }
+
         static func destinationImage() -> UIImage {
             let brand = Tokens.Palette.brand.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
             return UIGraphicsImageRenderer(size: CGSize(width: 36, height: 46)).image { ctx in
@@ -560,6 +705,17 @@ struct GimanoMapView: UIViewRepresentable {
                 UIBezierPath(roundedRect: CGRect(x: 16.5, y: 32, width: 3, height: 12), cornerRadius: 1.5).fill()
             }
         }
+    }
+}
+
+/// Breaks the CADisplayLink → target retain cycle.
+@MainActor
+final class FrameTarget: NSObject {
+    weak var coordinator: GimanoMapView.Coordinator?
+    init(_ c: GimanoMapView.Coordinator) { coordinator = c }
+    @objc func tick(_ link: CADisplayLink) {
+        guard let coordinator else { link.invalidate(); return }
+        coordinator.drawFrame(link)
     }
 }
 

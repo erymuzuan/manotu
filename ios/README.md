@@ -92,7 +92,22 @@ Navigation flow: a `LocationFix` comes from CoreLocation or `DriveSimulator` and
 `VoiceAnnouncer` speaks early and near prompts. `OffRouteDetector` needs 3 consecutive fixes beyond
 max(40 m, 1.2 × accuracy), with a 10 s cooldown, before calling `POST /routes/{id}/reroute` (falling back to `POST /routes`).
 Alerts on the route within 600 m raise the "Still there? / Not there" card. Pings are batched to `POST /locations`.
-The puck snaps to the route when within 30 m; otherwise it shows the raw fix.
+Toll plazas ahead (`TollTracker`), camera modes (`CameraModeController`: Simpang > Tinjau > Perlahan / Bandar /
+Lebuh raya) and the steady arrow (`PuckAnimator`, `HeadingFilter`, `SnapHysteresis`) follow docs/driving.md §1–3.
+`DriveMotion` turns fixes into per-frame arrow positions and camera values; the map's `CADisplayLink` draws the arrow
+and moves the camera every frame (only the puck source changes per frame). Arrival (§4): ≤ 30 m along the route or
+≤ 40 m from the pin, dotted last metres to the entrance (`Route.arrival`), side of the entrance on the arrival card.
+
+### CarPlay (docs/driving.md §5)
+
+`CarPlay/`: a `CPTemplateApplicationScene` (Info.plist scene manifest) whose `CarPlayController` drives the templates
+from the same `AppModel` and `NavigationSession` as the phone (one voice), and draws our own map in the car window
+(`CarMapViewController`, same layers and `DriveMotion`). The CarPlay navigation entitlement
+(`com.apple.developer.carplay-maps`) is not granted yet, so only **simulator** builds carry it
+(`Resources/CarPlaySim/*.entitlements`, selected by `[sdk=iphonesimulator*]` in `Config/Signing.xcconfig`); device,
+TestFlight and AltStore builds keep today's entitlements and profiles. Note: Xcode 27's Device Hub has no CarPlay
+external display, so the templates need Apple's CarPlay Simulator app or a car; `-GimanoCarPreview YES` shows the car
+map surface (800 × 480) on the phone for screenshots.
 
 ## Personal data: on device only (docs/privacy-and-backup.md)
 
@@ -194,6 +209,10 @@ app language: `ms-MY` voice, falling back to `id-ID` and then English if no Mala
 `-GimanoDemoScene search|place|route|route-far|nav|report|menu|overview` (DEBUG builds only), `-GimanoDemoQuery <text>`,
 `-GimanoFreshDevice YES` (new anonymous device, wipes local data), `-GimanoSkipOnboarding YES`,
 `-GimanoFakeLocation lat,lng`, `-GimanoNoAutoStart YES` (no Go-now countdown).
+Route replays: `-GimanoDriveTo "Name|lat,lng|placeId"` (plans and starts a drive from the fake location),
+`-GimanoSimSpeed route` (maneuver speeds), `-GimanoSimTick 1` (one fix a second), `-debug.simulationSpeedup 1`,
+`-GimanoFakeJam <metres>` (a memory-only jam on the replayed route), `-GimanoSkipSafety YES` (this launch only),
+`-GimanoCarPreview YES`, `-GimanoCarScene places|search|report|agreement` (CarPlay).
 
 ## UI tests (real device)
 
