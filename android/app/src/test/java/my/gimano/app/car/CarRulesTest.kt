@@ -25,6 +25,13 @@ class CarRulesTest {
         assertEquals("Tol", CarRules.tollLabel(route(true, null, false), Lang.MS))
     }
 
+    @Test fun shortViaKeepsRouteRowsToOneLine() {
+        assertEquals("Via E11, E6", CarRules.shortVia("Via E11 Lebuhraya Damansara–Puchong, E6 Lebuhraya Utara–Selatan Hubungan Tengah", Lang.EN))
+        assertEquals("Melalui Jalan Sultan Ismail", CarRules.shortVia("Via Jalan Sultan Ismail, Jalan Ampang", Lang.MS))
+        assertEquals("Via Lingkaran Syed Putra Very L…", CarRules.shortVia("Lingkaran Syed Putra Very Long Road Name", Lang.EN))
+        assertNull(CarRules.shortVia("", Lang.EN))
+    }
+
     @Test fun stillThereAtMostOncePer2kmAndOncePerReport() {
         val g = StillThereGate()
         assertFalse("too far ahead", g.shouldAsk("a", 900.0, 0.0))
