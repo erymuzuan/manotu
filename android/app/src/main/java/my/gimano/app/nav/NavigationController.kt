@@ -72,6 +72,12 @@ data class NavState(
     val deviation: my.gimano.app.core.issues.Deviation? = null,
     /** One trip (kept when a stop is added mid-drive); "Share my drive" belongs to it and ends with it. */
     val tripId: String? = null,
+    /** Camera mode for this fix (docs/driving.md §2): the same for the phone and the car screen. */
+    val camera: my.gimano.app.core.nav.CameraTarget? = null,
+    /** Along-route distance of the puck when it is snapped (the renderer animates along the line), else null. */
+    val puckAlongM: Double? = null,
+    /** Along-route distance of the next maneuver: the animated puck never runs past it. */
+    val nextManeuverAlongM: Double? = null,
     /** "Toll ahead" banner (docs/driving.md §1), null when no plaza is near. */
     val toll: my.gimano.app.core.nav.TollBanner? = null,
     /** Fares of the plazas already passed on this trip (kept across reroutes and added stops). */
@@ -108,6 +114,8 @@ class NavigationController(
     fun recentTrace(): List<GeoPoint> = trace.points()
     private var planner = VoicePromptPlanner()
     private var tolls: my.gimano.app.core.nav.TollTracker? = null
+    private val snap = my.gimano.app.core.nav.SnapHysteresis()
+    private val cameraModes = my.gimano.app.core.nav.CameraModeController()
     /** Tolls paid on earlier routes of this trip (a reroute or an added stop starts a new route). */
     private var tollsCarried = 0.0
     private val batcher = LocationBatcher()
@@ -144,6 +152,7 @@ class NavigationController(
         val mode = TravelMode.from(route.vehicle ?: request?.vehicle)
         tracker = NavigationTracker(route)
         tolls = my.gimano.app.core.nav.TollTracker(route, tracker!!.geometry)
+        snap.reset(); cameraModes.reset(); cameraModes.setRoute(route, tracker!!.geometry)
         planner = VoicePromptPlanner(mode.wire)
         offRoute.reset(); announcedAlerts.clear(); dismissedAlerts.clear()
         deviation.reset(); lastOnRoute = null; trace.clear()
@@ -251,10 +260,25 @@ class NavigationController(
             fix.timeMs,
         )?.let { send(it) }
 
-        val placement = PuckPlacement.place(fix.point, fix.bearing?.toDouble(), speed.toDouble(), p)
+        // Steady arrow (docs/driving.md §3): snap hysteresis; heading = the route 20 m ahead when snapped, the GPS
+        // course only off-route above 10 km/h. The per-frame renderer animates and filters both.
+        val snapped = snap.update(p.distanceFromRouteM, fix.bearing?.toDouble(), p.bearing, speed.toDouble(), fix.timeMs)
+        val bearing = when {
+            snapped -> t.geometry.bearingAhead(p.distanceAlongM, 20.0)
+            fix.bearing != null && speed > 10 -> fix.bearing.toDouble()
+            else -> _state.value.puckBearing
+        }
+        val prev = t.maneuvers.getOrNull(p.nextManeuverIndex - 1)
+        // Camera modes are for driving; walking and cycling keep the renderer's close-up.
+        val camera = if (!_state.value.mode.isMotorised) null else cameraModes.update(
+            speed.toDouble(), p.distanceAlongM, next?.type, p.distanceToNextM.takeIf { next != null },
+            prev?.type, prev?.let { p.distanceAlongM - t.geometry.distanceAtIndex(it.beginShapeIndex) }, fix.timeMs,
+        )
         _state.update {
             it.copy(
-                puck = placement.point, puckBearing = placement.bearing, puckSnapped = placement.snapped,
+                puck = if (snapped) p.snapped else fix.point, puckBearing = bearing, puckSnapped = snapped,
+                puckAlongM = if (snapped) p.distanceAlongM else null, nextManeuverAlongM = p.distanceAlongM + p.distanceToNextM,
+                camera = camera,
                 accuracyM = acc, weakGpsM = weak,
                 progress = p, fix = fix, speedKmh = speed, arrived = p.arrived,
                 upcomingAlert = ahead?.first, alertDistanceM = ahead?.second,
@@ -328,6 +352,8 @@ class NavigationController(
         // Plazas passed on the old route stay paid; the new route's plazas start from here.
         tollsCarried += tolls?.paidMyr ?: 0.0
         tolls = my.gimano.app.core.nav.TollTracker(route, tracker!!.geometry)
+        // Speed mode and jams already shown carry over; the puck re-snaps to the new line.
+        cameraModes.setRoute(route, tracker!!.geometry)
         planner = VoicePromptPlanner(_state.value.mode.wire)
         offRoute.reset()
         _state.update { it.copy(route = route, toll = null, tollsPaidMyr = tollsCarried, tollsCarriedMyr = tollsCarried) }

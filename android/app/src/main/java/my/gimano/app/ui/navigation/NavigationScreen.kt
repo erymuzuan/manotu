@@ -115,6 +115,11 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
             val alert = nav.upcomingAlert
             val toll = nav.toll
+            // Tinjau (docs/driving.md §2): while the camera shows the jam / closure ahead.
+            val tinjau = nav.camera?.tinjau
+            AnimatedVisibility(tinjau != null && !nav.arrived) {
+                if (tinjau != null) TinjauBanner(tinjau, Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+            }
             AnimatedVisibility(toll != null && !nav.arrived) {
                 if (toll != null) TollBannerCard(toll, Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
             }
@@ -356,6 +361,21 @@ fun TollBannerCard(b: my.gimano.app.core.nav.TollBanner, modifier: Modifier = Mo
                 Spacer(Modifier.width(10.dp))
                 Text(my.gimano.app.core.trip.TollBadge.rm(b.fareMyr ?: 0.0), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = c.brand)
             }
+        }
+    }
+}
+
+/** "Sesak 4.8 km di hadapan · 1.2 km panjang · +6 min" while the Tinjau camera is out. */
+@Composable
+fun TinjauBanner(t: my.gimano.app.core.nav.TinjauInfo, modifier: Modifier = Modifier) {
+    val c = Gimano.colors
+    val lang = currentLang()
+    val type = when (t.problem.kind) { "jam" -> "traffic"; else -> t.problem.kind }
+    FloatingSurface(modifier.fillMaxWidth(), RoundedCornerShape(Radius.lg)) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            ReportTile(type, 44.dp)
+            Spacer(Modifier.width(12.dp))
+            Text(my.gimano.app.core.nav.TinjauText.line(t, lang), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = c.text, maxLines = 2)
         }
     }
 }

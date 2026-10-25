@@ -74,5 +74,13 @@ class RouteGeometry(val points: List<GeoPoint>) {
         return if (i <= 0) 0 else i - 1
     }
 
+    /** Direction of the route from [alongM] to [aheadM] metres further on (smooth through vertices). */
+    fun bearingAhead(alongM: Double, aheadM: Double): Double {
+        val a = pointAt(alongM)
+        if (alongM + 1 >= lengthM) return a.second
+        val b = pointAt(minOf(alongM + aheadM, lengthM)).first
+        return if (GeoMath.distanceM(a.first, b) < 0.5) a.second else GeoMath.bearingDeg(a.first, b)
+    }
+
     fun distanceAtIndex(i: Int): Double = cumulative[i.coerceIn(0, cumulative.size - 1)]
 }

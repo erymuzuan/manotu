@@ -330,12 +330,8 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                     pinDestination = null
                     _ui.update { it.copy(namePin = s.destination) }
                 }
-                val p = s.progress
-                // Follow the puck even before there is route progress (poor fixes), so it never sits off-screen.
-                val target = s.puck ?: p?.snapped
-                if (s.active && target != null && _ui.value.following && _ui.value.screen == Screen.Navigating) {
-                    _ui.update { it.copy(camera = CameraCommand.Follow(target, s.puckBearing, zoom = if (p == null) 15.0 else if (s.mode.isMotorised) 17.0 else 18.0, tilt = if (p == null) 0.0 else 50.0, bottomDp = 170, topDp = 420)) }
-                }
+                // The camera follows the puck on every frame in the map (DriveRenderer, docs/driving.md §2–3): no
+                // camera commands per fix, which fought the puck.
             }
         }
         if (!repo.isDemo) c.liveHub.start()
@@ -468,8 +464,8 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         _ui.update { it.copy(following = true) }
         val s = nav.value
         val p = s.progress
-        if (s.active && p != null) {
-            _ui.update { it.copy(camera = CameraCommand.Follow(s.puck ?: p.snapped, s.puckBearing, bottomDp = 170, topDp = 420)) }
+        if (s.active && (p != null || s.puck != null)) {
+            // Following again: the map's per-frame camera blends back to the arrow by itself.
         } else {
             _ui.update { it.copy(camera = CameraCommand.Reset2D(here(), 15.5)) }
         }
