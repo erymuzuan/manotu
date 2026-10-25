@@ -179,6 +179,11 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     val navPoints = remember(nav.route?.id) { nav.route?.let { runCatching { Polyline.decode(it.polyline) }.getOrNull() }.orEmpty() }
     val navigating = screen == Screen.Navigating || (screen is Screen.Search && nav.active)
     val renderState = MapRenderState(
+        tolls = when {
+            navigating -> nav.route?.tolls.orEmpty().map { my.gimano.app.core.geo.GeoPoint(it.lat, it.lng) }
+            screen == Screen.RoutePreview -> ui.plan?.selected?.tolls.orEmpty().map { my.gimano.app.core.geo.GeoPoint(it.lat, it.lng) }
+            else -> emptyList()
+        },
         routes = when {
             navigating && nav.route != null -> listOf(RouteDraw(nav.route!!.id, navPoints, true, nav.route!!.trafficSegments))
             screen == Screen.RoutePreview -> ui.plan?.routes.orEmpty().map { r ->

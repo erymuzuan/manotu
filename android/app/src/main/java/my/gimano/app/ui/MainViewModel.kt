@@ -1804,6 +1804,27 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
     }
 
     /** Debug builds only (MainActivity extra `gimano.moveTo`). */
+    /**
+     * DEBUG builds only: replay a drive along a freshly planned route (see MainActivity `gimano.debugDrive`), at
+     * [cruiseKmh] with slow turns, starting [startAlongM] metres in. [jamAtM] adds a 1.2 km level-4 jam there (+6 min) so
+     * the "Tinjau" camera can be seen at a desk. Nothing about it is sent anywhere (simulated drives send no pings).
+     */
+    fun debugDrive(from: GeoPoint, to: GeoPoint, placeId: String?, name: String, cruiseKmh: Double, startAlongM: Double, jamAtM: Double?) {
+        if (!my.gimano.app.BuildConfig.DEBUG) return
+        viewModelScope.launch {
+            val req = RouteRequest(LatLngDto(from.lat, from.lng), LatLngDto(to.lat, to.lng, placeId, name.takeIf { placeId != null }), vehicle = "car", alternatives = 0)
+            val route = runCatching { repo.routes(req).firstOrNull() }.onFailure { GLog.w("Debug", "debugDrive: ${it.javaClass.simpleName}") }.getOrNull() ?: return@launch
+            val r = if (jamAtM == null) route else {
+                val g = my.gimano.app.core.nav.RouteGeometry(my.gimano.app.core.geo.Polyline.decode(route.polyline))
+                val a = g.segmentAt(jamAtM); val b = g.segmentAt(jamAtM + 1_200) + 1
+                route.copy(trafficSegments = route.trafficSegments + TrafficSegment(a, b, 4), trafficDurationS = route.effectiveDurationS + 360)
+            }
+            c.navigation.debugSim = my.gimano.app.nav.NavigationController.DebugSim(cruiseKmh, startAlongM)
+            c.navigation.start(r, NavDestination(name, "", to, placeId), req, simulate = true)
+            _ui.update { it.copy(screen = Screen.Navigating, following = true, navExpanded = false, plan = null) }
+        }
+    }
+
     fun debugMoveTo(p: GeoPoint, zoom: Double) {
         if (!my.gimano.app.BuildConfig.DEBUG) return
         centeredOnce = true

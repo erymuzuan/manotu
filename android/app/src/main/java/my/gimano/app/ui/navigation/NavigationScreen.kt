@@ -114,6 +114,10 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
         // ---- Bottom: alert card, speedometer, report, ETA bar ------------------------------
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
             val alert = nav.upcomingAlert
+            val toll = nav.toll
+            AnimatedVisibility(toll != null && !nav.arrived) {
+                if (toll != null) TollBannerCard(toll, Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+            }
             val still = ui.stillClosed
             if (still != null && !nav.arrived && alert == null) my.gimano.app.ui.issues.StillClosedCard(still, vm::answerStillClosed,
                 Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
@@ -256,6 +260,10 @@ private fun EtaBar(nav: NavState, ui: UiState, settings: AppSettings, vm: MainVi
                     val eta = p?.let { Formatters.etaClock(now, it.remainingS, ZoneId.systemDefault(), settings.use24h, lang) } ?: "--:--"
                     Text(eta, style = GimanoType.etaClock, color = c.text, lineHeight = 36.sp)
                     Text(p?.let { Formatters.remainingLine(it.remainingS, it.remainingM, lang) } ?: "", fontSize = 15.sp, color = c.textMuted)
+                    // "Tol setakat ini RM x · anggaran RM y" (docs/driving.md §1), only on routes with tolls.
+                    nav.route?.let { r -> my.gimano.app.core.nav.TollText.tripLine(nav.tollsPaidMyr, r, nav.tollsCarriedMyr, lang) }?.let {
+                        Text(it, fontSize = 13.sp, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
                 IconButton(onClick = vm::overview, Modifier.size(52.dp)) { Icon(Icons.Filled.AltRoute, stringResource(R.string.overview), tint = c.text, modifier = Modifier.size(28.dp)) }
             }
@@ -320,6 +328,34 @@ private fun ArrivedCard(nav: NavState, vm: MainViewModel) {
                 onClick = vm::stopNavigation, Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(Radius.md),
                 colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn),
             ) { Text(stringResource(R.string.done), fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+        }
+    }
+}
+
+/** "Tol Sungai Besi · 900 m di hadapan · RM 2.10" (docs/driving.md §1). */
+@Composable
+fun TollBannerCard(b: my.gimano.app.core.nav.TollBanner, modifier: Modifier = Modifier) {
+    val c = Gimano.colors
+    val lang = currentLang()
+    val fare = b.kind == my.gimano.app.core.nav.TollKind.FARE
+    FloatingSurface(modifier.fillMaxWidth(), RoundedCornerShape(Radius.lg)) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(c.brandMist), contentAlignment = Alignment.Center) {
+                GIcon("toll", null, size = 28.dp)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(my.gimano.app.core.nav.TollText.title(b.toll.plaza, lang), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.text,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val detail = if (fare) {
+                    if (b.passed) null else Formatters.navDistance(b.distanceM) + if (lang == my.gimano.app.core.format.Lang.MS) " di hadapan" else " ahead"
+                } else my.gimano.app.core.nav.TollText.detail(b, lang)
+                detail?.let { Text(it, fontSize = 15.sp, color = c.textMuted, maxLines = 2) }
+            }
+            if (fare) {
+                Spacer(Modifier.width(10.dp))
+                Text(my.gimano.app.core.trip.TollBadge.rm(b.fareMyr ?: 0.0), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = c.brand)
+            }
         }
     }
 }

@@ -474,6 +474,8 @@ data class TollPlaza(
     val fareMyr: Double? = null,
     val system: String = "open",   // open | closed_entry | closed_exit
     val source: String? = null,
+    /** Metres from the route start to the plaza (docs/api.md): drives the "toll ahead" alert. Absent from older servers. */
+    val distanceAlongRouteM: Double? = null,
 )
 
 @Serializable

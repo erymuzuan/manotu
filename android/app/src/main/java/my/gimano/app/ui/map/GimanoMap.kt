@@ -104,6 +104,8 @@ private object Ids {
     const val DRIVERS = "g-drivers"
     const val ALERTS = "g-alerts"
     const val PUCK = "g-puck"
+    const val TOLLS = "g-tolls"
+    const val L_TOLLS = "g-l-tolls"
     const val PINS = "g-pins"
     const val L_ALT_CASE = "g-l-alt-case"
     const val L_ALT = "g-l-alt"
@@ -359,7 +361,7 @@ private fun Style.addBelowLabels(layer: Layer, below: String?) {
 private fun installLayers(style: Style, c: GimanoColors, icons: Map<String, Bitmap>) {
     icons.forEach { (k, v) -> style.addImage(k, v) }
     val empty = FeatureCollection.fromFeatures(emptyList())
-    listOf(Ids.ROUTES, Ids.ROUTE_TRAFFIC, Ids.JAMS, Ids.DRIVERS, Ids.ALERTS, Ids.PUCK, Ids.PINS, Ids.BUILD_LINES, Ids.BUILD_PTS).forEach {
+    listOf(Ids.ROUTES, Ids.ROUTE_TRAFFIC, Ids.JAMS, Ids.DRIVERS, Ids.ALERTS, Ids.PUCK, Ids.PINS, Ids.BUILD_LINES, Ids.BUILD_PTS, Ids.TOLLS).forEach {
         style.addSource(GeoJsonSource(it, empty))
     }
     val below = firstSymbolLayerId(style)
@@ -429,6 +431,10 @@ private fun installLayers(style: Style, c: GimanoColors, icons: Map<String, Bitm
     ))
     style.addLayer(SymbolLayer(Ids.L_PINS, Ids.PINS).withProperties(
         PF.iconImage(Expression.get("icon")), PF.iconAnchor(Property.ICON_ANCHOR_BOTTOM), PF.iconAllowOverlap(true), PF.iconIgnorePlacement(true),
+    ))
+    style.addLayer(SymbolLayer(Ids.L_TOLLS, Ids.TOLLS).withProperties(
+        PF.iconImage("toll"), PF.iconAnchor(Property.ICON_ANCHOR_BOTTOM), PF.iconAllowOverlap(true), PF.iconIgnorePlacement(true),
+        PF.iconSize(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(10, 0.55f), Expression.stop(15, 0.9f))),
     ))
     style.addLayer(SymbolLayer(Ids.L_ALERTS, Ids.ALERTS).withProperties(
         PF.iconImage(Expression.concat(Expression.literal("alert-"), Expression.get("type"))),
@@ -520,6 +526,7 @@ private fun updateSources(style: Style, s: MapRenderState) {
         }
     }
     style.getSourceAs<GeoJsonSource>(Ids.ALERTS)?.setGeoJson(FeatureCollection.fromFeatures(alerts))
+    style.getSourceAs<GeoJsonSource>(Ids.TOLLS)?.setGeoJson(FeatureCollection.fromFeatures(s.tolls.map { Feature.fromGeometry(pt(it)) }))
 
     val puck = s.puck?.let { g ->
         listOf(Feature.fromGeometry(pt(g)).apply {
@@ -556,10 +563,12 @@ private fun rememberMapIcons(c: GimanoColors, density: Density): Map<String, Bit
     }
     val navPainter = rememberVectorPainter(Icons.Filled.Navigation)
     val pinPainter = rememberVectorPainter(Icons.Filled.Place)
+    val tollPainter = rememberVectorPainter(my.gimano.app.ui.common.Duotone.vector("toll", c.brandInk, c.brandTint))
     return remember(c, density) {
         val out = HashMap<String, Bitmap>()
         painters.forEach { (type, p) -> out["alert-$type"] = pebble(p, ReportColors.duotone(type).tile, ReportColors.duotone(type).stroke, density, 38f) }
         out["puck"] = puck(navPainter, c.brand, density)
+        out["toll"] = pebble(tollPainter, c.brandMist, c.brandInk, density, 34f)
         out["pin"] = pin(pinPainter, c.report, density, 44f)
         out["stop"] = pin(pinPainter, c.brand, density, 36f)
         out["private"] = pin(pinPainter, c.brandInk, density, 38f)

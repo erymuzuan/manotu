@@ -42,6 +42,8 @@ data class MapRenderState(
     val navigating: Boolean = false,
     /** The route builder's lines and points; also event sketch routes (dashed) on the event screen. */
     val builder: BuilderDraw? = null,
+    /** Toll plazas along the drawn route (docs/driving.md §1). */
+    val tolls: List<GeoPoint> = emptyList(),
 )
 
 /** One-shot camera instructions; [id] makes repeated identical commands re-apply. */
