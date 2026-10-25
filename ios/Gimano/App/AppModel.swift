@@ -1788,6 +1788,134 @@ final class AppModel {
         }
     }
 
+    // MARK: hold-to-report (docs/driving.md §6.4)
+
+    /// The "Hazard reported · street · just now" card with Undo (5 s) after a quick report from the fan.
+    var quickReport: QuickReportUndo?
+    /// Details on that card: the subtype sheet for the report just sent.
+    var quickReportDetails: QuickReportUndo?
+    @ObservationIgnored private var quickReportCloseTask: Task<Void, Never>?
+    /// UI tests: "sent=<id>" / "withdrawn=<id>" / "replaced=<id>" for the last quick report (public report ids only).
+    var quickReportLog = ""
+
+    #if DEBUG
+    /// `-GimanoQuickReportCard`: a sample card that stays up (screenshots); Undo/Details on it send nothing.
+    func debugShowQuickReportCard(_ t: ReportType) {
+        var q = QuickReportUndo(type: t, position: position, startedAt: .now.addingTimeInterval(-1.5))
+        _ = q.sent(id: "debug-quick")
+        q.street = "Jalan SS 2/55"
+        quickReport = q
+    }
+    #endif
+
+    /// Released on a fan bubble: send at once at the current position (no subtype). The same rules as the sheet apply:
+    /// a fresh fix, restricted areas refused, community rules, rate limits and signing (server side).
+    func sendQuickReport(_ type: ReportType) {
+        guard let position = reportPosition else {
+            showToast(String(localized: "Waiting for your location. Try again in a moment."))
+            return
+        }
+        if refuseReportInRestrictedArea(position) { return }
+        let new = QuickReportFan.newReport(type, at: position, heading: heading)
+        Task {
+            guard await ensureRulesAccepted() else { return }
+            let card = QuickReportUndo(type: type, position: position, startedAt: .now)
+            quickReport = card
+            scheduleQuickReportClose(card)
+            do {
+                let r = try await repo.createReport(new)
+                quickReportLog = "sent=\(r.id)"
+                if quickReport?.startedAt == card.startedAt {
+                    let action = quickReport!.sent(id: r.id)
+                    quickReport?.street = r.street
+                    if case .delete(let id) = action { withdraw(id, quiet: true); return }
+                }
+                live.upsert(r)
+                syncLiveLayers()
+            } catch {
+                if quickReport?.startedAt == card.startedAt { quickReport?.failed(); quickReport = nil }
+                // Restricted area (422), rate limit (429) or suspended (403): the server's own words.
+                if let e = error as? APIError, case .http(let status, _) = e, [403, 422, 429].contains(status) {
+                    showToast(e.localizedDescription)
+                } else {
+                    showToast(String(localized: "Couldn't send report"))
+                }
+            }
+        }
+    }
+
+    private func scheduleQuickReportClose(_ card: QuickReportUndo) {
+        quickReportCloseTask?.cancel()
+        quickReportCloseTask = Task {
+            try? await Task.sleep(for: .seconds(QuickReportUndo.windowS))
+            guard !Task.isCancelled, let q = quickReport, q.startedAt == card.startedAt else { return }
+            // Undo pressed while sending: keep the state until the POST comes back and is withdrawn.
+            if case .undone(nil) = q.phase { return }
+            quickReport = nil
+        }
+    }
+
+    /// Undo on the card: withdraws the report (`DELETE /reports/{id}`), or, while the POST is still on its way,
+    /// withdraws it as soon as it comes back.
+    func undoQuickReport() {
+        guard var q = quickReport else { return }
+        let action = q.undo(at: .now)
+        quickReport = q
+        switch action {
+        case .none: return
+        case .cancelSend: showToast(String(localized: "Report cancelled"))
+        case .delete(let id): withdraw(id, quiet: false)
+        }
+        // Keep the state only while a pending POST still has to be withdrawn.
+        if action != .cancelSend { quickReport = nil }
+    }
+
+    private func withdraw(_ id: String, quiet: Bool) {
+        live.remove(reportId: id)
+        syncLiveLayers()
+        if quiet { quickReport = nil }
+        if id.hasPrefix("debug-") { showToast(String(localized: "Report withdrawn")); return }
+        Task {
+            do {
+                try await repo.deleteReport(id: id)
+                quickReportLog = "withdrawn=\(id)"
+                if !quiet { showToast(String(localized: "Report withdrawn")) }
+            } catch {
+                showToast(String(localized: "Couldn't undo the report"))
+            }
+        }
+    }
+
+    /// Details on the card: pick a subtype for the report just sent.
+    func openQuickReportDetails() {
+        guard let q = quickReport, q.reportId != nil, !q.isUndone else { return }
+        quickReportCloseTask?.cancel()
+        quickReport = nil
+        quickReportDetails = q
+    }
+
+    /// A subtype chosen in Details: the quick report is replaced by one with that subtype at the same spot (there is no
+    /// PATCH for reports; the replacement happens within the 2 min undo window).
+    func setQuickReportSubtype(_ subtype: String) {
+        guard let q = quickReportDetails, let id = q.reportId else { return }
+        quickReportDetails = nil
+        if id.hasPrefix("debug-") { return }
+        let new = NewReport(type: q.type, subtype: subtype, lat: q.position.lat, lng: q.position.lng, heading: heading, comment: nil)
+        Task {
+            do {
+                try await repo.deleteReport(id: id)
+                live.remove(reportId: id)
+                let r = try await repo.createReport(new)
+                quickReportLog = "replaced=\(id);sent=\(r.id)"
+                live.upsert(r)
+                syncLiveLayers()
+                showToast(String(localized: "Thanks! Your report is live."))
+            } catch {
+                showToast(String(localized: "Couldn't update the report"))
+            }
+        }
+    }
+
     func vote(_ report: Report, stillThere: Bool) {
         selectedAlert = nil
         Task {

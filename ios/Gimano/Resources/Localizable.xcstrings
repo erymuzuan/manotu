@@ -91,6 +91,16 @@
         }
       }
     },
+    "%@ reported" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ dilaporkan"
+          }
+        }
+      }
+    },
     "%@ reported ahead" : {
       "localizations" : {
         "ms" : {
@@ -2711,6 +2721,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tidak dapat dihantar. Cuba lagi."
+          }
+        }
+      }
+    },
+    "Couldn't undo the report" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laporan tidak dapat dibatalkan"
+          }
+        }
+      }
+    },
+    "Couldn't update the report" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laporan tidak dapat dikemas kini"
           }
         }
       }
@@ -5402,6 +5432,16 @@
         }
       }
     },
+    "Just tap = full list · release outside = cancel" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ketik sahaja = senarai penuh · lepas di luar = batal"
+          }
+        }
+      }
+    },
     "Kampung" : {
       "localizations" : {
         "ms" : {
@@ -7190,6 +7230,16 @@
         }
       }
     },
+    "Nothing more to add for this report." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiada butiran lain untuk laporan ini."
+          }
+        }
+      }
+    },
     "Nothing shared yet" : {
       "localizations" : {
         "ms" : {
@@ -7592,6 +7642,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dibuka di mana-mana telefon, dengan atau tanpa Manotu. Sesuai untuk e-kad dan WhatsApp."
+          }
+        }
+      }
+    },
+    "Opens the report list. Touch and hold for quick reports." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buka senarai laporan. Sentuh dan tahan untuk laporan pantas."
           }
         }
       }
@@ -8590,6 +8650,16 @@
         }
       }
     },
+    "Release to report at your position" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lepas untuk lapor di lokasi anda sekarang"
+          }
+        }
+      }
+    },
     "Remove" : {
       "localizations" : {
         "ms" : {
@@ -8756,6 +8826,16 @@
         }
       }
     },
+    "Report cancelled" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laporan dibatalkan"
+          }
+        }
+      }
+    },
     "Report photo" : {
       "localizations" : {
         "ms" : {
@@ -8782,6 +8862,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Laporkan ulasan"
+          }
+        }
+      }
+    },
+    "Report withdrawn" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laporan ditarik balik"
           }
         }
       }
@@ -10348,6 +10438,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Langkau"
+          }
+        }
+      }
+    },
+    "Slide to an option, release to report" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leret ke pilihan, lepas untuk lapor"
           }
         }
       }
@@ -13588,6 +13688,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iCloud tidak didayakan dalam binaan ini."
+          }
+        }
+      }
+    },
+    "just now" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "baru tadi"
           }
         }
       }

@@ -6,6 +6,9 @@ struct DriveView: View {
     @Environment(AppModel.self) private var model
     @State private var expanded = false
     @State private var showAlternatives = false
+    /// Hold-to-report fan (docs/driving.md §6.4).
+    @State private var fan = QuickFanState()
+    static let space = "drive"
 
     var body: some View {
         if let nav = model.navigation {
@@ -109,6 +112,11 @@ struct DriveView: View {
                         .font(.system(size: 1))
                         .opacity(0.01)
                         .accessibilityIdentifier("navDebug")
+                    // Hidden for UI tests: the last quick report sent / withdrawn (public report ids only).
+                    Text(verbatim: model.quickReportLog)
+                        .font(.system(size: 1))
+                        .opacity(0.01)
+                        .accessibilityIdentifier("quickReportLog")
                     HStack {
                         Spacer()
                         VStack(spacing: 12) {
@@ -126,6 +134,11 @@ struct DriveView: View {
                 .animation(.snappy, value: nav.motion.tinjauProblem?.id)
 
                 VStack(spacing: 12) {
+                    if let q = model.quickReport, !q.isUndone {
+                        QuickReportCard(q: q)
+                            .padding(.horizontal, 10)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                     if nav.approachingAlert == nil, let issue = model.stillClosedPrompt {
                         StillClosedCard(issue: issue)
                             .padding(.horizontal, Tokens.Space.gutter)
@@ -143,7 +156,7 @@ struct DriveView: View {
                     HStack(alignment: .bottom) {
                         Speedometer(speedKmh: nav.speedKmh)
                         Spacer()
-                        ReportFab { model.showReport = true }
+                        HoldReportButton(fan: $fan, onTap: { model.showReport = true }, onSend: { model.sendQuickReport($0) })
                     }
                     .padding(.horizontal, Tokens.Space.gutter)
                     HStack {
@@ -155,6 +168,13 @@ struct DriveView: View {
                     BottomBar(nav: nav, expanded: $expanded, showAlternatives: $showAlternatives)
                 }
                 .animation(.snappy, value: nav.approachingAlert?.id)
+                .animation(.snappy, value: model.quickReport?.startedAt)
+
+                if fan.isOpen {
+                    QuickFanOverlay(fan: fan)
+                        .transition(.opacity)
+                        .zIndex(5)
+                }
 
                 if nav.arrived {
                     ArrivedCard(destination: nav.destination, info: nav.arrivalInfo, onDone: { model.stopNavigation() },
@@ -168,8 +188,30 @@ struct DriveView: View {
                         .transition(.move(edge: .bottom))
                 }
             }
+            .coordinateSpace(name: DriveView.space)
+            #if DEBUG
+            // Device screenshots: `-GimanoQuickFan open|hazard|…` shows the fan (nothing is sent);
+            // `-GimanoQuickReportCard hazard|…` shows a sample "reported" card (never sent).
+            .task {
+                let d = UserDefaults.standard
+                if let v = d.string(forKey: "GimanoQuickFan") {
+                    try? await Task.sleep(for: .seconds(4))
+                    fan.isOpen = true
+                    fan.selected = ReportType(rawValue: v)
+                }
+                if let v = d.string(forKey: "GimanoQuickReportCard"), let t = ReportType(rawValue: v) {
+                    try? await Task.sleep(for: .seconds(4))
+                    model.debugShowQuickReportCard(t)
+                }
+            }
+            #endif
             // Glanceable while driving: the largest text sizes are capped so the banner, sound button, cards and Stop stay on screen.
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .sheet(isPresented: Binding(get: { model.quickReportDetails != nil }, set: { if !$0 { model.quickReportDetails = nil } })) {
+                if let q = model.quickReportDetails {
+                    QuickReportDetailsSheet(q: q).presentationDetents([.medium])
+                }
+            }
             .sheet(isPresented: Binding(get: { model.showShareSheet }, set: { model.showShareSheet = $0 })) {
                 if let s = model.driveShare { ShareDriveSheet(session: s, nav: nav).presentationDetents([.medium]) }
             }

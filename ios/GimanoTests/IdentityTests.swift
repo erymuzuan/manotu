@@ -77,7 +77,7 @@ struct IdentityVectorTests {
     func signedEndpoints() {
         let yes: [(String, String)] = [("POST", "places"), ("PATCH", "places/c1"), ("POST", "places/c1/verify"),
                                        ("POST", "places/c1/suggest-edit"), ("POST", "places/c1/reviews"), ("PATCH", "reviews/r1"),
-                                       ("DELETE", "reviews/r1"), ("POST", "photos"), ("POST", "reports"), ("POST", "reports/r1/votes"),
+                                       ("DELETE", "reviews/r1"), ("POST", "photos"), ("POST", "reports"), ("POST", "reports/r1/votes"), ("DELETE", "reports/r1"),
                                        ("POST", "reports?source=app")]
         let no: [(String, String)] = [("GET", "places/c1"), ("DELETE", "places/c1"), ("POST", "reviews/r1/helpful"),
                                       ("POST", "reviews/r1/flag"), ("POST", "feedback"), ("POST", "locations"), ("GET", "me"),

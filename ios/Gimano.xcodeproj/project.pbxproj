@@ -151,10 +151,12 @@
 		C041471C8817A6B70EFEB5DA /* negative-tampered-ciphertext.json in Resources */ = {isa = PBXBuildFile; fileRef = B7D631CFDBBE02462BC5539A /* negative-tampered-ciphertext.json */; };
 		C2815545F493E0CEA5DDD4AF /* Community.swift in Sources */ = {isa = PBXBuildFile; fileRef = 783F86BAB563808E89DF6AD6 /* Community.swift */; };
 		C3F098D4152A8D14C5E5A090 /* ReviewsAndPhotos.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A036FEB486539C0CE10B8E9 /* ReviewsAndPhotos.swift */; };
+		C53B6EAC68DA0A0B96DFF38F /* HoldToReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9B697D92EC2C79759D393A /* HoldToReport.swift */; };
 		C5B2BF8F81AA020B1130C172 /* EventViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54C7CDA8A5DBC4327B3A7DA5 /* EventViews.swift */; };
 		C729407A7409459C6A537794 /* DemoReviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E946052DB2B62A3410CBEC81 /* DemoReviewUITests.swift */; };
 		C7EBE95E31B9793983663093 /* RouteBuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5E3F2B1E2E9F780E5DFEA7 /* RouteBuilderView.swift */; };
 		C88431528C9339DBAB8C532E /* ServerCheckUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC71DDB18170AAF1C8D8BAE /* ServerCheckUITests.swift */; };
+		C9675B9718F8EB61DF3AC05F /* QuickReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE8BAA491259B9399A53DD08 /* QuickReportTests.swift */; };
 		C967E664805E5EF04BD3FA0D /* DrivingCardsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F342C78189D1799124E3966D /* DrivingCardsTests.swift */; };
 		C9FAAB122AE3B86A83CAB0E5 /* RouteBuilderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F02B1DA475700AC288966776 /* RouteBuilderService.swift */; };
 		CB81976EC0A9BE8F4BEE9263 /* negative-invalid-secret-code.json in Resources */ = {isa = PBXBuildFile; fileRef = 4B93DE8D1395AD529E820CEA /* negative-invalid-secret-code.json */; };
@@ -200,6 +202,7 @@
 		F1EAEBD05E29A4A538A45D9E /* HomePanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 743078509870DB767627A452 /* HomePanelTests.swift */; };
 		F20DDF2F8419B72CDA46F062 /* ComplaintsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76531B2CD9400ECFB9A6A5D7 /* ComplaintsTests.swift */; };
 		F43F46EFEA44DC04DAF89F39 /* DriveBackupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87558CFB1FF80DBC5A662E7 /* DriveBackupUITests.swift */; };
+		F4FF92CA797DD11C0972B97A /* QuickReportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C076BB34547995181296B58C /* QuickReportUITests.swift */; };
 		F52929BDD002D28F4ECBDA18 /* negative-missing-polyline.json in Resources */ = {isa = PBXBuildFile; fileRef = ECA91DAABB4645382F9EE45C /* negative-missing-polyline.json */; };
 		F8A32C621804649AD8C92E5A /* negative-unknown-variant.json in Resources */ = {isa = PBXBuildFile; fileRef = 8980EA7C318720C27AB872D4 /* negative-unknown-variant.json */; };
 		F8B876ABC27695B2A7EA31B0 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBC90672622F0ABA4D89CFEA /* LocationService.swift */; };
@@ -381,6 +384,8 @@
 		B9A3A92DC74ADFCE84D6110C /* HomePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePanel.swift; sourceTree = "<group>"; };
 		BCE5BDD6B0E7DB774F0AFFF3 /* EventHostViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventHostViews.swift; sourceTree = "<group>"; };
 		BD42F4950F1A17C2FE2E0E43 /* kenduri-one-day.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kenduri-one-day.json"; sourceTree = "<group>"; };
+		BE8BAA491259B9399A53DD08 /* QuickReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickReportTests.swift; sourceTree = "<group>"; };
+		C076BB34547995181296B58C /* QuickReportUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickReportUITests.swift; sourceTree = "<group>"; };
 		C0CC37010D41A0E3C3B38C7D /* DriveArrivalUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveArrivalUITests.swift; sourceTree = "<group>"; };
 		C3B2DDD99414433CDAF4242E /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		C5F669B6DCBAC9CDBDA48CAF /* Round4UITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Round4UITests.swift; sourceTree = "<group>"; };
@@ -428,6 +433,7 @@
 		FBED0F8FE579F3B5F1450975 /* Polyline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Polyline.swift; sourceTree = "<group>"; };
 		FCB4A8EBDBFD3D3E30CD851F /* InboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxTests.swift; sourceTree = "<group>"; };
 		FD2F548D8B08143E9D7D735A /* TollAheadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TollAheadTests.swift; sourceTree = "<group>"; };
+		FD9B697D92EC2C79759D393A /* HoldToReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldToReport.swift; sourceTree = "<group>"; };
 		FEBDD7794BF35380C8835FD5 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		FEFB055D289B0D1AE4CE0307 /* ride-two-day.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ride-two-day.json"; sourceTree = "<group>"; };
 		FF9AC16956C2FFE93935B45F /* ParityFixesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParityFixesTests.swift; sourceTree = "<group>"; };
@@ -509,6 +515,7 @@
 				327388AA4FE1D5A5AAC4723E /* PreciseLocationUITests.swift */,
 				EEBE29304DF119F04E43590B /* ProdHooksUITests.swift */,
 				D0238A1CD728A2F2D9CBDD03 /* ProdUserUITests.swift */,
+				C076BB34547995181296B58C /* QuickReportUITests.swift */,
 				6FBA37416C29B4B20D878BFB /* Round3UITests.swift */,
 				C5F669B6DCBAC9CDBDA48CAF /* Round4UITests.swift */,
 				C8836464AED5673E2319EDF6 /* RouteBuilderUITests.swift */,
@@ -559,6 +566,7 @@
 			isa = PBXGroup;
 			children = (
 				8E333AAFC271BC55DBE183BD /* DriveView.swift */,
+				FD9B697D92EC2C79759D393A /* HoldToReport.swift */,
 				2075C59A0DFAA836D2F335C4 /* QuickReport.swift */,
 				2431E7AD0B92C709C0E4C5FC /* SoundSelector.swift */,
 			);
@@ -637,6 +645,7 @@
 				A27E86E151EC912063DD181D /* PlannedDrivePrivacyTests.swift */,
 				290AD2E4977FFEDB651E4762 /* PlannedDriveTests.swift */,
 				E3820150BB82A2510C4945B2 /* PolylineTests.swift */,
+				BE8BAA491259B9399A53DD08 /* QuickReportTests.swift */,
 				4F93249E570D3CB483EE564A /* Round2Tests.swift */,
 				5BA7609B4C2F03EEE40530B1 /* Round3Tests.swift */,
 				0FB126F524DFEE02E6BE3C81 /* RouteBuilderTests.swift */,
@@ -1135,6 +1144,7 @@
 				41894C17F9B8C24CDB9F93F9 /* PlannedDrivePrivacyTests.swift in Sources */,
 				534C137ABCED2AB78A8DF771 /* PlannedDriveTests.swift in Sources */,
 				26661DE9BEC534AA68B52D83 /* PolylineTests.swift in Sources */,
+				C9675B9718F8EB61DF3AC05F /* QuickReportTests.swift in Sources */,
 				18FC7697C4D36096EC2D8390 /* Round2Tests.swift in Sources */,
 				6CC34AC9F92492D8A5093CD3 /* Round3Tests.swift in Sources */,
 				FF08D21DE23C5ABB9784DDE2 /* RouteBuilderTests.swift in Sources */,
@@ -1202,6 +1212,7 @@
 				BA1E2852EC05C6323FEEE5F8 /* GimanoApp.swift in Sources */,
 				FA50685C80C235AA22BC9EA2 /* GimanoIcon.swift in Sources */,
 				74DE001005991821B65AD8A8 /* GimanoMapView.swift in Sources */,
+				C53B6EAC68DA0A0B96DFF38F /* HoldToReport.swift in Sources */,
 				D8B4CDC2846BA6D1F4052421 /* HomePanel.swift in Sources */,
 				997A6F6EE64064654956768F /* HomeView.swift in Sources */,
 				77C09E39905792ACB8545E43 /* IconData.swift in Sources */,
@@ -1278,6 +1289,7 @@
 				99AD437AD034E5F0FC1FB500 /* PreciseLocationUITests.swift in Sources */,
 				7C69BDCE20FBD4840F4154F4 /* ProdHooksUITests.swift in Sources */,
 				658D6AEB5A770EBA24F9DEDA /* ProdUserUITests.swift in Sources */,
+				F4FF92CA797DD11C0972B97A /* QuickReportUITests.swift in Sources */,
 				4F902BD3BD1138DEEAA5AB4E /* Round3UITests.swift in Sources */,
 				2CE151E5AF12C91658656725 /* Round4UITests.swift in Sources */,
 				A6EC4FB20F631A306E50899D /* RouteBuilderUITests.swift in Sources */,
