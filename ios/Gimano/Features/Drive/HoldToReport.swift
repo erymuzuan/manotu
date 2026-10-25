@@ -185,7 +185,7 @@ struct QuickReportCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("\(String(localized: q.type.fanTitle)) reported")
                         .font(Tokens.Font.nunito(18, .black, relativeTo: .headline))
-                        .lineLimit(2).minimumScaleFactor(0.8)
+                        .lineLimit(2).minimumScaleFactor(0.7)
                     Text(verbatim: [q.street, String(localized: "just now")].compactMap { $0 }.joined(separator: " · "))
                         .font(Tokens.Font.nunito(13, .bold, relativeTo: .footnote))
                         .foregroundStyle(Color.tileLabel)
@@ -197,6 +197,7 @@ struct QuickReportCard: View {
                 .accessibilityElement(children: .combine)
                 Button { model.openQuickReportDetails() } label: {
                     Text("Details").font(Tokens.Font.nunito(15, .black))
+                        .lineLimit(1).fixedSize()
                         .foregroundStyle(Color.brandInk)
                         .padding(.horizontal, 12).frame(minHeight: 48)
                         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.outline, lineWidth: 2))
@@ -216,6 +217,7 @@ struct QuickReportCard: View {
                         }
                         .frame(width: 22, height: 22)
                         Text("Undo").font(Tokens.Font.nunito(15, .black))
+                            .lineLimit(1).fixedSize()
                     }
                     .foregroundStyle(Color.brandOn)
                     .padding(.horizontal, 12).frame(minHeight: 48)
