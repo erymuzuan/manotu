@@ -6,6 +6,7 @@ COPY backend/src/Gimano.Core/Gimano.Core.csproj src/Gimano.Core/
 COPY backend/src/Gimano.BackOffice/Gimano.BackOffice.csproj src/Gimano.BackOffice/
 RUN dotnet restore src/Gimano.BackOffice/Gimano.BackOffice.csproj
 COPY data/moderation/ /data/moderation/
+COPY data/search/ /data/search/
 COPY backend/src/Gimano.Core/ src/Gimano.Core/
 COPY backend/src/Gimano.BackOffice/ src/Gimano.BackOffice/
 RUN dotnet publish src/Gimano.BackOffice/Gimano.BackOffice.csproj -c Release -o /app --no-restore /p:UseAppHost=false
