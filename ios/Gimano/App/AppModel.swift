@@ -1213,6 +1213,16 @@ final class AppModel {
                 stillClosedPrompt = Issue(id: "debug-still-closed", kind: .turnNotAllowed, state: .confirmed, lat: p.lat, lng: p.lng,
                                           roadName: "Jalan SS 2/3", lastEvidenceAt: Date().addingTimeInterval(-5 * 3600))
             }
+            // `-GimanoFakeAlertAhead YES`: a "Still there?" card for a sample police report 3 s into the drive (never sent).
+            if UserDefaults.standard.bool(forKey: "GimanoFakeAlertAhead") {
+                try? await Task.sleep(for: .seconds(3))
+                let p = position
+                let r = Report(id: "debug-alert-ahead", type: .police, subtype: "visible", lat: p.lat, lng: p.lng, heading: nil,
+                               street: "Jalan SS 2/3", reportedBy: nil, createdAt: Date().addingTimeInterval(-5 * 60),
+                               expiresAt: Date().addingTimeInterval(25 * 60), confirmations: 2, thanks: 0)
+                // 400 m ahead of the arrow, so the drive doesn't clear it as passed.
+                session.debugShowAlert(AlertOnRoute(report: r, distanceAlongRouteM: (session.progress?.snap.distanceAlongM ?? 0) + 400))
+            }
             #endif
         }
         session.onRouteChanged = { [weak self] r in
