@@ -101,12 +101,16 @@ class TinjauPlanner {
     fun reset() { shown.clear(); current = null }
 
     /**
-     * @param maneuverInS seconds to the next maneuver (Tinjau is skipped when one comes within 20 s).
+     * @param maneuverInS seconds to the next maneuver (Tinjau is skipped when one comes within 20 s), or until Simpang
+     *   would start, whichever is sooner: a zoom-out never starts if Simpang would cut it short.
      */
     fun update(problems: List<Problem>, alongM: Double, simpang: Boolean, maneuverInS: Double?, delayS: Double?, nowMs: Long): TinjauInfo? {
         current?.let { c ->
-            // Simpang has priority: the zoom-out stops at once.
-            if (simpang || nowMs - c.startedAtMs >= SHOW_MS) current = null
+            // Simpang has priority: the zoom-out stops at once. Cut short before the hold, the problem is shown again later.
+            if (simpang) {
+                if (nowMs - c.startedAtMs < OUT_MS + HOLD_MS / 2) shown -= c.problem.key
+                current = null
+            } else if (nowMs - c.startedAtMs >= SHOW_MS) current = null
             else current = c.copy(distanceM = (c.problem.startAlongM - alongM).coerceAtLeast(0.0))
             return current
         }
@@ -197,12 +201,20 @@ class CameraModeController {
 
     fun reset() { speed.reset(); tinjau.reset(); problems = emptyList() }
 
+    val problemCount: Int get() = problems.size
+
     fun update(
         speedKmh: Double, alongM: Double, nextType: String?, distanceToNextM: Double?, prevType: String?, sincePrevM: Double?, nowMs: Long,
     ): CameraTarget {
         val base = speed.update(speedKmh, nowMs)
         val simpang = SimpangRule.active(nextType, distanceToNextM, prevType, sincePrevM, speedKmh)
-        val inS = distanceToNextM?.takeIf { SimpangRule.isTurn(nextType) }?.let { SimpangRule.secondsTo(it, speedKmh) }
+        val inS = distanceToNextM?.takeIf { SimpangRule.isTurn(nextType) }?.let { d ->
+            val toTurn = SimpangRule.secondsTo(d, speedKmh)
+            // Seconds until Simpang starts (300 m before the turn), shifted so the 20 s rule also covers the whole show.
+            val toSimpang = SimpangRule.secondsTo((d - SimpangRule.NEAR_M).coerceAtLeast(0.0), speedKmh)
+                ?.let { it - TinjauPlanner.SHOW_MS / 1000.0 + TinjauPlanner.SKIP_MANEUVER_S }
+            listOfNotNull(toTurn, toSimpang).minOrNull()
+        }
         val t = tinjau.update(problems, alongM, simpang, inS, delayS, nowMs)
         return when {
             simpang -> CameraTarget(CameraMode.SIMPANG)

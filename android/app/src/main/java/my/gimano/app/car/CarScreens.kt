@@ -54,15 +54,17 @@ import java.util.TimeZone
 
 /** Not agreed on the phone yet: "Buka Manotu di telefon untuk bermula" + "Faham" (docs/driving.md §5). */
 class CarAgreementScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
-    override fun onGetTemplate(): Template = MessageTemplate.Builder(s.str(R.string.car_open_phone))
-        .setTitle(s.str(R.string.app_name))
-        .setHeaderAction(Action.APP_ICON)
-        .addAction(Action.Builder().setTitle(s.str(R.string.car_got_it)).setOnClickListener {
-            // Agreed on the phone meanwhile → straight to "Ke mana?"; otherwise the message stays.
-            if (s.agreed()) { screenManager.push(CarHomeScreen(s)); finish() } else invalidate()
-        }.build())
-        .build()
+    override fun onGetTemplate(): Template = agreementTemplate(s) {
+        // Agreed on the phone meanwhile → straight to "Ke mana?"; otherwise the message stays.
+        if (s.agreed()) { screenManager.push(CarHomeScreen(s)); finish() } else invalidate()
+    }
 }
+
+internal fun agreementTemplate(s: ManotuCarSession, onGotIt: () -> Unit): Template = MessageTemplate.Builder(s.str(R.string.car_open_phone))
+    .setTitle(s.str(R.string.app_name))
+    .setHeaderAction(Action.APP_ICON)
+    .addAction(Action.Builder().setTitle(s.str(R.string.car_got_it)).setOnClickListener(onGotIt).build())
+    .build()
 
 /** "Ke mana?": Rumah, Kerja, favourites and recents from this phone (≤ 6 rows while driving). */
 class CarHomeScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
@@ -82,6 +84,8 @@ class CarHomeScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
     }
 
     override fun onGetTemplate(): Template {
+        // The agreement may be withdrawn (or reset) while the car is connected: never offer a drive without it.
+        if (!s.agreed()) return agreementTemplate(s) { invalidate() }
         val b = PlaceListNavigationTemplate.Builder().setTitle(s.str(R.string.car_where_to)).setHeaderAction(Action.APP_ICON)
             .setActionStrip(ActionStrip.Builder().addAction(Action.Builder().setTitle(s.str(R.string.car_search))
                 .setOnClickListener { screenManager.push(CarSearchScreen(s)) }.build()).build())
