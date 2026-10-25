@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tambah tempat dengan semakan AI (papan reka bentuk A1–C3). Kod sebab dipetakan kepada teks tetap ini; teks semakan sendiri tidak pernah ditunjukkan. -->
+<resources>
+    <!-- A1 -->
+    <string name="apg_intro_kicker">TEMPAT KONGSI PERTAMA ANDA</string>
+    <string name="apg_intro_title">Cara menambah tempat</string>
+    <string name="apg_intro_s1_t">Semua orang boleh melihatnya</string>
+    <string name="apg_intro_s1_b">Tempat yang dikongsi muncul pada peta untuk semua pemandu, di bawah nama samaran anda.</string>
+    <string name="apg_intro_s2_t">Semakan automatik yang pantas</string>
+    <string name="apg_intro_s2_b">Kira-kira 2 saat. Ia hanya melihat apa yang anda tulis, bukan siapa anda.</string>
+    <string name="apg_intro_s3_t">Orang berdekatan mengesahkannya</string>
+    <string name="apg_intro_s3_b">Sehingga itu ia menunjukkan \"Belum disahkan\". Tempat yang tepat menaikkan tahap anda.</string>
+    <string name="apg_intro_rules">Kedai, gerai, surau, bengkel, parkir dan tempat berhenti. Bukan rumah, iklan atau tawaran kerja. Mahu untuk anda sahaja? Pilih \"Untuk saya sahaja\": ia tidak pernah keluar dari telefon anda.</string>
+
+    <!-- A2 -->
+    <string name="apg_share_hint">Tempat yang dikongsi melalui semakan automatik yang pantas, kemudian disahkan oleh orang berdekatan.</string>
+
+    <!-- A3 -->
+    <string name="apg_checking_title">Menyemak sebelum masuk ke peta…</string>
+    <string name="apg_check_location_t">Lokasi baik</string>
+    <string name="apg_check_location_s">Bukan di kawasan larangan</string>
+    <string name="apg_check_dup_t">Belum ada pada peta</string>
+    <string name="apg_check_dup_s">Tiada tempat serupa dalam 100 m</string>
+    <string name="apg_check_content_t">Semakan kandungan</string>
+    <string name="apg_check_content_s">Adakah ini tempat sebenar yang boleh dikunjungi pemandu?</string>
+    <string name="apg_check_live_t">Masuk ke peta</string>
+    <string name="apg_check_live_s">Kemudian orang berdekatan mengesahkannya</string>
+    <string name="apg_checking_button">Menyemak</string>
+    <string name="apg_checking_note">Biasanya kira-kira 2 saat. Anda boleh menutup ini: keputusannya juga sampai ke Peti masuk.</string>
+
+    <!-- A4 / menunggu biasa -->
+    <string name="apg_live_title">Sudah ada pada peta</string>
+    <string name="apg_not_verified_n">Belum disahkan · %1$s daripada %2$s</string>
+    <string name="apg_not_verified">Belum disahkan</string>
+    <string name="apg_community_verified">Disahkan komuniti</string>
+    <string name="apg_live_body">Pemandu boleh mencarinya sekarang. Orang seterusnya yang berhenti berdekatan akan ditanya \"Adakah tempat ini di sini?\". Apabila mereka menjawab ya, ia menjadi Disahkan komuniti dan anda dapat +20 mata.</string>
+    <string name="apg_share_place">Kongsi tempat</string>
+    <string name="apg_live_note">Anda boleh menyuntingnya selagi belum disahkan. Suntingan akan disemak semula.</string>
+    <string name="apg_pending_title">Ditambah, menunggu pengesahan</string>
+    <string name="apg_pending_body">Semakan automatik tidak dijalankan kali ini. Pemandu berdekatan akan diminta mengesahkannya sebelum ia muncul dalam carian.</string>
+
+    <!-- A5 -->
+    <string name="apg_gold_title">Di peta dan disahkan</string>
+    <string name="apg_gold_chip">Ditambah oleh penyumbang Emas</string>
+    <string name="apg_gold_body">Tahap Emas anda bermakna ia tidak perlu menunggu. Ia tetap melalui semakan automatik yang sama. Sekali-sekala kami meminta pemandu berdekatan mengesahkan tempat Emas, supaya tahap semua orang kekal adil.</string>
+    <string name="apg_gold_note">Jika semakan automatik tidak pasti tentang tempat Emas, seorang manusia yang memutuskan. Ia tidak pernah ditolak secara automatik.</string>
+
+    <!-- B1 -->
+    <string name="apg_dup_title">Adakah ia sudah ada pada peta?</string>
+    <string name="apg_dup_body">Kami menjumpai tempat yang serupa %1$s dari pin anda. Anda menulis \"%2$s\".</string>
+    <string name="apg_dup_body_near">Kami menjumpai tempat yang serupa berdekatan pin anda. Anda menulis \"%1$s\".</string>
+    <string name="apg_dup_same">Ya, itulah: cadangkan suntingan</string>
+    <string name="apg_dup_different">Tidak, tempat saya berbeza</string>
+    <string name="apg_dup_note">\"Tempat berbeza\" menghantarnya bersama jawapan itu. Jika semakan masih menganggap ia sama, seorang manusia yang memutuskan. Tiada apa yang hilang.</string>
+
+    <!-- B2 -->
+    <string name="apg_held_title">Seorang manusia akan menyemak tempat ini</string>
+    <string name="apg_held_chip">Sedang disemak · biasanya dalam 24 jam</string>
+    <string name="apg_held_why_security">Sebab: keterangan menyebut butiran keselamatan (kamera, waktu pengawal). Kami tidak pernah menerbitkannya, tetapi tempat itu sendiri mungkin tiada masalah. Penyelenggara mungkin membuang ayat itu dan menerbitkan selebihnya.</string>
+    <string name="apg_held_why_duplicate">Sebab: ia mungkin sama dengan tempat yang sudah ada pada peta. Penyelenggara akan membandingkannya.</string>
+    <string name="apg_held_why_unsure">Sebab: semakan automatik tidak pasti. Itu tidak bermakna ada yang salah.</string>
+    <string name="apg_held_why_appealed">Anda meminta semakan. Penyelenggara Manotu, seorang manusia, menjawab dalam 24 jam.</string>
+    <string name="apg_held_only_you">Sehingga itu hanya anda yang boleh melihatnya. Jawapannya akan sampai ke Peti masuk.</string>
+    <string name="apg_edit_description">Sunting keterangan</string>
+    <string name="apg_held_note">Penyumbang baharu lebih kerap melihat ini: sehingga anda ada 3 tempat yang diterima, apa-apa yang semakan tidak pasti akan disemak oleh manusia.</string>
+
+    <!-- B3 -->
+    <string name="apg_rej_advert_t">Ini kelihatan seperti iklan, bukan tempat</string>
+    <string name="apg_rej_scam_t">Ini kelihatan seperti penipuan</string>
+    <string name="apg_rej_illegal_t">Ini kelihatan seperti jualan barang terlarang</string>
+    <string name="apg_rej_adult_t">Ini kelihatan seperti perkhidmatan dewasa</string>
+    <string name="apg_rej_gibberish_t">Kami tidak dapat membaca ini sebagai tempat</string>
+    <string name="apg_rej_other_t">Ini tidak diterima</string>
+    <string name="apg_rej_advert_b">Tempat dalam Manotu ialah lokasi yang boleh dikunjungi pemandu. Kami tidak menerima iklan, tawaran pelaburan, tawaran kerja atau promosi. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya.</string>
+    <string name="apg_rej_scam_b">Ia berbunyi seperti tawaran yang meminta wang atau maklumat peribadi orang. Kami tidak menerbitkannya. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya.</string>
+    <string name="apg_rej_illegal_b">Kami tidak menerbitkan tempat yang menjual barang atau perkhidmatan terlarang atau tidak berdaftar. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya.</string>
+    <string name="apg_rej_adult_b">Kami tidak menerbitkan perkhidmatan dewasa. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya.</string>
+    <string name="apg_rej_gibberish_b">Nama atau keterangan tidak berbunyi seperti tempat yang boleh dicari pemandu. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya.</string>
+    <string name="apg_rej_other_b">Semakan automatik tidak menerimanya. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya.</string>
+    <string name="apg_rej_hint">Adakah kedai atau pejabat sebenar di sini? Tukar nama kepada apa yang tertulis pada papan tanda dan terangkan tempat itu, bukan tawarannya.</string>
+    <string name="apg_edit_try_again">Sunting dan cuba lagi</string>
+    <string name="apg_ask_review_wrong">Saya rasa ini salah: minta semakan</string>
+    <string name="apg_discard">Buang</string>
+    <string name="apg_review_closed">Seorang manusia telah menyemaknya, dan ia kekal tidak diterbitkan.</string>
+
+    <!-- B4 -->
+    <string name="apg_home_t">Ini kelihatan seperti rumah seseorang</string>
+    <string name="apg_person_t">Ini kelihatan seperti tentang seseorang</string>
+    <string name="apg_home_b">Untuk melindungi privasi orang, kami tidak menerbitkan rumah persendirian untuk semua. Anda masih boleh menyimpannya pada peta untuk diri sendiri. Tempat \"Untuk saya sahaja\" kekal dalam telefon ini dan sandaran anda sendiri, dan tidak pernah sampai ke Manotu.</string>
+    <string name="apg_person_b">Untuk melindungi privasi orang, kami tidak menerbitkan tempat yang menamakan atau menunjuk kepada seseorang. Anda masih boleh menyimpannya pada peta untuk diri sendiri. Tempat \"Untuk saya sahaja\" kekal dalam telefon ini dan sandaran anda sendiri, dan tidak pernah sampai ke Manotu.</string>
+    <string name="apg_keep_private">Simpan untuk saya sahaja</string>
+    <string name="apg_ask_review_business">Ia perniagaan: minta semakan</string>
+    <string name="apg_home_hint">Perniagaan dari rumah (kuih, tukang jahit, homestay) dialu-alukan. Namakan perniagaan, bukan orangnya, dan tambah waktu buka.</string>
+
+    <!-- B5 -->
+    <plurals name="apg_limit_title">
+        <item quantity="one">Anda boleh menambah lagi dalam %d minit</item>
+        <item quantity="other">Anda boleh menambah lagi dalam %d minit</item>
+    </plurals>
+    <string name="apg_limit_title_later">Anda boleh menambah lagi nanti</string>
+    <string name="apg_limit_body">Ada had bilangan tempat yang boleh dikongsi setiap jam dan setiap hari. Had ini bertambah apabila tempat anda disahkan.</string>
+    <string name="apg_limit_draft">Simpan sebagai draf dalam telefon ini dan kongsikannya dari Tempat saya apabila masanya tiba.</string>
+    <string name="apg_paused_title">Penambahan dijeda sehingga %1$s</string>
+    <string name="apg_paused_title_later">Penambahan dijeda buat masa ini</string>
+    <string name="apg_paused_body">Tiga tempat anda hari ini tidak diterima. Jeda ini tamat dengan sendirinya.</string>
+    <string name="apg_save_draft">Simpan draf</string>
+    <string name="apg_private_instead">Simpan untuk saya sahaja</string>
+
+    <!-- B6 -->
+    <string name="apg_slow_title">Dihantar. Kami masih menyemak</string>
+    <string name="apg_slow_body">%1$s selamat bersama kami. Ia akan masuk ke peta sebaik sahaja semakan selesai, biasanya dalam beberapa minit. Anda akan menerima mesej dalam Peti masuk.</string>
+    <string name="apg_offline_title">Tiada sambungan</string>
+    <string name="apg_offline_body">Disimpan dalam telefon ini. Ia akan dihantar dan disemak apabila anda kembali dalam talian.</string>
+    <string name="apg_slow_note">Jika perkhidmatan semakan terhenti lebih sejam, seorang manusia akan menyemak tempat itu. Tiada apa yang hilang.</string>
+
+    <!-- C1 -->
+    <string name="apg_appeal_title">Minta semakan</string>
+    <string name="apg_not_accepted_reason">Tidak diterima: %1$s</string>
+    <string name="apg_reason_advert">kelihatan seperti iklan</string>
+    <string name="apg_reason_scam">kelihatan seperti penipuan</string>
+    <string name="apg_reason_illegal">kelihatan seperti jualan barang terlarang</string>
+    <string name="apg_reason_adult">kelihatan seperti perkhidmatan dewasa</string>
+    <string name="apg_reason_gibberish">tidak dapat dibaca sebagai tempat</string>
+    <string name="apg_reason_home">kelihatan seperti rumah seseorang</string>
+    <string name="apg_reason_person">kelihatan seperti tentang seseorang</string>
+    <string name="apg_reason_other">tidak lulus semakan automatik</string>
+    <string name="apg_appeal_label">Apa yang perlu diketahui oleh penyemak?</string>
+    <string name="apg_appeal_count">%1$d / %2$d</string>
+    <string name="apg_appeal_info">Penyelenggara Manotu, seorang manusia, menjawab dalam 24 jam. Satu semakan bagi setiap tempat. Jangan masukkan nombor telefon atau nama orang di sini.</string>
+    <string name="apg_appeal_tip_home">Petua: menamakan perniagaan, bukan orangnya, dan menambah waktu buka selalunya lulus semakan serta-merta.</string>
+    <string name="apg_appeal_tip">Petua: menggunakan nama pada papan tanda dan menerangkan tempat itu selalunya lulus semakan serta-merta.</string>
+    <string name="apg_appeal_send">Hantar untuk semakan</string>
+    <string name="appeal_already">Semakan sudah diminta untuk tempat ini</string>
+
+    <!-- Mesej -->
+    <string name="add_late_live">Tempat anda sudah ada pada peta</string>
+    <string name="add_late_held">Seorang manusia akan menyemak tempat anda. Jawapannya sampai ke Peti masuk.</string>
+    <string name="add_late_not_accepted">Tempat anda tidak diterima. Peti masuk menerangkan sebabnya.</string>
+    <string name="add_late_checking">Tempat anda masih disemak. Keputusannya sampai ke Peti masuk.</string>
+    <string name="add_late_attention">Tempat anda tidak dihantar. Cuba lagi dari Tambah tempat.</string>
+    <string name="add_offline_saved">Tiada sambungan: disimpan dalam telefon ini, dihantar apabila anda kembali dalam talian</string>
+    <string name="add_draft_saved">Disimpan sebagai draf dalam telefon ini</string>
+    <string name="add_discarded">Dibuang</string>
+
+    <!-- C2 (jika pelayan tiada tajuk) -->
+    <string name="inbox_place_held">Penyelenggara akan menyemak tempat anda</string>
+    <string name="inbox_place_not_accepted">Tempat anda tidak diterima</string>
+    <string name="inbox_place_live">Tempat anda kini ada pada peta</string>
+
+    <!-- C3 -->
+    <string name="mp_verified">Disahkan komuniti</string>
+    <string name="mp_live">Di peta · belum disahkan</string>
+    <string name="mp_waiting">Menunggu pengesahan</string>
+    <string name="mp_checking">Semakan automatik sedang berjalan</string>
+    <string name="mp_held">Disemak oleh manusia</string>
+    <string name="mp_not_accepted">Tidak diterima</string>
+    <string name="mp_hidden">Disembunyikan: dilaporkan \"tiada di sini\"</string>
+    <string name="mp_expired">Tamat tempoh, belum disahkan</string>
+    <string name="mp_closed">Ditutup</string>
+    <string name="mp_draft">Draf dalam telefon ini</string>
+    <string name="mp_queued">Dalam giliran: dihantar apabila dalam talian</string>
+    <string name="mp_private">Dalam telefon ini sahaja</string>
+    <string name="mp_x_of_y">%1$s daripada %2$s</string>
+    <string name="mp_within_24h">&lt; 24 jam</string>
+    <string name="mp_share_in">Kongsi dalam %1$d min</string>
+    <string name="mp_share_now">Kongsi sekarang</string>
+    <string name="mp_ask_review">Minta semakan</string>
+    <string name="mp_review_closed">Semakan ditutup</string>
+    <string name="mp_moderator">Moderator</string>
+    <string name="mp_private_next">Peribadi</string>
+    <string name="mp_just_for_me_name">%1$s (untuk saya sahaja)</string>
+    <string name="mp_discard_draft">Buang draf</string>
+</resources>

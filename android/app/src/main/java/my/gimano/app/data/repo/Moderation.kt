@@ -13,8 +13,15 @@ object Moderation {
 
     fun reportBanned() { _banned.tryEmit(Unit) }
 
-    /** Is this failure the "banned" 403? */
-    fun isBanned(t: Throwable?): Boolean = (t as? retrofit2.HttpException)?.code() == 403
+    /** Is this failure the "banned" 403? (Not the `adding_paused` 403, which only pauses new places.) */
+    fun isBanned(t: Throwable?): Boolean = (t as? retrofit2.HttpException)?.let { it.code() == 403 && !isAddingPaused(it) } == true
+
+    /** 403 `code: "adding_paused"` (docs/api.md "AI check"). Reads the body without consuming it. */
+    fun isAddingPaused(e: retrofit2.HttpException): Boolean {
+        if (e.code() != 403) return false
+        val body = runCatching { e.response()?.errorBody()?.source()?.peek()?.readUtf8() }.getOrNull() ?: return false
+        return my.gimano.app.core.places.PlaceGate.failure(403, body, null) is my.gimano.app.core.places.CreateFailure.Paused
+    }
 }
 
 /**

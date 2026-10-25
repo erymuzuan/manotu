@@ -66,6 +66,8 @@ fun AddPlaceScreen(cvm: ContributeViewModel, handle: MapHandle, onBack: () -> Un
         AddStep.DETAILS -> DetailsStep(s, cvm)
         AddStep.VISIBILITY -> VisibilityStep(s, cvm)
     }
+    // The AI gate (A1, A3, the answers, B1, B5, B6, C1) covers the form; the form stays behind it for "Edit and try again".
+    AddPlaceOverlayScreen(s, cvm)
     // docs/safety.md §4 A: a public pin in a restricted area gets this sheet instead of the form.
     if (s.blockedSheet) my.gimano.app.ui.safety.BlockedPinSheet(onMove = cvm::blockedMove, onPrivate = cvm::blockedPrivate, onCancel = cvm::blockedCancel)
 }
@@ -120,7 +122,8 @@ private fun DetailsStep(s: AddPlaceState, cvm: ContributeViewModel) {
         if (ok && u != null) cvm.addPhotos(listOf(u)) else if (u != null) my.gimano.app.data.places.PhotoPrep.deleteIfCameraTemp(context, u)
     }
     Column(Modifier.fillMaxSize().background(c.background)) {
-        TopBar(stringResource(R.string.add_a_place)) { cvm.step(AddStep.PIN) }
+        // Opened from My places or the Inbox the map isn't at the pin, so back leaves instead of moving it.
+        TopBar(stringResource(R.string.add_a_place)) { if (s.fromList) cvm.finish() else cvm.step(AddStep.PIN) }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp).imePadding()) {
             // B: near a restricted area (public): the note, no photos, a moderator checks it first.
             if (s.nearArea) my.gimano.app.ui.safety.NearRestrictedNote(Modifier.padding(bottom = 12.dp))
@@ -281,21 +284,13 @@ private fun VisibilityStep(s: AddPlaceState, cvm: ContributeViewModel) {
             Text(s.name, style = GimanoType.title, color = c.text)
             BigChoice(Icons.Filled.Lock, stringResource(R.string.just_for_me), stringResource(R.string.just_for_me_desc), enabled = !s.saving) { cvm.savePrivate() }
             // After A's "Simpan untuk saya sahaja" there is no public choice. B/C: held, so it says "Hantar untuk semakan".
+            // A2: shared places get the automatic check, then people nearby confirm them.
             if (!s.privateOnly) BigChoice(Icons.Filled.Groups,
                 stringResource(if (cvm.willBeHeld(s)) R.string.restricted_send_review else R.string.share_everyone),
-                stringResource(R.string.share_everyone_desc), enabled = !s.saving) { cvm.savePublic() }
+                stringResource(R.string.apg_share_hint), enabled = !s.saving) { cvm.savePublic() }
             if (s.saving) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.brand, trackColor = c.surfaceAlt)
-            s.error?.let { Text(if (it == "duplicate") stringResource(R.string.duplicate_place) else it, color = c.report, fontWeight = FontWeight.Bold) }
+            s.error?.let { Text(it, color = c.report, fontWeight = FontWeight.Bold) }
         }
-    }
-    s.duplicate?.let { p ->
-        AlertDialog(
-            onDismissRequest = { cvm.update { it.copy(duplicate = null) } },
-            title = { Text(stringResource(R.string.is_it_this_one), style = GimanoType.title) },
-            text = { Text("${p.name}\n${p.address}") },
-            confirmButton = { Button(onClick = { cvm.update { it.copy(duplicate = null) }; cvm.showExisting(p) }) { Text(stringResource(R.string.yes_thats_it)) } },
-            dismissButton = { TextButton(onClick = { cvm.update { it.copy(duplicate = null, step = AddStep.DETAILS) } }) { Text(stringResource(R.string.no_edit_mine)) } },
-        )
     }
 }
 

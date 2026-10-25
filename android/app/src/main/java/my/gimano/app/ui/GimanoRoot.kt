@@ -145,6 +145,10 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
                 is my.gimano.app.ui.contribute.ContribEvent.Text -> { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(e.text) }
                 is my.gimano.app.ui.contribute.ContribEvent.ShowPlace -> vm.showPlace(e.summary)
                 my.gimano.app.ui.contribute.ContribEvent.Close -> vm.back()
+                my.gimano.app.ui.contribute.ContribEvent.OpenMyPlaces -> vm.open(Screen.Contributions)
+                my.gimano.app.ui.contribute.ContribEvent.OpenAddPlace -> vm.open(Screen.AddPlace)
+                is my.gimano.app.ui.contribute.ContribEvent.Share ->
+                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, e.text), null))
             }
         }
     }
@@ -330,7 +334,9 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
                 Screen.Contributions -> my.gimano.app.ui.contribute.ContributionsScreen(container, cvm, vm, ui.user)
                 Screen.AddPlace -> my.gimano.app.ui.contribute.AddPlaceScreen(cvm, handle, onBack = vm::back)
                 Screen.Favourites -> my.gimano.app.ui.more.FavouritesScreen(ui.saved, ui.myLocation?.point, settings.lastBackupAt, vm)
-                Screen.Inbox -> my.gimano.app.ui.inbox.InboxScreen(ui.inbox, settings.inboxRead, onBack = vm::back, onRefresh = { vm.refreshInbox() }, onMarkAll = { vm.markInboxRead() })
+                Screen.Inbox -> my.gimano.app.ui.inbox.InboxScreen(ui.inbox, settings.inboxRead, onBack = vm::back, onRefresh = { vm.refreshInbox() }, onMarkAll = { vm.markInboxRead() },
+                    // C2: the AI check's results open that place's result screen (appeal, edit, keep it just for me).
+                    onOpenPlace = { item -> item.placeRef?.let { id -> cvm.openResult(id) } })
                 Screen.Theme -> my.gimano.app.ui.more.ThemeScreen(settings.theme, onPick = { vm.setTheme(it) }, onBack = vm::back)
                 Screen.Events -> my.gimano.app.ui.events.EventsListScreen(container.eventStore, container.hostStore, settings.use24h, onBack = vm::back,
                     onOpen = { id -> vm.open(Screen.EventDetail(id)) }, onOpenHosted = { id -> vm.openHostEvent(id) }, onNew = vm::newHostEvent)

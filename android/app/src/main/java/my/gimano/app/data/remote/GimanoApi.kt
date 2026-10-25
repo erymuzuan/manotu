@@ -175,6 +175,10 @@ interface GimanoApi {
     @DELETE("places/{id}")
     suspend fun deletePlace(@Path("id") id: String): Response<ResponseBody>
 
+    /** Owner only, a place the AI check didn't accept, once per place (signed). → the owner's Place (held). */
+    @POST("places/{id}/appeal")
+    suspend fun appealPlace(@Path("id") id: String, @Body body: AppealRequest): Place
+
     @POST("places/{id}/suggest-edit")
     suspend fun suggestEdit(@Path("id") id: String, @Body body: SuggestEditRequest): SuggestionCreated
 

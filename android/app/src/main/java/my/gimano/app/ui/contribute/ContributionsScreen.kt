@@ -29,6 +29,9 @@ import kotlin.math.roundToInt
 import coil3.compose.AsyncImage
 import my.gimano.app.AppContainer
 import my.gimano.app.R
+import androidx.compose.material.icons.filled.Delete
+import my.gimano.app.core.places.MyPlaceStatus
+import my.gimano.app.core.places.PlaceGate
 import my.gimano.app.data.model.PlaceSummary
 import my.gimano.app.data.model.User
 import my.gimano.app.ui.MainViewModel
@@ -47,7 +50,10 @@ fun ContributionsScreen(c: AppContainer, cvm: ContributeViewModel, vm: MainViewM
     val reports by cvm.log.reports.collectAsState(initial = 0)
     val reviewNames by cvm.log.reviewEntries.collectAsState(initial = emptyList())
     var tab by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { places = runCatching { c.repo.contributedPlaces() }.getOrDefault(emptyList()) }
+    val drafts by cvm.drafts.collectAsState(initial = emptyList())
+    val privatePlaces by c.local.privatePlaces.collectAsState(initial = emptyList())
+    // Reloaded when a draft goes out (sent from the queue or from the flow).
+    LaunchedEffect(drafts.size) { places = runCatching { c.repo.contributedPlaces() }.getOrDefault(places ?: emptyList()) }
     val points = user?.points ?: 0
 
     Column(Modifier.fillMaxSize().background(col.background).windowInsetsPadding(WindowInsets.statusBars)) {
@@ -103,20 +109,30 @@ fun ContributionsScreen(c: AppContainer, cvm: ContributeViewModel, vm: MainViewM
         if (tab == 0 && places == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp), color = col.brand, trackColor = col.surfaceAlt)
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             when (tab) {
-                0 -> items(places.orEmpty(), key = { it.id }) { p ->
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(col.surface).clickable { vm.showPlace(p) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(col.brandMist), contentAlignment = Alignment.Center) { CategoryGlyph(p.category, 30.dp) }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(p.name, fontWeight = FontWeight.Black, fontSize = 17.sp, color = col.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(stringResource(R.string.review_count, p.reviewCount), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = col.textMuted)
+                // C3 "My places": every place I added, wherever it is (server, a draft on this phone, or just for me).
+                0 -> {
+                    items(drafts, key = { "d-" + it.id }) { d ->
+                        val left = d.readyAt()?.let { java.time.Duration.between(java.time.Instant.now(), it).seconds.toInt() }?.takeIf { it > 0 }
+                        MyPlaceRow(d.request.name, d.request.category, MyPlaceStatus.DRAFT, if (d.queued) stringResource(R.string.mp_queued) else null,
+                            next = if (d.queued) null else left?.let { stringResource(R.string.mp_share_in, PlaceGate.minutes(it) ?: 1) } ?: stringResource(R.string.mp_share_now),
+                            onDiscard = { cvm.discardDraft(d.id) }) { cvm.openDraft(d.id) }
+                    }
+                    items(places.orEmpty(), key = { it.id }) { p ->
+                        val st = PlaceGate.myStatus(p)
+                        val next = when (st) {
+                            MyPlaceStatus.LIVE_UNVERIFIED, MyPlaceStatus.WAITING -> PlaceGate.progress(p)?.let { (n, of) -> stringResource(R.string.mp_x_of_y, n, of) }
+                            MyPlaceStatus.HELD -> stringResource(R.string.mp_within_24h)
+                            MyPlaceStatus.NOT_ACCEPTED -> stringResource(if (p.screening?.canAppeal == true) R.string.mp_ask_review else R.string.mp_review_closed)
+                            MyPlaceStatus.HIDDEN -> stringResource(R.string.mp_moderator)
+                            else -> null
                         }
-                        val published = p.status == "published" && !p.heldForReview
-                        // Held for a moderator (docs/safety.md): "Sedang disemak", whatever the status says.
-                        if (p.heldForReview) HeldChip()
-                        else Text(stringResource(if (published) R.string.status_published else R.string.status_pending),
-                            Modifier.clip(RoundedCornerShape(999.dp)).background(if (published) Color(0xFFDDF4F2) else Color(0xFFFFF1CC)).padding(horizontal = 10.dp, vertical = 4.dp),
-                            fontSize = 12.sp, fontWeight = FontWeight.Black, color = if (published) Color(0xFF0E5A54) else Color(0xFF7A5200))
+                        // The check's results open their screen (appeal, edit, keep it just for me); the rest open the place.
+                        MyPlaceRow(p.name, p.category, st, null, next) {
+                            if (st == MyPlaceStatus.NOT_ACCEPTED || st == MyPlaceStatus.HELD || st == MyPlaceStatus.CHECKING) cvm.openResult(p.id, p) else vm.showPlace(p)
+                        }
+                    }
+                    items(privatePlaces, key = { "p-" + it.id }) { e ->
+                        MyPlaceRow(stringResource(R.string.mp_just_for_me_name, e.name), e.category, MyPlaceStatus.JUST_FOR_ME, null, stringResource(R.string.mp_private_next)) { vm.showPrivate(e.id) }
                     }
                 }
                 1 -> items(reviewNames) { (name, held) ->
@@ -141,6 +157,45 @@ private fun Stat(icon: String, value: String, label: String, modifier: Modifier)
         GIcon(icon, null, size = 30.dp)
         Text(value, fontSize = 20.sp, fontWeight = FontWeight.Black, color = c.text)
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = c.textMuted, maxLines = 1)
+    }
+}
+
+/** One row of My places (design C3): category, name, status chip, and what happens next on the right. */
+@Composable
+private fun MyPlaceRow(name: String, category: String, status: MyPlaceStatus, statusText: String?, next: String?, onDiscard: (() -> Unit)? = null, onClick: () -> Unit) {
+    val col = Gimano.colors
+    val (bg, fg) = when (status) {
+        MyPlaceStatus.COMMUNITY_VERIFIED -> (if (col.isDark) Color(0xFF123B33) else Color(0xFFDDF4F2)) to (if (col.isDark) Color(0xFF7FE0C2) else Color(0xFF0B3D2E))
+        MyPlaceStatus.LIVE_UNVERIFIED, MyPlaceStatus.WAITING -> (if (col.isDark) Color(0xFF3A2E12) else Color(0xFFFFF1CC)) to (if (col.isDark) Color(0xFFFFD98A) else Color(0xFF7A5200))
+        MyPlaceStatus.HELD, MyPlaceStatus.CHECKING -> col.brandMist to col.brandInk
+        MyPlaceStatus.DRAFT, MyPlaceStatus.JUST_FOR_ME -> col.surfaceAlt to col.textMuted
+        MyPlaceStatus.NOT_ACCEPTED, MyPlaceStatus.HIDDEN, MyPlaceStatus.EXPIRED, MyPlaceStatus.CLOSED -> col.reportTint to col.report
+    }
+    val label = statusText ?: stringResource(when (status) {
+        MyPlaceStatus.COMMUNITY_VERIFIED -> R.string.mp_verified
+        MyPlaceStatus.LIVE_UNVERIFIED -> R.string.mp_live
+        MyPlaceStatus.WAITING -> R.string.mp_waiting
+        MyPlaceStatus.CHECKING -> R.string.mp_checking
+        MyPlaceStatus.HELD -> R.string.mp_held
+        MyPlaceStatus.NOT_ACCEPTED -> R.string.mp_not_accepted
+        MyPlaceStatus.HIDDEN -> R.string.mp_hidden
+        MyPlaceStatus.EXPIRED -> R.string.mp_expired
+        MyPlaceStatus.CLOSED -> R.string.mp_closed
+        MyPlaceStatus.DRAFT -> R.string.mp_draft
+        MyPlaceStatus.JUST_FOR_ME -> R.string.mp_private
+    })
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(col.surface).clickable(onClick = onClick).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(col.brandMist), contentAlignment = Alignment.Center) { CategoryGlyph(category, 30.dp) }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(name, fontWeight = FontWeight.Black, fontSize = 17.sp, color = col.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(label, Modifier.padding(top = 4.dp).clip(RoundedCornerShape(999.dp)).background(bg).padding(horizontal = 10.dp, vertical = 4.dp),
+                fontSize = 12.sp, fontWeight = FontWeight.Black, color = fg)
+        }
+        if (next != null) Text(next, Modifier.padding(start = 8.dp), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = col.textMuted)
+        if (onDiscard != null) IconButton(onClick = onDiscard) {
+            Icon(androidx.compose.material.icons.Icons.Filled.Delete, stringResource(R.string.mp_discard_draft), tint = col.textMuted)
+        }
     }
 }
 

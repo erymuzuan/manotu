@@ -85,7 +85,8 @@ class SwitchingRepository(
             remote.block()
         } catch (e: retrofit2.HttpException) {
             // docs/api.md: a moderator-banned account gets 403 on every public contribution. Say so plainly (once).
-            if (e.code() == 403) Moderation.reportBanned()
+            // 403 `adding_paused` (3 places not accepted in 24 h) is not a ban: the add-a-place flow explains it (B5).
+            if (e.code() == 403 && !Moderation.isAddingPaused(e)) Moderation.reportBanned()
             // docs/api.md "Restricted areas": 422 restricted_area carries a localized detail the UI shows as is.
             RestrictedAreaException.from(e)?.let { throw it }
             throw e
@@ -126,6 +127,9 @@ class SwitchingRepository(
     override suspend fun flagPlace(placeId: String, reason: String) = write { flagPlace(placeId, reason) }
     override suspend fun sendCrashReport(body: CrashReportRequest) = write { sendCrashReport(body) }
     override suspend fun createPlace(body: CreatePlaceRequest) = write { createPlace(body) }
+    override suspend fun updatePlace(placeId: String, body: CreatePlaceRequest) = write { updatePlace(placeId, body) }
+    override suspend fun deletePlace(placeId: String) = write { deletePlace(placeId) }
+    override suspend fun appealPlace(placeId: String, note: String?) = write { appealPlace(placeId, note) }
     override suspend fun suggestEdit(placeId: String, body: SuggestEditRequest) = write { suggestEdit(placeId, body) }
     override suspend fun verifyPlace(placeId: String, body: VerifyRequest, ts: Long?) = write { verifyPlace(placeId, body, ts) }
     override suspend fun pendingNearby(cell: String) = pick { pendingNearby(cell) }
