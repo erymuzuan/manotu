@@ -135,6 +135,8 @@ class CarSearchScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
 /** Route choice: up to 3 routes, "Tanpa tol" / "Tol RM 2.10"; "Mula" starts the drive. */
 class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: NavDestination) : Screen(s.carContext) {
     private var failed = false
+    /** The preview this screen published (selection changes copy it, keeping [CarPreview.owner]). */
+    private var mine: CarPreview? = null
 
     init {
         lifecycleScope.launch {
@@ -142,19 +144,20 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
             if (here == null) { CarToast.makeText(carContext, s.str(R.string.car_no_location), CarToast.LENGTH_LONG).show(); failed = true; invalidate(); return@launch }
             val req = RouteRequest(LatLngDto(here.lat, here.lng), dest.toDto(), vehicle = s.c.settings.current.vehicle, alternatives = 2)
             val routes = runCatching { s.c.repo.routes(req) }.getOrDefault(emptyList()).take(CarRules.MAX_ROUTES)
-            if (routes.isEmpty()) failed = true else s.preview.value = CarPreview(dest, req, routes)
+            if (routes.isEmpty()) failed = true else s.preview.value = CarPreview(dest, req, routes).also { mine = it }
             invalidate()
         }
         lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
             override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
-                if (s.preview.value?.destination == dest && !s.c.navigation.state.value.active) s.preview.value = null
+                // Only this screen's own preview: a later screen to the same place must keep its routes (seen on the DHU).
+                if (s.preview.value?.let { it === mine || it.owner === mine } == true && !s.c.navigation.state.value.active) s.preview.value = null
             }
         })
     }
 
     override fun onGetTemplate(): Template {
         val b = RoutePreviewNavigationTemplate.Builder().setTitle(dest.name).setHeaderAction(Action.BACK)
-        val p = s.preview.value?.takeIf { it.destination == dest }
+        val p = s.preview.value?.takeIf { it === mine || (mine != null && it.owner === mine) }
         if (p == null) {
             if (!failed) return b.setLoading(true).build()
             return MessageTemplate.Builder(s.str(R.string.car_no_route)).setTitle(dest.name).setHeaderAction(Action.BACK).build()
@@ -165,10 +168,10 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
             val title = android.text.SpannableString("  ·  ${Formatters.distance(r.distanceM)}")
             title.setSpan(androidx.car.app.model.DurationSpan.create(r.effectiveDurationS.toLong()), 0, 1, android.text.Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             items.addItem(Row.Builder().setTitle(title)
-                .addText(listOf(CarRules.tollLabel(r, s.lang), r.summary).filter { it.isNotBlank() }.joinToString(" · ")).build())
+                .addText(listOfNotNull(CarRules.tollLabel(r, s.lang), CarRules.shortVia(r.summary, s.lang)).joinToString(" · ")).build())
         }
         items.setSelectedIndex(p.selected)
-        items.setOnSelectedListener { i -> s.preview.value = s.preview.value?.copy(selected = i); invalidate() }
+        items.setOnSelectedListener { i -> s.preview.value = s.preview.value?.select(i); invalidate() }
         return b.setItemList(items.build())
             .setNavigateAction(Action.Builder().setTitle(s.str(R.string.car_go)).setOnClickListener { s.start(s.preview.value ?: p) }.build())
             .build()
@@ -301,7 +304,7 @@ class CarReportScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
         when {
             p == null -> s.toast(s.str(R.string.report_needs_location))
             // docs/safety.md §4 / driving.md §5: refused inside a restricted area, and nothing is sent.
-            s.c.restricted.zone(p) == RestrictedZone.BLOCKED -> CarToast.makeText(carContext, s.str(R.string.restricted_report_blocked), CarToast.LENGTH_SHORT).show()
+            s.c.restricted.zone(p) == RestrictedZone.BLOCKED -> CarToast.makeText(carContext, s.str(R.string.restricted_report_blocked), CarToast.LENGTH_LONG).show()
             !s.c.terms.accepted() -> s.toast(s.str(R.string.car_open_phone))
             else -> s.c.scope.launch {
                 val ok = runCatching { s.c.repo.createReport(CreateReportRequest(type, null, p.lat, p.lng, fix.bearing?.toDouble(), null)) }

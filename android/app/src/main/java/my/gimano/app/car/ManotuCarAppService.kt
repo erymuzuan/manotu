@@ -63,7 +63,12 @@ class ManotuCarAppService : CarAppService() {
 }
 
 /** A route choice on the car: up to 3 routes to [destination], [selected] drawn on top. */
-data class CarPreview(val destination: NavDestination, val request: RouteRequest, val routes: List<Route>, val selected: Int = 0)
+data class CarPreview(val destination: NavDestination, val request: RouteRequest, val routes: List<Route>, val selected: Int = 0) {
+    /** The preview as first published by its screen; a selection change is a copy with the same owner. */
+    var owner: CarPreview? = null
+        private set
+    fun select(i: Int) = copy(selected = i).also { it.owner = owner ?: this }
+}
 
 class ManotuCarSession : Session() {
     lateinit var c: AppContainer
@@ -78,6 +83,7 @@ class ManotuCarSession : Session() {
     private val stillThere = StillThereGate()
     private val odometer = Odometer()
     private var navigating = false
+    private var alertsTrip: String? = null
     private var homeCamera = false
     private var navScreen: CarNavigationScreen? = null
 
@@ -203,8 +209,9 @@ class ManotuCarSession : Session() {
     private var lastPreviewKey: Any? = null
     private var lastPreviewCamera: CameraCommand? = null
     private fun previewCamera(p: CarPreview, all: List<GeoPoint>): CameraCommand? {
-        val key = p.routes.map { it.id }
-        if (key == lastPreviewKey) return lastPreviewCamera
+        // Fit once per published preview (not per route ids: the same trip planned again reuses them).
+        val key = p.owner ?: p
+        if (key === lastPreviewKey) return lastPreviewCamera
         lastPreviewKey = key
         // The route list card covers the left of the car screen: fit the routes to the right of it.
         lastPreviewCamera = CameraCommand.Fit(all + p.destination.point, topDp = 40, bottomDp = 30, sideDp = 40)
@@ -216,7 +223,6 @@ class ManotuCarSession : Session() {
         if (n.active && !navigating) {
             navigating = true
             homeCamera = false
-            tollAlerts.reset(); tinjauAlerts.reset(); stillThere.reset(); odometer.reset()
             runCatching { navManager.navigationStarted() }
             preview.value = null
             if (screens.top !is CarNavigationScreen) screens.push(navigationScreen())
@@ -227,6 +233,12 @@ class ManotuCarSession : Session() {
             homeCamera = false
         }
         if (!n.active) return
+        // Once-per-drive alerts restart with every new trip, also when a drive replaces another without ending
+        // (seen on the DHU: a re-planned drive never asked "Masih ada?" again). An added stop keeps the trip.
+        if (n.tripId != alertsTrip) {
+            alertsTrip = n.tripId
+            tollAlerts.reset(); tinjauAlerts.reset(); stillThere.reset(); odometer.reset()
+        }
         navScreen?.onNav(n)
         if (n.arrived) return
         // Toll ahead: an 8 s alert without buttons (the voice is the phone's, through the car audio, once).

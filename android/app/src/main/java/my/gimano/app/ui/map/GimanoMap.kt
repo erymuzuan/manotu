@@ -330,6 +330,8 @@ fun GimanoMap(
     LaunchedEffect(camera?.id, handle.ready) {
         val map = handle.map ?: return@LaunchedEffect
         val cmd = camera ?: return@LaunchedEffect
+        // A new map (the car surface is recreated on every template change) has no size yet: a fit before layout is lost.
+        while (mapView.width == 0 || mapView.height == 0) kotlinx.coroutines.delay(16)
         applyCamera(map, cmd, density, bottomInsetDp, topInsetDp, startInsetDp)
     }
     // When the covered area changes (home sheet appears / grows, place card swiped), shift the view so its centre
@@ -337,6 +339,12 @@ fun GimanoMap(
     LaunchedEffect(bottomInsetDp, topInsetDp, startInsetDp, focus, handle.ready) {
         val map = handle.map ?: return@LaunchedEffect
         if (camera is CameraCommand.Follow || drive != null) return@LaunchedEffect
+        // A fit already accounts for the covered areas: re-fit with the new insets (a padding animation would cancel it).
+        if (camera is CameraCommand.Fit) {
+            while (mapView.width == 0 || mapView.height == 0) kotlinx.coroutines.delay(16)
+            applyCamera(map, camera, density, bottomInsetDp, topInsetDp, startInsetDp)
+            return@LaunchedEffect
+        }
         val top = (topInsetDp * density.density).toDouble()
         val bottom = (bottomInsetDp * density.density).toDouble()
         val start = (startInsetDp * density.density).toDouble()

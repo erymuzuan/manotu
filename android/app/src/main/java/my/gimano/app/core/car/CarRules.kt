@@ -15,6 +15,19 @@ object CarRules {
     const val STILL_THERE_WITHIN_M = 800.0
     const val TOLL_ALERT_MS = 8_000L
 
+    /**
+     * Short "via" for a car row: the road refs of the summary ("Via E11, E6"), else its first part, at most 28 chars.
+     * The full summary wraps over four lines on a car screen and pushes the other routes out of view.
+     */
+    fun shortVia(summary: String, lang: Lang): String? {
+        val refs = Regex("""\b[A-Z]{1,3}\d{1,4}\b""").findAll(summary).map { it.value }.distinct().take(3).toList()
+        val via = if (lang == Lang.MS) "Melalui " else "Via "
+        if (refs.isNotEmpty()) return via + refs.joinToString(", ")
+        val first = summary.removePrefix("Via ").removePrefix("Melalui ").substringBefore(",").trim()
+        if (first.isEmpty()) return null
+        return via + if (first.length > 28) first.take(27).trimEnd() + "…" else first
+    }
+
     /** Route choice row: "Tanpa tol" / "Tol RM 2.10" / "Tol dari RM 1.60" / "Tol". */
     fun tollLabel(route: Route, lang: Lang): String {
         val ms = lang == Lang.MS
