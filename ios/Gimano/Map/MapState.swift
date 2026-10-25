@@ -46,6 +46,8 @@ final class MapState {
     @ObservationIgnored var motion: DriveMotion?
     var routes: [RouteLine] = []
     var destination: LatLng?
+    /// Dotted last metres of the shown route: route end → entrance (blue), entrance → pin (grey).
+    var lastMetres = LastMetres()
     /// Toll plazas on the shown route (docs/driving.md §1: plaza icon along the route).
     var tolls: [LatLng] = []
     var alerts: [Report] = []

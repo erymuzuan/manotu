@@ -156,7 +156,8 @@ struct DriveView: View {
                 .animation(.snappy, value: nav.approachingAlert?.id)
 
                 if nav.arrived {
-                    ArrivedCard(destination: nav.destination, onDone: { model.stopNavigation() },
+                    ArrivedCard(destination: nav.destination, info: nav.arrivalInfo, onDone: { model.stopNavigation() },
+                                onWrongEntrance: nav.canReportWrongEntrance ? { model.reportWrongEntrance() } : nil,
                                 onName: nav.destination.isPin ? {
                                     let d = nav.destination
                                     model.stopNavigation()
@@ -502,7 +503,11 @@ struct AlertDetailSheet: View {
 
 struct ArrivedCard: View {
     let destination: Destination
+    /// "Main entrance on your left · 25 m from the road".
+    var info: ArrivalInfo? = nil
     let onDone: () -> Void
+    /// "Wrong entrance?": the existing place_entrance_wrong flow (place destinations only).
+    var onWrongEntrance: (() -> Void)? = nil
     /// Arrived at a point chosen on the map: offer once to name (save) it on this phone.
     var onName: (() -> Void)? = nil
 
@@ -511,12 +516,37 @@ struct ArrivedCard: View {
             Image(systemName: "flag.checkered.circle.fill").font(.system(size: 54)).foregroundStyle(Color.brand)
             Text("You've arrived").font(Tokens.Font.title)
             Text(destination.name).font(Tokens.Font.body).foregroundStyle(Color.textMuted)
+            if let info {
+                HStack(spacing: 10) {
+                    Image(systemName: info.side == .left ? "arrow.turn.up.left" : "arrow.turn.up.right")
+                        .font(.system(size: 18, weight: .heavy))
+                        .foregroundStyle(Color.brand)
+                        .frame(width: 40, height: 40)
+                        .background(Color.brandMist, in: Circle())
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(info.sideText).font(Tokens.Font.bodyBold)
+                        Text(info.distanceText).font(Tokens.Font.caption).foregroundStyle(Color.textMuted)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(12)
+                .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: Tokens.Radius.md, style: .continuous))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("arrivalSide")
+            }
             if let onName {
                 Button(action: onName) { Label("Name this place?", systemImage: "star") }
                     .buttonStyle(SecondaryButtonStyle())
                     .accessibilityIdentifier("namePinPlace")
             }
-            Button("Done", action: onDone).buttonStyle(PrimaryButtonStyle())
+            HStack(spacing: 10) {
+                if let onWrongEntrance {
+                    Button("Wrong entrance?", action: onWrongEntrance)
+                        .buttonStyle(SecondaryButtonStyle())
+                        .accessibilityIdentifier("wrongEntrance")
+                }
+                Button("Done", action: onDone).buttonStyle(PrimaryButtonStyle())
+            }
         }
         .padding(24)
         .frame(maxWidth: .infinity)

@@ -12,6 +12,10 @@ final class NavigationSession {
     private(set) var fix: LocationFix?
     private(set) var isRerouting = false
     private(set) var arrived = false
+    /// Which side the entrance (or the place) is on at the route end, and how far from the road (docs/driving.md §4).
+    private(set) var arrivalInfo: ArrivalInfo?
+    /// Dotted last metres: route end → entrance → pin.
+    private(set) var lastMetres = LastMetres()
     private(set) var approachingAlert: AlertOnRoute?
     /// The toll plaza on the "toll ahead" banner (docs/driving.md §1); stays 10 s after passing it.
     private(set) var tollAhead: RouteToll?
@@ -76,6 +80,21 @@ final class NavigationSession {
         self.stopTracker = StopTracker(schedule: StopSchedule.make(route: route, stops: stops.map(\.location)), stopCount: stops.count)
         self.stopArrivals = Self.arrivalLabels(maneuvers: tracker.maneuvers, stops: stops)
         self.tollTotals = Self.totals(route: route, paidBefore: 0, paidNow: 0)
+        updateArrivalGeometry()
+    }
+
+    /// "Wrong entrance?" applies to a server place (not a dropped pin, a "Just for me" place or a demo route).
+    var canReportWrongEntrance: Bool {
+        guard let id = destination.placeId, route.demoNote == nil, !destination.isPin else { return false }
+        return !id.hasPrefix("pin:") && !id.hasPrefix(PrivatePlace.idPrefix) && !id.hasPrefix("demo:")
+    }
+
+    /// The route ends at `route.arrival` (the entrance) when the server routed there; the pin is the destination.
+    private func updateArrivalGeometry() {
+        // A substituted demo route ends at its own captured destination: no entrance line to the requested place.
+        let pin: LatLng? = route.demoNote == nil ? destination.location : nil
+        lastMetres = LastMetres.make(routeEnd: tracker.geometry.points.last, arrival: route.arrival?.location, pin: pin)
+        arrivalInfo = pin.flatMap { ArrivalInfo.make(geometry: tracker.geometry, arrival: route.arrival, pin: $0) }
     }
 
     static func totals(route: Route, paidBefore: Double, paidNow: Double) -> TollTotals {
@@ -156,9 +175,13 @@ final class NavigationSession {
             send(batch)
         }
 
-        if p.arrived, onRoute {
+        // Arrived: ≤ 30 m left along the route (on it), or ≤ 40 m from the pin, whichever comes first.
+        let toPin = route.demoNote == nil ? Geo.distance(fix.coordinate, destination.location) : nil
+        if ArrivalRule.arrived(remainingM: p.remainingM, onRoute: onRoute, distanceToPinM: toPin) {
             arrived = true
-            voice.speak(String(localized: "You have arrived at \(destination.name)"))
+            motion.arrive()
+            let side = arrivalInfo.map { ". \($0.sideText)" } ?? ""
+            voice.speak(String(localized: "You have arrived at \(destination.name)") + side)
             arrivedTask?.cancel()
             send(batcher.drain())
             return
@@ -233,6 +256,7 @@ final class NavigationSession {
                                   paidMyr: tollTracker.paidMyr)
         tollAhead = nil
         motion.setRoute(r, geometry: tracker.geometry)
+        updateArrivalGeometry()
         tollTotals = Self.totals(route: r, paidBefore: tollsPaidBeforeRoute, paidNow: tollTracker.paidMyr)
         stopTracker = StopTracker(schedule: StopSchedule.make(route: r, stops: stops.map(\.location)), stopCount: stops.count)
         stopArrivals = Self.arrivalLabels(maneuvers: tracker.maneuvers, stops: stops)

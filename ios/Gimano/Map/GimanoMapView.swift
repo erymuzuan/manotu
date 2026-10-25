@@ -56,6 +56,7 @@ struct GimanoMapView: UIViewRepresentable {
         private var lastRestrictedRevision = -1
         private var lastDestination: LatLng?
         private var lastTolls: [LatLng] = []
+        private var lastLastMetres = LastMetres()
         private var lastPuckMove = Date.distantPast
         private var lastHomeInset: Double = 0
         private var lastPlaceInset: Double = 0
@@ -84,6 +85,7 @@ struct GimanoMapView: UIViewRepresentable {
             let restrictedRevision = state.restrictedRevision
             let destination = state.destination
             let tolls = state.tolls
+            let lastMetres = state.lastMetres
             let puck = state.puck
             let heading = state.puckHeading
             let accuracy = state.puckAccuracyM
@@ -109,6 +111,7 @@ struct GimanoMapView: UIViewRepresentable {
             if restrictedRevision != lastRestrictedRevision { updateRestricted(state.restrictedAreas); lastRestrictedRevision = restrictedRevision }
             if destination != lastDestination { updateDestination(destination, style: style); lastDestination = destination }
             if tolls != lastTolls { updatePoints(tolls, source: "tolls"); lastTolls = tolls }
+            if lastMetres != lastLastMetres { updateLastMetres(lastMetres); lastLastMetres = lastMetres }
             syncDisplayLink()
             if !isDrivenByMotion {
                 updatePuck(puck, heading: heading, nav: navPuck, style: style)
@@ -362,7 +365,8 @@ struct GimanoMapView: UIViewRepresentable {
             let puck = MLNShapeSource(identifier: "puck", shape: nil)
             let priv = MLNShapeSource(identifier: "private", shape: nil)
             let tolls = MLNShapeSource(identifier: "tolls", shape: nil)
-            [jams, alt, sel, traffic, dest, alerts, drivers, puck, priv, tolls].forEach { style.addSource($0) }
+            let lastM = MLNShapeSource(identifier: "last-metres", shape: nil)
+            [jams, alt, sel, traffic, dest, alerts, drivers, puck, priv, tolls, lastM].forEach { style.addSource($0) }
 
             for level in 1...4 {
                 style.addLayer(lineLayer("jam-\(level)", source: jams, color: Tokens.Palette.traffic(level: level), width: 5, opacity: 0.8,
@@ -375,6 +379,14 @@ struct GimanoMapView: UIViewRepresentable {
             for level in 1...4 {
                 style.addLayer(lineLayer("route-traffic-\(level)", source: traffic, color: Tokens.Palette.traffic(level: level), width: 9,
                                          predicate: NSPredicate(format: "level == %d", level)))
+            }
+
+            // Last metres: round dots (zero-length dashes with round caps), blue to the entrance, grey on to the pin.
+            for (id, color) in [("blue", Tokens.Palette.routeActive.resolvedColor(with: traits)), ("grey", UIColor(hex: 0x8A94A6))] {
+                let dots = lineLayer("last-metres-\(id)", source: lastM, color: color, width: 5,
+                                     predicate: NSPredicate(format: "kind == %@", id))
+                dots.lineDashPattern = NSExpression(forConstantValue: [0, 2])
+                style.addLayer(dots)
             }
 
             let driverLayer = MLNSymbolStyleLayer(identifier: "drivers", source: drivers)
@@ -431,7 +443,7 @@ struct GimanoMapView: UIViewRepresentable {
             style.addLayer(puckLayer)
 
             lastRoutes = []; lastJams = []; lastAlerts = []; lastDrivers = []; lastDestination = nil; lastPrivate = []; lastRestrictedRevision = -1
-            lastTolls = []
+            lastTolls = []; lastLastMetres = LastMetres()
             appliedCameraRevision = -1
             apply()
         }
@@ -492,6 +504,13 @@ struct GimanoMapView: UIViewRepresentable {
                 return f
             }
             source("private")?.shape = MLNShapeCollectionFeature(shapes: features)
+        }
+
+        private func updateLastMetres(_ m: LastMetres) {
+            var lines: [MLNPolylineFeature] = []
+            if m.blue.count > 1 { lines.append(polyline(m.blue, attrs: ["kind": "blue"])) }
+            if m.grey.count > 1 { lines.append(polyline(m.grey, attrs: ["kind": "grey"])) }
+            source("last-metres")?.shape = lines.isEmpty ? nil : MLNShapeCollectionFeature(shapes: lines)
         }
 
         private func updatePoints(_ pts: [LatLng], source id: String) {

@@ -889,20 +889,29 @@ final class AppModel {
             }
             map.bubbleAnchors = Self.bubbleAnchors(for: planner.routes.map { ($0.id, Polyline.decode($0.polyline)) })
             map.tolls = (planner.selected?.tolls ?? []).map { LatLng(lat: $0.lat, lng: $0.lng) }
+            if let r = planner.selected, r.demoNote == nil {
+                map.lastMetres = LastMetres.make(routeEnd: Polyline.decode(r.polyline).last, arrival: r.arrival?.location,
+                                                 pin: planner.destination.location)
+            } else {
+                map.lastMetres = LastMetres()
+            }
         case .navigating:
             guard let nav = navigation else { break }
             map.tolls = nav.tollTracker.tolls.map { LatLng(lat: $0.plaza.lat, lng: $0.plaza.lng) }
+            map.lastMetres = nav.lastMetres
             map.routes = [RouteLine(id: nav.route.id, points: nav.geometry.points, selected: true, traffic: nav.route.trafficSegments ?? [])]
             map.destination = nav.route.demoNote != nil ? (nav.geometry.points.last ?? nav.destination.location) : nav.destination.location
             map.bubbleAnchors = [:]
         case .place(let p):
             map.routes = []
             map.tolls = []
+            map.lastMetres = LastMetres()
             map.destination = p.location
             map.bubbleAnchors = [:]
         default:
             map.routes = []
             map.tolls = []
+            map.lastMetres = LastMetres()
             map.destination = nil
             map.bubbleAnchors = [:]
         }
@@ -1335,6 +1344,18 @@ final class AppModel {
         guard let planner else { return }
         planner.ignoredIssues.insert(issue.id)
         Task { await fetchRoutes() }
+    }
+
+    /// "Wrong entrance?" on the arrival card: ends the drive and opens the existing `place_entrance_wrong` flow (move the
+    /// pin to where the entrance really is).
+    func reportWrongEntrance() {
+        guard let nav = navigation, let placeId = nav.destination.placeId, !placeId.hasPrefix("pin:"),
+              !placeId.hasPrefix(PrivatePlace.idPrefix) else { return }
+        let pin = nav.destination.location
+        let start = nav.route.arrival?.location ?? pin
+        stopNavigation()
+        entrancePlace = (placeId, pin)
+        startPinPick(.placeEntrance, start: start)
     }
 
     func stopNavigation() {

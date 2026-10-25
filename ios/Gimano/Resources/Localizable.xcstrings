@@ -11,6 +11,16 @@
         }
       }
     },
+    "%@ from the road" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ dari jalan"
+          }
+        }
+      }
+    },
     "%@ from you" : {
       "localizations" : {
         "ms" : {
@@ -3889,6 +3899,26 @@
         }
       }
     },
+    "Entrance on your left" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pintu masuk di sebelah kiri"
+          }
+        }
+      }
+    },
+    "Entrance on your right" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pintu masuk di sebelah kanan"
+          }
+        }
+      }
+    },
     "Entrance or parking wrong" : {
       "localizations" : {
         "ms" : {
@@ -5864,6 +5894,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dibuat pada"
+          }
+        }
+      }
+    },
+    "Main entrance on your left" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pintu masuk utama di sebelah kiri"
+          }
+        }
+      }
+    },
+    "Main entrance on your right" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pintu masuk utama di sebelah kanan"
           }
         }
       }
@@ -11242,6 +11292,26 @@
         }
       }
     },
+    "The place is on your left" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat ini di sebelah kiri"
+          }
+        }
+      }
+    },
+    "The place is on your right" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat ini di sebelah kanan"
+          }
+        }
+      }
+    },
     "The plan has changed" : {
       "localizations" : {
         "ms" : {
@@ -12856,6 +12926,16 @@
         }
       }
     },
+    "Wrong entrance?" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pintu masuk salah?"
+          }
+        }
+      }
+    },
     "Wrong passphrase." : {
       "localizations" : {
         "ms" : {
@@ -13051,7 +13131,7 @@
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Anda telah tiba"
+            "value" : "Anda sudah tiba"
           }
         }
       }

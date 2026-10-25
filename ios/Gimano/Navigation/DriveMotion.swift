@@ -57,6 +57,7 @@ final class DriveMotion {
     @ObservationIgnored private var maneuverAlongs: [Double]
     @ObservationIgnored private var lastFrame: (t: Double, frame: DriveFrame)?
     @ObservationIgnored private var hasFix = false
+    @ObservationIgnored private(set) var hasArrived = false
 
     init(route: Route, geometry: RouteGeometry) {
         self.geometry = geometry
@@ -96,6 +97,7 @@ final class DriveMotion {
             heading.target = c
         }
 
+        guard !hasArrived else { return }
         let target = controller.update(CameraModeController.Input(now: fix.timestamp, speedKmh: fix.speedKmh, alongM: along,
                                                                   nextManeuverAlongM: next, lastManeuverAlongM: last, problems: problems))
         zoom.set(target.zoom, over: target.easeS, at: t)
@@ -109,6 +111,17 @@ final class DriveMotion {
             if let problem { onTinjau?(problem, problem.bannerText(distanceM: max(0, problem.startAlongM - along))) }
         }
         if let problem { tinjauDistanceM = max(0, problem.startAlongM - along) }
+    }
+
+    /// Arrived: the arrow moves up the screen (above the arrival card) and the camera closes in on the entrance.
+    func arrive() {
+        guard !hasArrived else { return }
+        hasArrived = true
+        let t = clock()
+        zoom.set(17.6, over: 1.5, at: t)
+        pitch.set(40, over: 1.5, at: t)
+        puckY.set(0.34, over: 1.5, at: t)
+        tinjauProblem = nil
     }
 
     /// The frame to draw at monotonic time `t` (cached for a second map drawing the same frame).
