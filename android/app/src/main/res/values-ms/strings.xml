@@ -1300,4 +1300,6 @@
     <string name="qr_close">Tutup pilihan laporan</string>
     <string name="report_fab_desc">Lapor. Tekan lama untuk pilihan pantas.</string>
     <string name="report_rate_limited">Terlalu banyak laporan. Cuba lagi sebentar lagi.</string>
+    <string name="place_link_unavailable">Tempat ini tidak dapat dibuka. Semak sambungan anda atau cuba lagi nanti.</string>
+    <string name="place_link_finish_drive">Tamatkan perjalanan anda sebelum membuka tempat yang dikongsi.</string>
 </resources>

@@ -15303,6 +15303,26 @@
           }
         }
       }
+    },
+    "Could not open this place. Check your connection or try again later." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat ini tidak dapat dibuka. Semak sambungan anda atau cuba lagi nanti."
+          }
+        }
+      }
+    },
+    "Finish your drive before opening a shared place." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tamatkan perjalanan anda sebelum membuka tempat yang dikongsi."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

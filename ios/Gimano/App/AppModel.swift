@@ -1016,6 +1016,31 @@ final class AppModel {
         }
     }
 
+    @ObservationIgnored private var placeLinkTask: Task<Void, Never>?
+
+    @discardableResult
+    func openPlaceLink(_ url: URL) -> Bool {
+        guard let id = PlaceLink.parse(url) else { return false }
+        placeLinkTask?.cancel()
+        placeLinkTask = Task { [weak self] in
+            guard let self else { return }
+            guard screen != .navigating else {
+                showToast(String(localized: "Finish your drive before opening a shared place."))
+                return
+            }
+            do {
+                let place = try await repo.place(id: id, near: nil)
+                try Task.checkCancellation()
+                if screen != .navigating { openPlace(place.summary) }
+            } catch is CancellationError {
+                return
+            } catch {
+                if !Task.isCancelled { showToast(String(localized: "Could not open this place. Check your connection or try again later.")) }
+            }
+        }
+        return true
+    }
+
     func openPlace(_ p: PlaceSummary) {
         go(.place(p))
     }

@@ -1309,4 +1309,6 @@
     <string name="qr_close">Close report options</string>
     <string name="report_fab_desc">Report. Hold for quick report options.</string>
     <string name="report_rate_limited">Too many reports. Try again in a while.</string>
+    <string name="place_link_unavailable">Could not open this place. Check your connection or try again later.</string>
+    <string name="place_link_finish_drive">Finish your drive before opening a shared place.</string>
 </resources>

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -1278,6 +1279,27 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
     }
 
     // --- Place card -------------------------------------------------------------------------
+
+    private var placeLinkJob: kotlinx.coroutines.Job? = null
+
+    fun openPlaceLink(id: String) {
+        placeLinkJob?.cancel()
+        placeLinkJob = viewModelScope.launch {
+            if (nav.value.active) {
+                _events.emit(UiEvent.Toast(R.string.place_link_finish_drive))
+                return@launch
+            }
+            try {
+                val place = repo.place(id)
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                if (!nav.value.active) showPlace(place.summary())
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _events.emit(UiEvent.Toast(R.string.place_link_unavailable))
+            }
+        }
+    }
 
     fun showPlace(p: PlaceSummary) {
         val savedId = _ui.value.saved.firstOrNull { (it.placeId != null && it.placeId == p.id) || (GeoMath.distanceM(GeoPoint(it.lat, it.lng), GeoPoint(p.lat, p.lng)) < 15) }?.id

@@ -38,6 +38,7 @@
 		1EAFFEBE1469CC11F939CF75 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 2E8135A9B3B01C9F1BAC02CD /* Localizable.xcstrings */; };
 		21F53C814B4D840037955B17 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 3F15E288221AA3BECD1A4EC0 /* InfoPlist.xcstrings */; };
 		24FAF0844856C0523CDC2C5B /* negative-bad-signature.json in Resources */ = {isa = PBXBuildFile; fileRef = 10AA21DC87B7FF32492B1428 /* negative-bad-signature.json */; };
+		2598F8213FDF754A20640295 /* PlaceLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 630F684524E4758850D7B4FA /* PlaceLink.swift */; };
 		26661DE9BEC534AA68B52D83 /* PolylineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3820150BB82A2510C4945B2 /* PolylineTests.swift */; };
 		29575FD027DAA9EE93013315 /* Nunito.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 28F8D8E468983421C5B7ED97 /* Nunito.ttf */; };
 		298D71CFB6D7F0FA0EBA14D6 /* DemoAndReviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B61FA022B75DA0086D56060A /* DemoAndReviewTests.swift */; };
@@ -86,6 +87,7 @@
 		5C3885CE7CD643A9755AC644 /* DriveArrivalUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0CC37010D41A0E3C3B38C7D /* DriveArrivalUITests.swift */; };
 		5CB53D739BEF05FA73922890 /* SafetyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 865EC25B2240C53478B6EC65 /* SafetyViews.swift */; };
 		5F1EA50718464D9E6D649C99 /* VettingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A2809B4A861031AAB5862D /* VettingTests.swift */; };
+		60D8A4128A1DA6E36F1E6444 /* PlaceLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B8349E784F345FBF3196366 /* PlaceLinkTests.swift */; };
 		614D045FAF8AA500E4F66BF4 /* FindingPlacesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5960D200AFAFCFB933F4A293 /* FindingPlacesUITests.swift */; };
 		658D6AEB5A770EBA24F9DEDA /* ProdUserUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0238A1CD728A2F2D9CBDD03 /* ProdUserUITests.swift */; };
 		66F1A2BF8F235AE1F95CFA4A /* Geo.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0CAAB16AB2BC4F7F3A4DEA /* Geo.swift */; };
@@ -315,6 +317,7 @@
 		6023B07BB4A55205325F42E2 /* import-stops-only-sequence.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "import-stops-only-sequence.json"; sourceTree = "<group>"; };
 		61ABE43688D60686AFC62829 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		61F9650C9BBD9D64137581D9 /* EventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStore.swift; sourceTree = "<group>"; };
+		630F684524E4758850D7B4FA /* PlaceLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceLink.swift; sourceTree = "<group>"; };
 		65D4E9385585AAD1B4B63291 /* GimanoUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = GimanoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		66FF5166D9C11F68A7EFD5F6 /* SearchLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchLogicTests.swift; sourceTree = "<group>"; };
 		6CB95316F13D494A4B61DC61 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
@@ -330,6 +333,7 @@
 		783F86BAB563808E89DF6AD6 /* Community.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Community.swift; sourceTree = "<group>"; };
 		790E9A86B3CD8058FC123078 /* RouteOriginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteOriginTests.swift; sourceTree = "<group>"; };
 		7B55A4599161B413898B803D /* SafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyTests.swift; sourceTree = "<group>"; };
+		7B8349E784F345FBF3196366 /* PlaceLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceLinkTests.swift; sourceTree = "<group>"; };
 		7C47FE94945188AC3C750DE0 /* VoiceGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceGuide.swift; sourceTree = "<group>"; };
 		7CCD7755F233520667D922F4 /* MapState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapState.swift; sourceTree = "<group>"; };
 		7DC0C241B3E142FFDC4652B9 /* FlatIconData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlatIconData.swift; sourceTree = "<group>"; };
@@ -587,6 +591,7 @@
 			children = (
 				15D166F80F9F3A6ACB804638 /* Issues.swift */,
 				4D9A99725AFCF5CA1B28EB82 /* Models.swift */,
+				630F684524E4758850D7B4FA /* PlaceLink.swift */,
 				5916B174831C704E0FDA2144 /* ReportCatalog.swift */,
 			);
 			path = Models;
@@ -654,6 +659,7 @@
 				1C4DB04186BD2AE95335FA52 /* PersonalRouteTests.swift */,
 				3EB1195B33BE0861CC3B8188 /* PhotoPrivacyTests.swift */,
 				8F80C78F3101B2C2AE7A35FB /* PlaceCardTests.swift */,
+				7B8349E784F345FBF3196366 /* PlaceLinkTests.swift */,
 				A27E86E151EC912063DD181D /* PlannedDrivePrivacyTests.swift */,
 				290AD2E4977FFEDB651E4762 /* PlannedDriveTests.swift */,
 				E3820150BB82A2510C4945B2 /* PolylineTests.swift */,
@@ -1154,6 +1160,7 @@
 				86CDC74911E0D574086736E7 /* PersonalRouteTests.swift in Sources */,
 				29B0A4A29D75F3B988CACC6A /* PhotoPrivacyTests.swift in Sources */,
 				DA112C0CBF28A294057DD3D6 /* PlaceCardTests.swift in Sources */,
+				60D8A4128A1DA6E36F1E6444 /* PlaceLinkTests.swift in Sources */,
 				41894C17F9B8C24CDB9F93F9 /* PlannedDrivePrivacyTests.swift in Sources */,
 				534C137ABCED2AB78A8DF771 /* PlannedDriveTests.swift in Sources */,
 				26661DE9BEC534AA68B52D83 /* PolylineTests.swift in Sources */,
@@ -1247,6 +1254,7 @@
 				31BE3362F4ED79E4F09F6835 /* PersonalRoutes.swift in Sources */,
 				A743FC4E64E6778479FBD0EF /* PlaceCardMetrics.swift in Sources */,
 				0A3A0E4E9C3E8F453862E0AA /* PlaceCardView.swift in Sources */,
+				2598F8213FDF754A20640295 /* PlaceLink.swift in Sources */,
 				9B1881F81CE1327DEDC2B2DC /* PlannedDrives.swift in Sources */,
 				923C38259DAA5E15A0F5E112 /* PlannedDrivesView.swift in Sources */,
 				1411F07311E084B2270AD2FE /* Polyline.swift in Sources */,

@@ -83,6 +83,13 @@ class MainActivity : AppCompatActivity() {
         } else null
         if (i.action != Intent.ACTION_VIEW && sent == null) return
         val uri = sent ?: i.data ?: return
+        if (sent == null) {
+            my.gimano.app.core.links.PlaceLink.parse(uri.toString())?.let { id ->
+                vm.openPlaceLink(id)
+                i.data = null
+                return
+            }
+        }
         val importer = (application as GimanoApp).container.eventImporter
         when (uri.scheme?.lowercase()) {
             // `manotu://event?drop=<id>#<secret>` (§5.6) is fetched; `manotu://event#1.…` opens directly (§5.3).

@@ -77,11 +77,12 @@ struct GimanoApp: App {
                 }
                 // Universal Links (https://manotu.app/j/#…, /a/#…), when the Associated Domains entitlement is on.
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-                    if let url = activity.webpageURL { model.events.handleIncoming(url: url) }
+                    if let url = activity.webpageURL, !model.openPlaceLink(url) { model.events.handleIncoming(url: url) }
                 }
                 .onOpenURL { url in
                     // Google sign-in redirects exist only in builds with Drive backup (GIMANO_DRIVE = YES).
                     if GoogleDriveBackupDestination.isEnabled && GIDSignIn.sharedInstance.handle(url) { return }
+                    if model.openPlaceLink(url) { return }
                     // Event invitations: manotu://event#…, manotu://event?drop=…#…, gimano://event#…, …/a/#1.… and …/j/#…
                     // links, and .manotu-event files.
                     if model.events.handleIncoming(url: url) { return }
