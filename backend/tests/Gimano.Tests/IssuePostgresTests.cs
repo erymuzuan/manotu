@@ -535,4 +535,52 @@ public sealed class PostgresIntegrationIssueTests : IAsyncLifetime
             Assert.Equal(PlaceStatus.Hidden, (await db.CommunityPlaces.FirstAsync(x => x.Id == fine.Id)).Status);
         }
     }
+
+    // Quick-report Undo (docs/driving.md §6.4).
+    [Fact]
+    public async Task Undo_withdraws_your_own_quick_report_or_your_merged_confirmation_within_two_minutes()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var users = await SeedAsync(3);
+        var clock = new MutableClock(T0);
+        ReportService Svc(GimanoDbContext db) => new(db, new Bus(), new GeoLookup(db, new Gimano.Api.Live.DriverSnapshotStore(clock), clock), clock,
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            new RestrictedAreaService(db, new()));
+        var req = new CreateReportRequest(ReportType.Hazard, null, Lat, Lng, 0, null);
+
+        Guid first;
+        await using (var db = NewDb()) first = (await Svc(db).CreateAsync(users[0].Id, req, default)).Report.Id;
+        bool merged;
+        await using (var db = NewDb()) merged = (await Svc(db).CreateAsync(users[1].Id, req, default)).Merged;
+        Assert.True(merged);   // same type, same place and heading: becomes a confirmation of the first
+
+        await using (var db = NewDb()) await Svc(db).RetractAsync(first, users[1].Id, default);
+        await using (var db = NewDb())
+        {
+            var r = await db.Reports.FirstAsync(x => x.Id == first);
+            Assert.Equal((ReportStatus.Active, 0), (r.Status, r.Confirmations));
+            Assert.False(await db.ReportVotes.AnyAsync(v => v.ReportId == first && v.UserId == users[1].Id));
+            await Assert.ThrowsAsync<ForbiddenException>(() => Svc(db).RetractAsync(first, users[2].Id, default));
+        }
+
+        clock.Now = T0.AddMinutes(1);
+        await using (var db = NewDb()) await Svc(db).RetractAsync(first, users[0].Id, default);
+        await using (var db = NewDb())
+        {
+            Assert.Equal(ReportStatus.Expired, (await db.Reports.FirstAsync(x => x.Id == first)).Status);
+            Assert.Equal(0, (await db.Users.FirstAsync(u => u.Id == users[0].Id)).Points);
+        }
+
+        // After the window it can't be undone.
+        Guid late;
+        await using (var db = NewDb()) late = (await Svc(db).CreateAsync(users[2].Id, req with { Lat = Lat + 0.01 }, default)).Report.Id;
+        clock.Now = T0.AddMinutes(4);
+        await using (var db = NewDb()) await Assert.ThrowsAsync<ConflictException>(() => Svc(db).RetractAsync(late, users[2].Id, default));
+    }
+
+    private sealed class MutableClock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
 }

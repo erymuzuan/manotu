@@ -559,6 +559,8 @@ POST /reports
 
 POST /reports/{id}/votes     {"stillThere": true}   → Report
 POST /reports/{id}/thanks                           → 204
+DELETE /reports/{id}   (signed)                     → 204   Undo within 2 min (docs/driving.md §6.4): withdraws your own
+                                                    report, or your confirmation when yours was merged into it; later 409
 ```
 
 Privacy: about an hour after a report expires, it is **unlinked from its reporter** (`reportedBy` becomes "Pemandu

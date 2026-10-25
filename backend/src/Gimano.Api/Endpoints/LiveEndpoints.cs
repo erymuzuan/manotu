@@ -26,6 +26,8 @@ public static class LiveEndpoints
         reports.MapPost("", CreateReport).RequireSignature();
         reports.MapPost("/{id:guid}/votes", Vote).RequireSignature();
         reports.MapPost("/{id:guid}/thanks", Thank);
+        reports.MapDelete("/{id:guid}", Retract).RequireSignature()
+            .WithSummary("Undo a quick report within 2 minutes: withdraws your own report, or your confirmation when it was merged into another.");
 
         api.MapPost("/locations", Locations).WithTags("Live").RequireAuthorization();
         return api;
@@ -60,6 +62,12 @@ public static class LiveEndpoints
 
     private static async Task<Ok<ReportDto>> Vote(Guid id, VoteRequest req, HttpContext http, ReportService svc, CancellationToken ct) =>
         TypedResults.Ok(await svc.VoteAsync(id, http.User.RequiredUserId(), req.StillThere, ct));
+
+    private static async Task<NoContent> Retract(Guid id, HttpContext http, ReportService svc, CancellationToken ct)
+    {
+        await svc.RetractAsync(id, http.User.RequiredUserId(), ct);
+        return TypedResults.NoContent();
+    }
 
     private static async Task<NoContent> Thank(Guid id, HttpContext http, ReportService svc, CancellationToken ct)
     {

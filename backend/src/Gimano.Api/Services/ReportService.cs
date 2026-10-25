@@ -72,6 +72,36 @@ public sealed class ReportService(GimanoDbContext db, IEventPublisher bus, GeoLo
         return (dto, false);
     }
 
+    /// <summary>"Undo" right after a quick report (docs/driving.md §6.4): within <see cref="UndoWindow"/>, the reporter's own
+    /// report is withdrawn (expired now, points taken back), or, when their report was merged into an existing one, their
+    /// vote on it is removed. Later: 409.</summary>
+    public static readonly TimeSpan UndoWindow = TimeSpan.FromMinutes(2);
+
+    public async Task RetractAsync(Guid reportId, Guid userId, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == reportId, ct) ?? throw new NotFoundException($"Report {reportId} not found.");
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct) ?? throw new UnauthorizedAccessException("This account was deleted.");
+        if (report.ReporterId == userId)
+        {
+            if (now - report.CreatedAt > UndoWindow) throw new ConflictException("This report can no longer be undone.");
+            if (report.Status == ReportStatus.Expired) return;
+            report.Status = ReportStatus.Expired;
+            report.ExpiresAt = now;
+            user.Points = Math.Max(0, user.Points - AlertRules.Points.NewReport);
+            await db.SaveChangesAsync(ct);
+            await bus.PublishAsync(RoutingKeys.ReportExpired, new ReportExpiredEvent(reportId), ct);
+            return;
+        }
+        var vote = await db.ReportVotes.FindAsync([reportId, userId], ct) ?? throw new ForbiddenException("Only your own report or confirmation can be undone.");
+        if (now - vote.CreatedAt > UndoWindow) throw new ConflictException("This report can no longer be undone.");
+        db.ReportVotes.Remove(vote);
+        if (vote.StillThere) report.Confirmations = Math.Max(0, report.Confirmations - 1);
+        user.Points = Math.Max(0, user.Points - AlertRules.Points.Vote);
+        await db.SaveChangesAsync(ct);
+        await bus.PublishAsync(RoutingKeys.ReportUpdated, report.ToDto(), ct);
+    }
+
     public async Task<ReportDto> VoteAsync(Guid reportId, Guid userId, bool stillThere, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
