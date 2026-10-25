@@ -365,7 +365,7 @@ private fun applyCamera(map: MapLibreMap, cmd: CameraCommand, density: Density, 
             val bounds = LatLngBounds.Builder().includes(cmd.points.map { LatLng(it.lat, it.lng) }).build()
             val side = px(cmd.sideDp).toInt()
             map.animateCamera(
-                CameraUpdateFactory.newLatLngBounds(bounds, 0.0, 0.0, side, px(cmd.topDp).toInt(), side, px(cmd.bottomDp).toInt()),
+                CameraUpdateFactory.newLatLngBounds(bounds, 0.0, 0.0, cmd.startDp?.let { px(it).toInt() } ?: side, px(cmd.topDp).toInt(), side, px(cmd.bottomDp).toInt()),
                 800,
             )
         }

@@ -276,6 +276,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
     // Declared before the init block: refreshAccount() starts in init and can reach migrateLegacy() without
     // suspending (demo data answers at once), so the lock must already exist (startup NPE in 0.3.1-dev).
     private val migrationLock = kotlinx.coroutines.sync.Mutex()
+    private var navSeenActive = false
     val container: AppContainer get() = c
     private val repo = c.repo
     private val local = c.local
@@ -330,6 +331,11 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                     pinDestination = null
                     _ui.update { it.copy(namePin = s.destination) }
                 }
+                // A drive started on the car screen (Android Auto) while the phone shows the map: show it here too.
+                if (s.active && !navSeenActive && _ui.value.screen == Screen.Home) {
+                    _ui.update { it.copy(screen = Screen.Navigating, following = true, navExpanded = false) }
+                }
+                navSeenActive = s.active
                 // The camera follows the puck on every frame in the map (DriveRenderer, docs/driving.md §2–3): no
                 // camera commands per fix, which fought the puck.
             }

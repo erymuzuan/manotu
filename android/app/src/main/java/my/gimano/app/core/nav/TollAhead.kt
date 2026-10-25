@@ -65,11 +65,17 @@ class TollTracker(val plazas: List<TollOnRoute>) {
     private val triggered = HashSet<Int>()
     private val passedAt = HashMap<Int, Long>()
     private var paid = 0.0
+    private var first = true
 
     val paidMyr: Double get() = paid
 
     fun update(alongM: Double, speedKmh: Double, nowMs: Long): Update {
         var speak: TollOnRoute? = null
+        if (first) {
+            first = false
+            // Plazas already behind at the first fix were not driven through on this route: not paid, not announced.
+            plazas.forEachIndexed { i, t -> if (t.alongM < alongM - BEHIND_AT_START_M) { passedAt[i] = Long.MIN_VALUE / 2; triggered += i } }
+        }
         plazas.forEachIndexed { i, t ->
             val ahead = t.alongM - alongM
             if (ahead <= 0 && i !in passedAt) {
@@ -97,6 +103,7 @@ class TollTracker(val plazas: List<TollOnRoute>) {
         const val TRIGGER_SLOW_M = 500.0
         const val SLOW_KMH = 60.0
         const val HIDE_AFTER_PASS_MS = 10_000L
+        const val BEHIND_AT_START_M = 50.0
 
         fun triggerM(speedKmh: Double) = if (speedKmh < SLOW_KMH) TRIGGER_SLOW_M else TRIGGER_M
     }

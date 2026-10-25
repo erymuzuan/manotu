@@ -95,6 +95,15 @@ class TollAheadTest {
         assertNull(t.update(5_300.0, 100.0, now + 11_000).speak)
     }
 
+    @Test fun plazasBehindTheFirstFixAreNeitherPaidNorAnnounced() {
+        val t = TollTracker(TollAlong.place(listOf(entry, sungaiBesi, unknown), geometry))
+        val u = t.update(5_500.0, 100.0, 0)
+        assertEquals(0.0, u.paidMyr, 1e-9)
+        assertNull(u.speak)
+        assertNull(u.banner)
+        assertEquals("the next one still counts", "n3", t.update(7_100.0, 100.0, 1_000).speak?.plaza?.plazaId)
+    }
+
     @Test fun runningTotalCountsOnlyPassedPlazas() {
         val t = TollTracker(TollAlong.place(listOf(entry, sungaiBesi, unknown), geometry))
         assertEquals(0.0, t.update(1_000.0, 90.0, 0).paidMyr, 1e-9)

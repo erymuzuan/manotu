@@ -281,6 +281,8 @@ dependencies {
     implementation(libs.androidx.biometric)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    // Android Auto (docs/driving.md §5): navigation-category car app, drawn on the car surface by our own map.
+    implementation(libs.androidx.car.app)
     implementation(libs.lazysodium.android) { exclude(group = "net.java.dev.jna") }
     implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
 

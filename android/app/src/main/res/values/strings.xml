@@ -1279,4 +1279,20 @@
     <string name="flag_sensitive">Sensitive or security location</string>
     <string name="flag_sensitive_desc">A military or strategic site, a shelter, a private home, or details such as guards and CCTV. Hidden at once while it\'s checked.</string>
     <string name="safety_debug_reset">Reset safety (debug)</string>
+    <!-- Android Auto (docs/driving.md §5) -->
+    <string name="car_open_phone">Open Manotu on your phone to start</string>
+    <string name="car_got_it">Got it</string>
+    <string name="car_where_to">Where to?</string>
+    <string name="car_search">Search</string>
+    <string name="car_home">Home</string>
+    <string name="car_work">Work</string>
+    <string name="car_nothing_saved">No saved places or recent trips on this phone yet</string>
+    <string name="car_go">Go</string>
+    <string name="car_no_location">Your location isn\'t known yet</string>
+    <string name="car_no_route">No route found</string>
+    <string name="car_report">Report</string>
+    <string name="car_end">End</string>
+    <string name="car_still_there">Still there?</string>
+    <string name="car_yes">Yes</string>
+    <string name="car_gone">Gone</string>
 </resources>

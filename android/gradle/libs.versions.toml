@@ -24,6 +24,7 @@ playServicesAuth = "21.4.0"
 playIntegrity = "1.4.0"
 biometric = "1.1.0"
 coil = "3.3.0"
+carApp = "1.7.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -66,6 +67,7 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
 play-integrity = { module = "com.google.android.play:integrity", version.ref = "playIntegrity" }
 androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
+androidx-car-app = { module = "androidx.car.app:app", version.ref = "carApp" }
 xerial-sqlite = { module = "org.xerial:sqlite-jdbc", version = "3.49.1.0" }
 
 [plugins]
