@@ -80,7 +80,8 @@ public sealed class ReportService(GimanoDbContext db, IEventPublisher bus, GeoLo
     public async Task RetractAsync(Guid reportId, Guid userId, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == reportId, ct) ?? throw new NotFoundException($"Report {reportId} not found.");
+        var report = await db.Reports.Include(r => r.Reporter).FirstOrDefaultAsync(r => r.Id == reportId, ct)
+                     ?? throw new NotFoundException($"Report {reportId} not found.");
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct) ?? throw new UnauthorizedAccessException("This account was deleted.");
         if (report.ReporterId == userId)
         {
@@ -96,7 +97,12 @@ public sealed class ReportService(GimanoDbContext db, IEventPublisher bus, GeoLo
         var vote = await db.ReportVotes.FindAsync([reportId, userId], ct) ?? throw new ForbiddenException("Only your own report or confirmation can be undone.");
         if (now - vote.CreatedAt > UndoWindow) throw new ConflictException("This report can no longer be undone.");
         db.ReportVotes.Remove(vote);
-        if (vote.StillThere) report.Confirmations = Math.Max(0, report.Confirmations - 1);
+        if (vote.StillThere)
+        {
+            report.Confirmations = Math.Max(0, report.Confirmations - 1);
+            // The reporter was credited for this confirmation; take it back with the vote.
+            if (report.Reporter is not null) report.Reporter.Points = Math.Max(0, report.Reporter.Points - AlertRules.Points.Confirmed);
+        }
         user.Points = Math.Max(0, user.Points - AlertRules.Points.Vote);
         await db.SaveChangesAsync(ct);
         await bus.PublishAsync(RoutingKeys.ReportUpdated, report.ToDto(), ct);
