@@ -81,12 +81,24 @@ class ManotuCarSession : Session() {
     private var homeCamera = false
     private var navScreen: CarNavigationScreen? = null
 
-    val lang: Lang get() = c.lang()
+    // The app language is a binder call (per-app locales): read it at most every 10 s, never per string.
+    private var langAt = 0L
+    private var langCached: Lang = Lang.EN
+    private var res: Pair<Lang, android.content.res.Resources>? = null
+    val lang: Lang get() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (langAt == 0L || now - langAt > 10_000) { langCached = c.lang(); langAt = now }
+        return langCached
+    }
 
     /** Strings in the app's language (the car context doesn't follow the per-app locale by itself). */
     fun str(id: Int, vararg args: Any): String {
-        val conf = Configuration(carContext.resources.configuration).apply { setLocale(Locale.forLanguageTag(lang.tag)) }
-        return carContext.createConfigurationContext(conf).resources.getString(id, *args)
+        val l = lang
+        val r = res?.takeIf { it.first == l }?.second ?: run {
+            val conf = Configuration(carContext.resources.configuration).apply { setLocale(Locale.forLanguageTag(l.tag)) }
+            carContext.createConfigurationContext(conf).resources.also { res = l to it }
+        }
+        return r.getString(id, *args)
     }
 
     fun agreed(): Boolean = !SafetyAgreement.needsAgreement(c.settings.current.safetyAgreedVersion)
@@ -184,7 +196,7 @@ class ManotuCarSession : Session() {
         val here = l?.point
         return CarMapContent(
             render = MapRenderState(puck = here, puckBearing = l?.bearing ?: 0f, puckAccuracyM = l?.accuracyM?.toDouble(), showDrivers = false),
-            camera = if (here != null && !homeCamera) { homeCamera = true; CameraCommand.MoveTo(here, 15.0) } else surface.content.value.camera.takeUnless { it is CameraCommand.Fit },
+            camera = if (here != null && !homeCamera) { homeCamera = true; CameraCommand.MoveTo(here, 15.0, animate = false) } else surface.content.value.camera.takeUnless { it is CameraCommand.Fit },
         )
     }
 
@@ -195,7 +207,7 @@ class ManotuCarSession : Session() {
         if (key == lastPreviewKey) return lastPreviewCamera
         lastPreviewKey = key
         // The route list card covers the left of the car screen: fit the routes to the right of it.
-        lastPreviewCamera = CameraCommand.Fit(all + p.destination.point, topDp = 40, bottomDp = 30, sideDp = 40, startDp = 300)
+        lastPreviewCamera = CameraCommand.Fit(all + p.destination.point, topDp = 40, bottomDp = 30, sideDp = 40)
         return lastPreviewCamera
     }
 

@@ -66,7 +66,8 @@ class CarMapSurface(private val carContext: CarContext, private val c: AppContai
     private var display: VirtualDisplay? = null
     private var presentation: Presentation? = null
     private var owner: SurfaceOwner? = null
-    private val handle = MapHandle()
+    /** A new handle for every surface: the host recreates the surface on template changes, and the old map is gone. */
+    private var handle = MapHandle()
     private var resumeAtMs = 0L
 
     val following: StateFlow<Boolean> = follow
@@ -81,11 +82,12 @@ class CarMapSurface(private val carContext: CarContext, private val c: AppContai
             DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY)
         display = vd
         val o = SurfaceOwner().also { owner = it }
+        val h = MapHandle().also { handle = it }
         presentation = Presentation(carContext, vd.display).apply {
             val view = ComposeView(context).apply {
                 setViewTreeLifecycleOwner(o)
                 setViewTreeSavedStateRegistryOwner(o)
-                setContent { CarMap() }
+                setContent { CarMap(h) }
             }
             setContentView(view)
             show()
@@ -131,7 +133,7 @@ class CarMapSurface(private val carContext: CarContext, private val c: AppContai
     }
 
     @Composable
-    private fun CarMap() {
+    private fun CarMap(handle: MapHandle) {
         val ct by content.collectAsState()
         val f by follow.collectAsState()
         val area by visible.collectAsState()
@@ -156,8 +158,8 @@ class CarMapSurface(private val carContext: CarContext, private val c: AppContai
                     restricted = restricted,
                     drive = if (ct.navigating) renderer else null,
                     driveFollow = f,
-                    driveTopDp = topDp, driveBottomDp = bottomDp,
-                    topInsetDp = topDp, bottomInsetDp = bottomDp,
+                    driveTopDp = topDp, driveBottomDp = bottomDp, driveFrameMs = 50,
+                    topInsetDp = topDp, bottomInsetDp = bottomDp, startInsetDp = startDp,
                 )
                 Column(Modifier.align(Alignment.BottomStart).padding(start = (startDp + 8).dp, bottom = (bottomDp + 6).dp)) {
                     ct.speedKmh?.let { Speedometer(it, null); Spacer(Modifier.height(4.dp)) }
