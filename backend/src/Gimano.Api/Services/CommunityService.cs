@@ -413,7 +413,13 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
     /// <summary>The owner's view, with the AI check's state.</summary>
     private PlaceDto Dto(CommunityPlace p) =>
         PlaceService.ToDto(p, null, null, null, [], TimeZoneInfo.ConvertTime(clock.GetUtcNow(), ValhallaMapper.MalaysiaTime).DateTime)
-            with { Status = p.Status, HeldForReview = p.HeldForReview, Screening = ScreeningDto(p) };
+            with
+            {
+                Status = p.Status, HeldForReview = p.HeldForReview, Screening = ScreeningDto(p),
+                // "Not verified yet · x of y" (design A4), while it waits for confirmations or an audit.
+                ConfirmationsWeighted = p.Status == PlaceStatus.Pending || p.AuditOpen ? Math.Round(p.WeightedYes, 2) : null,
+                Required = p.Status == PlaceStatus.Pending || p.AuditOpen ? RequiredFor(p) : null,
+            };
 
     internal static PlaceScreeningDto ScreeningDto(CommunityPlace p) => new(p.ScreeningState,
         string.IsNullOrEmpty(p.ScreeningReasons) ? [] : p.ScreeningReasons.Split(','),

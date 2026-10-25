@@ -105,6 +105,7 @@ public sealed class PostgresIntegrationAddPlaceTests : IAsyncLifetime
         var dto = await Svc(db, Answer("publish")).CreateAsync(_regular, Req("Gerai Nasi Kerabu Mek Na"), TestContext.Current.CancellationToken);
         Assert.Equal(PlaceStatus.Pending, dto.Status);
         Assert.Equal(ScreeningState.Passed, dto.Screening!.State);
+        Assert.Equal((0d, 1d), (dto.ConfirmationsWeighted, dto.Required));
         var row = await db.CommunityPlaces.AsNoTracking().SingleAsync(p => p.Id == dto.Id, TestContext.Current.CancellationToken);
         Assert.True(row.Listed);
         Assert.Equal(1, row.RequiredConfirmations);

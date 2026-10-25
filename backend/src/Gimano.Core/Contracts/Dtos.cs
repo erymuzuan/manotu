@@ -50,7 +50,8 @@ public sealed record PlaceDto(
     IReadOnlyList<string> Amenities, IReadOnlyDictionary<string, string> Tags, string? OsmType, long? OsmId,
     PlaceSource Source = PlaceSource.Osm, PlaceStatus? Status = null, double? Rating = null, int ReviewCount = 0, string? ThumbnailUrl = null,
     string? Description = null, AddedBy? AddedBy = null, int VerifiedCount = 0, IReadOnlyList<PhotoDto>? Photos = null,
-    PlaceBadge? Badge = null, NavigationPoint? NavigationPoint = null, bool HeldForReview = false, PlaceScreeningDto? Screening = null);
+    PlaceBadge? Badge = null, NavigationPoint? NavigationPoint = null, bool HeldForReview = false, PlaceScreeningDto? Screening = null,
+    double? ConfirmationsWeighted = null, double? Required = null);
 
 /// <summary>
 /// Route here instead of the display pin. source: confirmed (a confirmed place_entrance_wrong, IssueId set), osm_entrance

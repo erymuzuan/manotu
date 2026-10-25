@@ -224,7 +224,8 @@ confirmed is never rejected automatically: a doubtful edit is held. **3 AI rejec
 budget is used up, places follow the plain rules (`screening.state: "skipped"`: `pending`, not listed, 3 confirmations).
 
 The owner's `Place` (POST/PATCH/appeal responses, `GET /me/places/contributed`) carries
-`screening: {state, reasons, canAppeal, appealed}` (absent for other viewers):
+`screening: {state, reasons, canAppeal, appealed}` (absent for other viewers), and while it waits for confirmations
+`confirmationsWeighted` and `required` ("Not verified yet · 0 of 1"):
 
 | `state` | Meaning | App (design) |
 |---|---|---|
