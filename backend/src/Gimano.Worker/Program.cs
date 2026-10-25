@@ -39,4 +39,12 @@ if (builder.Configuration.GetSection(GitHubFeedbackOptions.Section).Get<GitHubFe
     builder.Services.AddHostedService<GitHubFeedbackSink>();
 }
 
+// Daily counts-only email to maintainers + moderation alerts (docs/back-office.md "Maintainer digest"). Off without ACS + recipients.
+builder.Services.Configure<Gimano.Worker.Support.DigestOptions>(builder.Configuration.GetSection(Gimano.Worker.Support.DigestOptions.Section));
+if (builder.Configuration.GetSection(Gimano.Worker.Support.DigestOptions.Section).Get<Gimano.Worker.Support.DigestOptions>() is { Enabled: true })
+{
+    builder.Services.AddSingleton<Gimano.Worker.Support.IMaintainerMailer, Gimano.Worker.Support.AcsMaintainerMailer>();
+    builder.Services.AddHostedService<Gimano.Worker.Support.MaintainerDigestJob>();
+}
+
 builder.Build().Run();

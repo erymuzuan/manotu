@@ -70,7 +70,7 @@ Smoke test from the Mac: `curl http://100.101.150.9:5080/readyz`.
 
 - **WS556 builds the images; WS556-SERVER only deploys.** WS556-SERVER is low on memory, so never build images
   there. WS556 (the bigger box) runs `pwsh deploy/build-push.ps1 -Registry myhiro.azurecr.io` from an up-to-date
-  `master` and pushes `myhiro.azurecr.io/gimano-{api,worker,importer}:<sha>` to ACR. The `docker login` to ACR is
+  `master` and pushes `myhiro.azurecr.io/gimano-{api,worker,importer,backoffice}:<sha>` to ACR. The `docker login` to ACR is
   typed by a person and never stored in the repo or a script.
 - WS556-SERVER, with the **BespokeTech VPN connected** (.150 and .13 are reachable only through it), deploys that
   tag on 172.30.30.150: `pg_dump` first when the release has a migration, `TAG=<sha>` in `deploy/.env.prod`, pull and

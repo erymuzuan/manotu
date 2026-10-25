@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Builds the Gimano images (api, worker, importer) from this checkout and pushes them to Azure Container Registry.
+  Builds the Gimano images (api, worker, importer, backoffice) from this checkout and pushes them to Azure Container Registry.
 
 .DESCRIPTION
   Runs on WS556-SERVER or WS556 (PowerShell 7 + Docker). Must be run from a git checkout.
@@ -19,7 +19,7 @@ param(
     [string]$Tag,
     [switch]$AzLogin,
     [switch]$NoLatest,
-    [string[]]$Images = @('api', 'worker', 'importer')
+    [string[]]$Images = @('api', 'worker', 'importer', 'backoffice')
 )
 $ErrorActionPreference = 'Stop'
 $root = (git rev-parse --show-toplevel).Trim()

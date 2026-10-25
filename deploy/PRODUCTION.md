@@ -129,16 +129,40 @@ cd /opt/gimano && sudo git fetch origin && sudo git checkout --detach <sha>   # 
 # release with a migration: pg_dump first, into /opt/gimano/backups (the daily cron in §6 is not installed yet)
 # after build-push printed a new sha:
 sed -i 's/^TAG=.*/TAG=<sha>/' deploy/.env.prod
-$C pull api worker importer && $C up -d api worker # migrations run on API start; ~5 s of downtime
+$C pull api worker backoffice importer && $C up -d api worker backoffice # migrations run on API start; ~5 s of downtime
 ```
 
 - Toll table changed (`data/tolls/my-toll-rates.csv`): `$C --profile tools run --rm importer --tolls-only`.
 - New OSM data (monthly): download the PBF, run the importer, delete the PBF. Rebuild Valhalla with
   `force_rebuild=True` once, or remove the `gimano_valhalla` volume and restart Valhalla.
 
+### Back office and maintainer digest
+
+The back office (`gimano-backoffice`, Blazor; docs/back-office.md) runs next to the api and is **never published**:
+`BACKOFFICE_BIND` defaults to `127.0.0.1`. Reach it from a maintainer's machine through Tailscale on .150
+(`tailscale serve --bg --https=443 http://127.0.0.1:5090`, which also gives passkeys the HTTPS they need), through an
+SSH tunnel (`ssh -L 5090:127.0.0.1:5090 <user>@172.30.30.150`, with the BespokeTech VPN up), or bind it to an address
+only the VPN reaches. Never bind it to the address IIS ARR publishes.
+
+```bash
+# once: allow the maintainers (comma-separated), start it, then print a one-time registration link (24 h) per person
+sed -i 's/^BACKOFFICE_MAINTAINERS=.*/BACKOFFICE_MAINTAINERS=<email>,<email>/' deploy/.env.prod
+$C pull backoffice && $C up -d backoffice
+$C run --rm backoffice invite <email>
+```
+
+To let Claude Code triage over MCP, also set `AGENT_ADMIN_ENABLED=true` and `AGENT_ADMIN_NETWORKS` to the tailnet
+CIDR, then recreate the api.
+
+The **maintainer digest** (worker) emails counts only (new and untriaged feedback, crash groups, moderation waiting and
+its age) at 08:00 Malaysia time, and sends an alert when a moderation item has waited 20 h. It uses Azure Communication
+Services: put the ACS connection string in `DIGEST_ACS_CONNECTION_STRING` (typed on the server, never committed) and the
+maintainers' addresses in `DIGEST_TO` (comma-separated), then `$C up -d worker`. Empty values keep it off.
+
+
 ## 5. Rollback
 
-Images are immutable per sha. Set `TAG` back to the previous sha and run `$C up -d api worker`. EF migrations only move
+Images are immutable per sha. Set `TAG` back to the previous sha and run `$C up -d api worker backoffice`. EF migrations only move
 forward. If a release added a migration that the old image can't handle, restore the pre-release dump (below) as
 well. Every release that contains a migration should be preceded by a manual `pg_dump`.
 

@@ -192,6 +192,13 @@ services:
       <<: *app-env
       # No GitHub-issue sink in production: feedback is free text a user may fill with personal details, and the privacy
       # policy promises it goes only to us. (The worker also refuses it outside Development unless explicitly allowed.)
+      # Maintainer digest (docs/back-office.md): one counts-only email a day + moderation alerts, through Azure Communication
+      # Services. Off unless both the connection string and a recipient are set.
+      Digest__AcsConnectionString: ${DIGEST_ACS_CONNECTION_STRING:-}
+      Digest__From: ${DIGEST_FROM:-DoNotReply@bukitbunga.com}
+      Digest__To__0: ${DIGEST_TO:-}
+      Digest__SendAtHour: ${DIGEST_SEND_AT_HOUR:-8}
+      Digest__BackOfficeUrl: ${BACKOFFICE_PUBLIC_URL:-http://127.0.0.1:5090}
     volumes: ["media:/data/media"]
     networks: [gimano]
     depends_on:
@@ -199,6 +206,32 @@ services:
     deploy:
       resources:
         limits: { cpus: "2.0", memory: 1536m }   # in-memory road index ≈ 450 MB
+
+  # Maintainer back office (Blazor): feedback, crash groups, replies, agent tokens (docs/back-office.md). Never public:
+  # bind it to 127.0.0.1 (reach it with `tailscale serve` or an SSH tunnel) or to an address only the VPN reaches.
+  backoffice:
+    image: ${REGISTRY:?}/gimano-backoffice:${TAG:?}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      <<: *app-env
+      Urls: "http://+:8080"
+      # Same key as the api: needed to reveal volunteered contacts (with a reason, audited).
+      Feedback__ContactKey: ${FEEDBACK_CONTACT_KEY:?Set FEEDBACK_CONTACT_KEY in deploy/.env.prod}
+      BackOffice__Maintainers__0: ${BACKOFFICE_MAINTAINERS:-}
+      # Shown on "Agent access" as the API address agents use for /mcp (the api as reached over the tailnet).
+      BackOffice__ApiBaseUrl: ${BACKOFFICE_API_BASE_URL:-http://172.30.30.150:5080}
+      # Base of the one-time invite links printed by `run --rm backoffice invite <email>`.
+      BackOffice__PublicUrl: ${BACKOFFICE_PUBLIC_URL:-http://127.0.0.1:5090}
+      DataProtection__KeysPath: /data/keys
+    ports: ["${BACKOFFICE_BIND:-127.0.0.1}:${BACKOFFICE_PORT:-5090}:8080"]
+    volumes: ["backofficekeys:/data/keys"]
+    networks: [gimano]
+    depends_on:
+      api: { condition: service_started }   # the API applies the main EF migrations; the back office migrates only its own schema
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 384m }
 
   importer:
     profiles: ["tools"]
@@ -226,3 +259,4 @@ volumes:
   rabbitdata:
   valhalla:
   media:
+  backofficekeys:   # ASP.NET Data Protection keys for back-office sign-in cookies
