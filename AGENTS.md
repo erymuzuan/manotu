@@ -175,10 +175,8 @@ must be rejected in review.
   and push against `origin/master`. Never recreate `main`.
 - **No pull requests for the owner's own work** (owner's instruction, 25 Oct 2026). When the owner (erymuzuan) asks for
   work to be committed, merge it into `master` and push to `origin/master` yourself. Feature branches for parallel agents
-  are fine, but merge them into `master` when done; don't open a PR and wait. If GitHub rejects the push because the
-  `master` ruleset requires a pull request, open one and merge it straight away with `gh pr merge --merge --admin`, and
-  tell the owner the ruleset still blocks direct pushes. PRs from others (e.g. Codex branches) are merged only when the
-  owner asks.
+  are fine, but merge them into `master` when done; don't open a PR and wait. The `master` ruleset allows direct merge
+  and push (since 25 Oct 2026). PRs from others (e.g. Codex branches) are merged only when the owner asks.
 - No secrets in the repo: `deploy/.env` and `.env*` are git-ignored; JWT key is set per host.
 - OSM data © OpenStreetMap contributors (ODbL) — keep attribution visible in every map view.
 - Clean-room: no third-party navigation app assets/code/copy (see `docs/research/ux-study.md`).
