@@ -161,6 +161,9 @@ services:
       BackOffice__ApiBaseUrl: ${BACKOFFICE_API_BASE_URL:-http://100.101.150.9:5080}
       # Base of the one-time invite links printed by `run --rm backoffice invite <email>`.
       BackOffice__PublicUrl: ${BACKOFFICE_PUBLIC_URL:-http://100.101.150.9:5090}
+      # Dev is reachable only on the tailnet and has no ACS: the emailed sign-in code is off unless ACS is set here.
+      BackOffice__EmailCode__AcsConnectionString: ${DIGEST_ACS_CONNECTION_STRING:-}
+      BackOffice__EmailCode__Required: ${BACKOFFICE_EMAIL_CODE_REQUIRED:-false}
       DataProtection__KeysPath: /data/keys
     ports: ["${BACKOFFICE_PORT:-5090}:8080"]
     volumes: ["backofficekeys:/data/keys"]

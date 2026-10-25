@@ -119,9 +119,8 @@
                 return;
             }
 
-            // This doesn't count login failures towards account lockout
-            // To enable password failures to trigger account lockout, set lockoutOnFailure: true
-            result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+            // Wrong passwords count toward lockout (Lockout:MaxFailedAccessAttempts): the back office is on a public URL.
+            result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: true);
         }
 
         if (result.Succeeded)
@@ -131,8 +130,9 @@
         }
         else if (result.RequiresTwoFactor)
         {
+            // Always, while BackOffice:EmailCode:Required (MaintainerSignInManager): a code is emailed on every sign-in.
             RedirectManager.RedirectTo(
-                "Account/LoginWith2fa",
+                "Account/LoginWithEmailCode",
                 new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
         }
         else if (result.IsLockedOut)

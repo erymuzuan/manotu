@@ -10,7 +10,7 @@ Design canvas: https://claude.ai/artifact/XBcon9bVauxY6gVjBf2Y8T
 ```
 phone ──(consented, scrubbed)──▶ Api /api/v1/feedback, /crash-reports ──▶ Postgres ◀── Worker (retention sweep)
                                                                               ▲
-             maintainer ──(passkey / password + TOTP)──▶ BackOffice (Blazor) ─┤
+             maintainer ──(passkey / password + emailed code)──▶ BackOffice (Blazor) ─┤
                                                                               │
  Claude Code ──(agt_ token, Tailscale)──▶ Api /mcp  (gimano-backoffice MCP) ──┤
                                     └──▶ Api /admin/v1 (REST twin)          ──┘
@@ -84,8 +84,8 @@ A feedback status change (by anyone) puts the standard status notice in the repo
 (`CF-Connecting-IP` / `CF-Ray`). Agents use Tailscale (`http://100.101.150.9:5080`). `Admin:AllowedNetworks`
 (CIDRs) can tighten this further, and `Admin:Enabled=false` turns both endpoints off.
 
-**Production** (`deploy/docker-compose.prod.yml`) runs the back office bound to `127.0.0.1` on .150 (see
-deploy/PRODUCTION.md, "Back office and maintainer digest"). The agent endpoints stay **off** (`Admin__Enabled=false`) until
+**Production** (`deploy/docker-compose.prod.yml`) serves the back office publicly at `https://backoffice.manotu.app` through
+IIS ARR on .13 (see deploy/PRODUCTION.md, "Back office and maintainer digest"); every sign-in needs the emailed code below. The agent endpoints stay **off** (`Admin__Enabled=false`) until
 you turn them on. To enable them, set in `deploy/.env.prod`:
 
 ```
@@ -141,8 +141,16 @@ ASP.NET Core Identity in the `backoffice` schema of the Manotu (`gimano`) databa
 register or stay signed in; removing an email signs that person out on their next request. Changing a password, 2FA or
 passkeys signs the account's other sessions out (Identity security stamp, checked every 30 minutes).
 
-**No self-registration.** There is no mail sender, so email ownership is never proven; instead an account can only be
-created with a **one-time invite** minted on the host for one allowlisted email:
+**Emailed sign-in code, every time.** After the password or passkey, a 6-digit code goes to the maintainer's email through
+Azure Communication Services (`BackOffice:EmailCode:AcsConnectionString`; prod uses `DIGEST_ACS_CONNECTION_STRING`). It is
+Identity's TOTP from the account's security stamp (a 3-minute step, accepted for a few minutes), so a password change voids
+outstanding codes. At most one email per 45 s per account; wrong passwords and wrong codes both count toward the 5-attempt
+lockout; no browser is "remembered". The code is never logged. `BackOffice:EmailCode:Required` (default true) fails closed
+without ACS: nobody can sign in. Dev on the tailnet sets it false (`BACKOFFICE_EMAIL_CODE_REQUIRED`). Code:
+`Components/Account/EmailSignInCode.cs`, page `Account/LoginWithEmailCode`. Registering an invite also ends with a code, which
+proves the address.
+
+**No self-registration.** An account can only be created with a **one-time invite** minted on the host for one allowlisted email:
 
 ```powershell
 docker compose -f deploy/docker-compose.yml run --rm backoffice invite me@example.com

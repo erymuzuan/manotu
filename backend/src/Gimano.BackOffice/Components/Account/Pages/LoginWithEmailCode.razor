@@ -1,0 +1,131 @@
+@page "/Account/LoginWithEmailCode"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using Gimano.BackOffice.Data
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject EmailSignInCodeSender CodeSender
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<LoginWithEmailCode> Logger
+
+<PageTitle>Sign-in code</PageTitle>
+
+<h1>Check your email</h1>
+<hr />
+<StatusMessage Message="@message" />
+<p>@intro</p>
+<div class="row">
+    <div class="col-md-4">
+        <EditForm Model="Input" FormName="login-with-email-code" OnValidSubmit="OnValidSubmitAsync" method="post">
+            <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
+            <input type="hidden" name="RememberMe" value="@RememberMe" />
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert" />
+            <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.Code" id="Input.Code" class="form-control" autocomplete="one-time-code" inputmode="numeric" />
+                <label for="Input.Code" class="form-label">6-digit code</label>
+                <ValidationMessage For="() => Input.Code" class="text-danger" />
+            </div>
+            <div>
+                <button type="submit" class="w-100 btn btn-lg btn-primary">Sign in</button>
+            </div>
+        </EditForm>
+    </div>
+</div>
+<p class="mt-3">
+    No email? Check spam, or <a href="@ResendHref">send a new code</a>.
+</p>
+
+@code {
+    private string? message;
+    private string intro = "";
+    private ApplicationUser user = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    private bool RememberMe { get; set; }
+
+    private string ResendHref =>
+        $"Account/LoginWithEmailCode?ReturnUrl={Uri.EscapeDataString(ReturnUrl ?? "")}&RememberMe={RememberMe}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        // Only after the password or passkey step (the two-factor cookie it leaves); otherwise back to the login page.
+        if (await SignInManager.GetTwoFactorAuthenticationUserAsync() is not { } u)
+        {
+            RedirectManager.RedirectTo("Account/Login");
+            return;
+        }
+        user = u;
+        var masked = Mask(await UserManager.GetEmailAsync(user));
+        intro = $"We sent a 6-digit sign-in code to {masked}. Enter it below.";
+
+        if (!HttpMethods.IsGet(HttpContext.Request.Method)) return;
+        switch (await CodeSender.SendAsync(user, HttpContext.RequestAborted))
+        {
+            case EmailSignInCodeSender.Outcome.Sent:
+                break;
+            case EmailSignInCodeSender.Outcome.TooSoon:
+                intro = $"A code was sent to {masked} less than a minute ago. Enter it below, or wait a moment before asking for a new one.";
+                break;
+            case EmailSignInCodeSender.Outcome.NotConfigured:
+                message = "Error: sign-in codes can't be emailed because no mail service is configured on this server. Ask the operator.";
+                break;
+            default:
+                message = "Error: the email could not be sent. Try again in a minute.";
+                break;
+        }
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        var code = Input.Code!.Replace(" ", string.Empty).Replace("-", string.Empty);
+        // Wrong codes count toward lockout (5 attempts), like a wrong password.
+        var result = await SignInManager.TwoFactorSignInAsync(EmailSignInCodeProvider.Name, code, RememberMe, rememberClient: false);
+        var userId = await UserManager.GetUserIdAsync(user);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("Maintainer {UserId} signed in with an emailed code.", userId);
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("Maintainer {UserId} locked out after wrong sign-in codes.", userId);
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else
+        {
+            Logger.LogWarning("Wrong or expired sign-in code for maintainer {UserId}.", userId);
+            message = "Error: that code is wrong or has expired. Check the latest email, or send a new code.";
+        }
+    }
+
+    /// <summary>"er…n@gmail.com": enough to recognise the address, not to read it off a shoulder-surfed screen.</summary>
+    private static string Mask(string? email)
+    {
+        if (string.IsNullOrEmpty(email) || email.IndexOf('@') is var at && at < 1) return "your email";
+        var name = email[..at];
+        return (name.Length <= 2 ? name[..1] + "…" : name[..2] + "…" + name[^1]) + email[at..];
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [RegularExpression(@"^\s*\d{3}[\s-]?\d{3}\s*$", ErrorMessage = "Enter the 6 digits from the email.")]
+        [Display(Name = "Code")]
+        public string? Code { get; set; }
+    }
+}

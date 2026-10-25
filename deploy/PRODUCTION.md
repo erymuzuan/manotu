@@ -138,11 +138,20 @@ $C pull api worker backoffice importer && $C up -d api worker backoffice # migra
 
 ### Back office and maintainer digest
 
-The back office (`gimano-backoffice`, Blazor; docs/back-office.md) runs next to the api and is **never published**:
-`BACKOFFICE_BIND` defaults to `127.0.0.1`. Reach it from a maintainer's machine through Tailscale on .150
-(`tailscale serve --bg --https=443 http://127.0.0.1:5090`, which also gives passkeys the HTTPS they need), through an
-SSH tunnel (`ssh -L 5090:127.0.0.1:5090 <user>@172.30.30.150`, with the BespokeTech VPN up), or bind it to an address
-only the VPN reaches. Never bind it to the address IIS ARR publishes.
+The back office (`gimano-backoffice`, Blazor; docs/back-office.md) runs next to the api and is public at
+**https://backoffice.manotu.app** (owner's decision, 26 Oct 2026): Cloudflare → IIS ARR on .13 → `172.30.30.150:5090`.
+Every sign-in is password (or passkey) **plus a 6-digit code emailed through ACS** to the maintainer's address; wrong
+passwords and codes count toward a 5-attempt lockout, and only allowlisted, invited emails have accounts. Without
+`DIGEST_ACS_CONNECTION_STRING` nobody can sign in (it fails closed).
+
+- `.env.prod`: `BACKOFFICE_BIND=172.30.30.150`, `BACKOFFICE_PUBLIC_URL=https://backoffice.manotu.app`, `TRUSTED_PROXIES`
+  (already set for the api) so the back office sees https.
+- IIS on .13 (elevated, same script as the api, its own farm and site):
+  `.\gimano-api.ps1 -HostName backoffice.manotu.app -BackendPort 5090 -FarmName gimano-backoffice-docker -PhysicalPath C:\apps\websites\backoffice.manotu.app -CertThumbprint <LE thumbprint>`.
+  Blazor needs WebSockets through ARR and Cloudflare, like `/hubs/live`.
+- Cloudflare (the owner): proxied record `backoffice` → 103.28.91.40, SSL Full (strict).
+- To take it off the internet again: `BACKOFFICE_BIND=127.0.0.1` and `$C up -d backoffice`; then reach it with an SSH
+  tunnel (`ssh -L 5090:127.0.0.1:5090 <user>@172.30.30.150`, VPN up).
 
 ```bash
 # once: allow the maintainers (comma-separated), start it, then print a one-time registration link (24 h) per person

@@ -233,6 +233,11 @@ services:
       # Base of the one-time invite links printed by `run --rm backoffice invite <email>`.
       BackOffice__PublicUrl: ${BACKOFFICE_PUBLIC_URL:-http://127.0.0.1:5090}
       DataProtection__KeysPath: /data/keys
+      # Every sign-in ends with a 6-digit code emailed through ACS (the digest's resource); no ACS = nobody can sign in.
+      BackOffice__EmailCode__AcsConnectionString: ${DIGEST_ACS_CONNECTION_STRING:-}
+      BackOffice__EmailCode__From: ${DIGEST_FROM:-DoNotReply@bukitbunga.com}
+      # Public URL through IIS ARR on .13: trust its X-Forwarded-Proto/For (https for cookies and passkeys).
+      Proxy__TrustedProxies: ${TRUSTED_PROXIES:-}
     ports: ["${BACKOFFICE_BIND:-127.0.0.1}:${BACKOFFICE_PORT:-5090}:8080"]
     volumes: ["backofficekeys:/data/keys"]
     networks: [gimano]

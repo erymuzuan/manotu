@@ -6,6 +6,7 @@ using Gimano.Core.Data;
 using Gimano.Core.Infrastructure;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,6 +31,20 @@ builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuth
 builder.Services.Configure<BackOfficeOptions>(config.GetSection(BackOfficeOptions.Section));
 builder.Services.AddSingleton<MaintainerAllowlist>();
 builder.Services.AddScoped<MaintainerInvites>();
+// Every sign-in ends with a 6-digit code emailed through ACS (Components/Account/EmailSignInCode.cs).
+builder.Services.Configure<EmailCodeOptions>(config.GetSection(EmailCodeOptions.Section));
+builder.Services.AddScoped<EmailSignInCodeSender>();
+
+// Behind IIS ARR on .13 (public URL): trust X-Forwarded-* only from Proxy:TrustedProxies, so cookies and passkeys see https.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    o.KnownProxies.Clear();
+    o.KnownIPNetworks.Clear();
+    foreach (var p in (config["Proxy:TrustedProxies"] ?? "").Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries))
+        if (System.Net.IPAddress.TryParse(p, out var ip)) o.KnownProxies.Add(ip);
+    o.ForwardLimit = 1;
+});
 
 builder.Services.AddAuthentication(options =>
     {
@@ -74,8 +89,9 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
         options.Lockout.MaxFailedAccessAttempts = 5;
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
-    .AddSignInManager()
+    .AddSignInManager<MaintainerSignInManager>()
     .AddDefaultTokenProviders()
+    .AddTokenProvider<EmailSignInCodeProvider>(EmailSignInCodeProvider.Name)
     .AddUserValidator<MaintainerUserValidator>();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
@@ -106,6 +122,8 @@ if (config.GetValue("Database:MigrateOnStartup", true))
     }
     if (app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<BackOfficeOptions>>().Value.Maintainers.Length == 0)
         log.LogWarning("BackOffice:Maintainers is empty: nobody can register or sign in.");
+    if (app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<EmailCodeOptions>>().Value is { Required: true, CanSend: false })
+        log.LogError("BackOffice:EmailCode:AcsConnectionString is not set: sign-in codes can't be emailed, so nobody can sign in.");
     if (!app.Services.GetRequiredService<Gimano.Core.Support.ContactCrypto>().Enabled)
         log.LogWarning("Feedback:ContactKey is not set: contact details cannot be revealed on this host.");
 }
@@ -131,6 +149,7 @@ if (args is ["invite", var inviteEmail, ..])
     }
 }
 
+app.UseForwardedHeaders();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);

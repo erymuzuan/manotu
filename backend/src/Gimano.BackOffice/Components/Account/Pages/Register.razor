@@ -111,8 +111,12 @@
         }
         else
         {
-            await SignInManager.SignInAsync(user, isPersistent: false);
-            RedirectManager.RedirectTo(ReturnUrl);
+            // Through the normal sign-in, so the first visit also needs the emailed code (it proves the address is theirs).
+            var signIn = await SignInManager.PasswordSignInAsync(user.UserName!, Input.Password, isPersistent: false, lockoutOnFailure: true);
+            if (signIn.RequiresTwoFactor)
+                RedirectManager.RedirectTo("Account/LoginWithEmailCode", new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = false });
+            else
+                RedirectManager.RedirectTo(signIn.Succeeded ? ReturnUrl : "Account/Login");
         }
     }
 
