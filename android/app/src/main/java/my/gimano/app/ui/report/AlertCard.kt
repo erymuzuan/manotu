@@ -36,6 +36,36 @@ import java.time.Instant
 fun currentLang(): Lang = Lang.from(androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language)
 
 /**
+ * "Still there?" for a road alert ahead while driving (docs/driving.md §6.1): the same confirm card as "Still closed?"
+ * (10 s ring, three equal 84 dp buttons). [onAnswer]: true = still there, false = gone, null = not sure / timed out
+ * (nothing is sent).
+ */
+@Composable
+fun StillThereCard(report: Report, distanceAheadM: Double?, onAnswer: (Boolean?) -> Unit, modifier: Modifier = Modifier) {
+    val lang = currentLang()
+    val now = remember(report.id) { Instant.now() }
+    val created = Formatters.parseInstant(report.createdAt) ?: now
+    val subtitle = listOfNotNull(
+        Labels.reportTitle(report.type, report.subtype),
+        report.street?.takeIf { it.isNotBlank() },
+        Formatters.reportAge(created, now, lang),
+        distanceAheadM?.let { stringResource(R.string.ahead, Formatters.navDistance(it)) },
+    ).joinToString(" · ")
+    my.gimano.app.ui.common.ConfirmCard(
+        key = report.id,
+        title = stringResource(R.string.still_there),
+        subtitle = subtitle,
+        options = listOf(
+            my.gimano.app.ui.common.ConfirmOption(stringResource(R.string.confirm_still_there), my.gimano.app.ui.common.ConfirmIcons.up, my.gimano.app.ui.common.ConfirmStyle.SOLID) { onAnswer(true) },
+            my.gimano.app.ui.common.ConfirmOption(stringResource(R.string.confirm_gone), my.gimano.app.ui.common.ConfirmIcons.cleared, my.gimano.app.ui.common.ConfirmStyle.PALE) { onAnswer(false) },
+            my.gimano.app.ui.common.ConfirmOption(stringResource(R.string.not_sure), my.gimano.app.ui.common.ConfirmIcons.unsure, my.gimano.app.ui.common.ConfirmStyle.OUTLINED) { onAnswer(null) },
+        ),
+        onTimeout = { onAnswer(null) },
+        modifier = modifier,
+    ) { ReportTile(report.type, 52.dp) }
+}
+
+/**
  * "Still there? / Not there" card for a community report. Shows age, reporter, distance and a
  * shrinking bar for the remaining TTL.
  */

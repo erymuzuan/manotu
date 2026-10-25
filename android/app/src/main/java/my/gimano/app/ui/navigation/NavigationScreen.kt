@@ -35,7 +35,6 @@ import my.gimano.app.nav.NavState
 import my.gimano.app.ui.MainViewModel
 import my.gimano.app.ui.UiState
 import my.gimano.app.ui.common.*
-import my.gimano.app.ui.report.AlertCard
 import my.gimano.app.ui.report.currentLang
 import my.gimano.app.ui.theme.Gimano
 import my.gimano.app.ui.theme.GimanoType
@@ -128,11 +127,10 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
                 Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
             AnimatedVisibility(alert != null && !nav.arrived) {
                 if (alert != null) {
-                    AlertCard(
-                        alert.toReport(), null,
-                        onVote = { v -> vm.vote(alert.toReport(), v) },
-                        onClose = { vm.dismissNavAlert(alert.id) },
-                        distanceAheadM = nav.alertDistanceM?.coerceAtLeast(0.0),
+                    // "Still there?" confirm card (docs/driving.md §6.1): not sure / 10 s timeout = no vote.
+                    my.gimano.app.ui.report.StillThereCard(
+                        alert.toReport(), nav.alertDistanceM?.coerceAtLeast(0.0),
+                        onAnswer = { v -> if (v == null) vm.dismissNavAlert(alert.id) else vm.vote(alert.toReport(), v) },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     )
                 }

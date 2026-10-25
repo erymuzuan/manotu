@@ -1286,4 +1286,18 @@
     <string name="car_still_there">Masih ada?</string>
     <string name="car_yes">Ya</string>
     <string name="car_gone">Tiada</string>
+    <!-- docs/driving.md §6.1 / §6.4 -->
+    <string name="confirm_still_there">Masih ada</string>
+    <string name="confirm_gone">Sudah tiada</string>
+    <string name="qr_hint_title">Leret ke pilihan, lepas untuk lapor</string>
+    <string name="qr_hint_sub">Ketik sahaja = senarai penuh · lepas di luar = batal</string>
+    <string name="qr_release_sub">Lepas untuk lapor di lokasi anda sekarang</string>
+    <string name="qr_reported">%1$s dilaporkan</string>
+    <string name="qr_just_now">baru tadi</string>
+    <string name="qr_undo">Batal</string>
+    <string name="qr_undone">Laporan ditarik balik</string>
+    <string name="qr_undo_failed">Tidak dapat dibatalkan: laporan kekal</string>
+    <string name="qr_close">Tutup pilihan laporan</string>
+    <string name="report_fab_desc">Lapor. Tekan lama untuk pilihan pantas.</string>
+    <string name="report_rate_limited">Terlalu banyak laporan. Cuba lagi sebentar lagi.</string>
 </resources>
