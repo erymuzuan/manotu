@@ -45,11 +45,20 @@ class IssueGate(private val repo: SwitchingRepository) {
         }
     }
 
+    @Volatile private var restricted: String? = null
+
+    /** The server's text when the last [call] was refused in a restricted area (read once). */
+    fun takeRestricted(): String? = restricted.also { restricted = null }
+
     /** Runs [block] when issues are available; null when hidden or the endpoint turned out to be missing. */
     suspend fun <T> call(collection: Boolean = true, block: suspend SwitchingRepository.() -> T): T? {
         if (!_available.value && !repo.isDemo) return null
+        restricted = null
         return try {
             repo.block()
+        } catch (e: my.gimano.app.data.repo.RestrictedAreaException) {
+            restricted = e.detail   // 422 restricted_area: the caller shows the server's own words
+            null
         } catch (e: HttpException) {
             if (collection && IssueSupport.endpointMissing(e.code())) _available.value = false
             // Debug builds only: the server's problem title/errors (validation messages, no request body).

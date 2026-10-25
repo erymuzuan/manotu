@@ -63,8 +63,40 @@ public static class AdminEndpoints
         dev.MapDelete("/issues/{id:guid}", DeleteSeededIssue);
         g.MapPost("/osm-queue/{id:guid}/exported", MarkExported);
         g.MapPost("/search/aliases/reload", (Services.AliasStore store) => TypedResults.Ok(new { rows = store.Reload() }));
+
+        // Curated restricted areas (docs/api.md "Restricted areas"): sites OSM doesn't tag. public=false (shelters, safe
+        // houses) is checked on the server only and never sent to phones. No names are stored.
+        g.MapGet("/restricted-areas", ListCurated);
+        g.MapPost("/restricted-areas", AddCurated);
+        g.MapDelete("/restricted-areas/{id:long}", DeleteCurated);
         return api;
     }
+
+    public sealed record CuratedAreaRequest(IReadOnlyList<double[]> Ring, bool Public);
+    public sealed record CuratedArea(long Id, bool Public, IReadOnlyList<double[]> Ring);
+
+    private static async Task<Ok<List<CuratedArea>>> ListCurated(GimanoDbContext db, CancellationToken ct) =>
+        TypedResults.Ok((await db.RestrictedAreas.AsNoTracking().Where(a => a.Curated).OrderBy(a => a.Id).ToListAsync(ct))
+            .Select(a => new CuratedArea(a.Id, a.Public, a.Geom.ExteriorRing.Coordinates.Select(c => new[] { c.X, c.Y }).ToList())).ToList());
+
+    /// <summary>ring = [[lng, lat], …] (closed or not; at least 3 distinct points).</summary>
+    private static async Task<IResult> AddCurated(CuratedAreaRequest req, GimanoDbContext db, CancellationToken ct)
+    {
+        if (req.Ring is not { Count: >= 3 } || req.Ring.Any(p => p is not { Length: 2 } || !Validation.ValidLatLng(p[1], p[0])))
+            return Validation.Problem("ring", "ring must be at least 3 [lng, lat] points.");
+        var pts = req.Ring.Select(p => new NetTopologySuite.Geometries.Coordinate(p[0], p[1])).ToList();
+        if (!pts[0].Equals2D(pts[^1])) pts.Add(pts[0]);
+        var poly = Gimano.Core.Geo.GeoMath.Factory.CreatePolygon(pts.ToArray());
+        if (!poly.IsValid) return Validation.Problem("ring", "ring must not cross itself.");
+        if (!poly.Shell.IsCCW) poly = (NetTopologySuite.Geometries.Polygon)poly.Reverse();
+        var area = new RestrictedArea { Curated = true, Public = req.Public, Geom = poly };
+        db.RestrictedAreas.Add(area);
+        await db.SaveChangesAsync(ct);
+        return TypedResults.Created($"/api/v1/admin/restricted-areas/{area.Id}", new { id = area.Id });
+    }
+
+    private static async Task<IResult> DeleteCurated(long id, GimanoDbContext db, CancellationToken ct) =>
+        await db.RestrictedAreas.Where(a => a.Id == id && a.Curated).ExecuteDeleteAsync(ct) > 0 ? TypedResults.NoContent() : TypedResults.NotFound();
 
     private static bool TryKind(string? kind, out Services.ModerationKind k) => GimanoJson.TryParseWire(kind ?? "", out k);
 

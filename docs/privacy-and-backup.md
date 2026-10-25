@@ -102,6 +102,10 @@ ISO-8601 UTC. A **Merge** restore keeps this phone's value for a key that exists
 | `blocked_authors` | **one JSON array** `[{"ref": "<authorRef>", "name": "<display name>", "blockedAt": "2026-10-24T03:00:00Z"}]`: contributors the user chose to hide (docs/api.md `authorRef`). On the device only, never sent. No row when nobody is blocked. Readers skip entries without a `ref` (never the whole list). | **union by `ref`** (this phone's entry wins for a ref on both sides) |
 | `community_rules_version` | the community rules version the user accepted (an ISO date, e.g. `2026-10-24`); asked again when the app's version differs | the **later** version wins, together with its date |
 | `community_rules_accepted_at` | when it was accepted (ISO-8601, fractional seconds allowed) | goes with `community_rules_version` |
+| `safety.agreedVersion` | the safety agreement version the user agreed to (integer; docs/safety.md part 1); asked again when the app's version is higher | the **higher** version wins, together with its date |
+| `safety.agreedAt` | when it was agreed (ISO-8601) | goes with `safety.agreedVersion` |
+| `safety.reminderEnabled` | `true` / `false`: the safety card at the start of every drive (docs/safety.md part 2) | this phone wins |
+| `safety.reminderDisabledAt` | when "Jangan tunjuk lagi" or the switch turned it off (ISO-8601) | goes with `safety.reminderEnabled` |
 
 "Delete my Manotu account" with "also clear data on this phone" removes these rows with the rest of the local data.
 

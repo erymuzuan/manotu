@@ -179,6 +179,25 @@ final class AppModel {
     let events: EventCenter
     /// On-device personal data (favourites, recents, private places, settings).
     let store: LocalStore
+    /// Restricted areas + sensitive words (public data from the server, cached in a file; docs/safety.md part 4).
+    let restricted = RestrictedAreaStore()
+    /// Safety agreement + drive reminder (on this phone only; docs/safety.md parts 1–3).
+    private(set) var safety = SafetySettings()
+    /// The full-screen user agreement and why it is open.
+    var safetyAgreement: SafetyAgreementPurpose?
+    /// "Agree first to start driving" (Mula before agreeing).
+    var showNotAgreedSheet = false
+    /// The reminder card over the route preview; guidance starts after its button.
+    var safetyCard: SafetyCardRequest?
+    /// "Drive safely. Obey the traffic laws." for 5 s when navigation starts while moving.
+    private(set) var showSafetyBanner = false
+    /// Sheet D: tapped inside a restricted area on the map.
+    var showRestrictedAreaInfo = false
+    @ObservationIgnored private var safetyBannerTask: Task<Void, Never>?
+    @ObservationIgnored private var launchWaitsForAgreement = false
+    /// DEBUG/UI tests (`-GimanoSkipOnboarding` / `-GimanoSkipSafety`): agreement and reminder are skipped for this
+    /// launch only, without writing anything to the user's settings.
+    @ObservationIgnored private var skipSafetyForTests = false
     let backup: BackupManager
     let feedbackOutbox: FeedbackOutbox
     /// Server-side "My feedback" (merged with the local outbox in the UI).
@@ -218,6 +237,22 @@ final class AppModel {
         if let raw = UserDefaults.standard.string(forKey: "GimanoFakeLocation") {
             let parts = raw.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
             if parts.count == 2 { fixedLocation = LatLng(lat: parts[0], lng: parts[1]); position = fixedLocation! }
+        }
+        #endif
+        safety = SafetySettings(store: store)
+        #if DEBUG
+        let d = UserDefaults.standard
+        skipSafetyForTests = (d.bool(forKey: "GimanoSkipSafety") || d.bool(forKey: "GimanoSkipOnboarding")) && !d.bool(forKey: "GimanoSafetyTest")
+        // `-GimanoResetSafety YES`: "never agreed" + reminder on, touching nothing else (device tests keep the user's data).
+        if d.bool(forKey: "GimanoResetSafety") { safety = SafetySettings(); safety.save(to: store) }
+        // `-GimanoAgreeSafety YES`: agreed now, reminder on (device screenshots of the card without tapping).
+        if d.bool(forKey: "GimanoAgreeSafety") {
+            safety = SafetySettings(); safety.agreedVersion = SafetyPolicy.agreementVersion; safety.agreedAt = .now; safety.save(to: store)
+        }
+        // `-GimanoRestrictedFixture lat,lng`: a 400 m test restricted area there (memory only, DEBUG builds only).
+        if let raw = d.string(forKey: "GimanoRestrictedFixture") {
+            let parts = raw.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+            if parts.count == 2 { restricted.installFixture(around: LatLng(lat: parts[0], lng: parts[1])) }
         }
         #endif
         if let raw = UserDefaults.standard.string(forKey: "travelMode"), let v = Vehicle(rawValue: raw) { vehicle = v }
@@ -273,11 +308,19 @@ final class AppModel {
     // MARK: bootstrap
 
     func bootstrap() async {
-        if location.needsPermission && !UserDefaults.standard.bool(forKey: "onboarding.done") {
-            showOnboarding = true
-        } else {
-            location.start()
+        // The safety agreement comes after the splash and before the location permission prompt (docs/safety.md §1).
+        var launchAgreement = needsSafetyAgreement
+        #if DEBUG
+        // `-GimanoNoLaunchAgreement YES`: stay "not agreed" without the launch screen (device shots of the Go-now sheet).
+        if UserDefaults.standard.bool(forKey: "GimanoNoLaunchAgreement") { launchAgreement = false }
+        #endif
+        if launchAgreement {
+            safetyAgreement = .launch
+            launchWaitsForAgreement = location.needsPermission
         }
+        if !launchWaitsForAgreement { continueLaunch() }
+        syncRestrictedLayer()
+        Task { await refreshRestrictedAreas() }
         map.puck = position
         await refreshUserData()
         #if DEBUG
@@ -314,11 +357,122 @@ final class AppModel {
             showReport = true
         case "menu":
             showMenu = true
+        case "addplace":
+            addPlaceStart = position
+        case "restrictedinfo":
+            showRestrictedAreaInfo = true
         default:
             break
         }
     }
     #endif
+
+    /// Location onboarding / start, once the agreement (if any) is answered.
+    private func continueLaunch() {
+        if location.needsPermission && !UserDefaults.standard.bool(forKey: "onboarding.done") {
+            showOnboarding = true
+        } else {
+            location.start()
+        }
+    }
+
+    // MARK: safety (docs/safety.md parts 1–3)
+
+    var needsSafetyAgreement: Bool { !skipSafetyForTests && !safety.hasAgreed }
+    /// The reminder as it applies to this launch (UI tests skip it).
+    var reminderEnabled: Bool { safety.reminderEnabled && !skipSafetyForTests }
+
+    func answerSafetyAgreement(_ agreed: Bool) {
+        let purpose = safetyAgreement
+        safetyAgreement = nil
+        if agreed {
+            safety.agreedVersion = SafetyPolicy.agreementVersion
+            safety.agreedAt = .now
+            safety.save(to: store)
+        }
+        Task {
+            // Let the full-screen cover finish closing before the next one (onboarding) or navigation.
+            try? await Task.sleep(for: .milliseconds(450))
+            switch purpose {
+            case .launch:
+                if launchWaitsForAgreement { launchWaitsForAgreement = false; continueLaunch() }
+            case .startDriving:
+                if agreed { startNavigation() }
+            case .reread, nil:
+                break
+            }
+        }
+    }
+
+    func setReminderEnabled(_ on: Bool) {
+        safety.reminderEnabled = on
+        safety.reminderDisabledAt = on ? nil : .now
+        safety.save(to: store)
+    }
+
+    /// The card's button: "Got it, start driving" (optionally "Don't show again").
+    func confirmSafetyCard(dontShowAgain: Bool) {
+        safetyCard = nil
+        if dontShowAgain {
+            setReminderEnabled(false)
+            showToast(String(localized: "Turned off. Turn it back on in Settings › Safety."), seconds: 4)
+        }
+        guard planner != nil, navigation == nil, screen == .routePreview else { return }
+        beginNavigation()
+    }
+
+    private func startWithReminder() {
+        guard let planner, let route = planner.selected else { return }
+        let speed: Double? = hasRealFix || isSimulatingDrive || pinnedLocation != nil ? speedKmh : nil
+        switch SafetyPolicy.reminder(enabled: reminderEnabled, speedKmh: speed) {
+        case .none:
+            beginNavigation()
+        case .banner:
+            beginNavigation()
+            flashSafetyBanner()
+        case .card:
+            safetyCard = SafetyCardRequest(destination: planner.destination.name, durationS: route.effectiveDurationS)
+        }
+    }
+
+    private func flashSafetyBanner() {
+        showSafetyBanner = true
+        safetyBannerTask?.cancel()
+        safetyBannerTask = Task {
+            try? await Task.sleep(for: .seconds(SafetyPolicy.bannerSeconds))
+            if !Task.isCancelled { showSafetyBanner = false }
+        }
+    }
+
+    #if DEBUG
+    /// Developer settings: back to "never agreed" + reminder on (the next launch shows the agreement again).
+    func debugResetSafety() {
+        safety = SafetySettings()
+        safety.save(to: store)
+        skipSafetyForTests = false
+        showToast("Safety settings reset")
+    }
+    #endif
+
+    // MARK: restricted areas (docs/safety.md part 4)
+
+    func refreshRestrictedAreas(force: Bool = false) async {
+        guard config.dataMode != .demo else { return }
+        await restricted.refreshIfNeeded(base: config.apiBaseURL, force: force)
+        syncRestrictedLayer()
+    }
+
+    func syncRestrictedLayer() {
+        map.restrictedAreas = restricted.rings
+        map.isInsideRestrictedArea = { [restricted] p in restricted.isInsideArea(p) }
+    }
+
+    /// Road reports and complaints are not sent from inside a restricted area (≤ blockM).
+    private func refuseReportInRestrictedArea(_ p: LatLng) -> Bool {
+        guard restricted.proximity(of: p) == .blocked else { return false }
+        showToast(String(localized: "Reports aren't accepted in restricted areas."))
+        return true
+    }
 
     func finishOnboarding(allowLocation: Bool) {
         UserDefaults.standard.set(true, forKey: "onboarding.done")
@@ -348,6 +502,7 @@ final class AppModel {
         let hubURL: URL? = config.dataMode == .demo ? nil : config.liveHubURL
         live.configure(repo: repo, hubURL: hubURL, tokenProvider: { TokenStore.load(for: base) })
         Task { await refreshUserData() }
+        Task { await refreshRestrictedAreas() }
     }
 
     func refreshUserData() async {
@@ -551,6 +706,7 @@ final class AppModel {
         plannedDrives = (try? store.plannedDrives()) ?? []
         map.privatePins = privatePlaces.map { $0.location }
         events.reloadPersonalRoutes()
+        safety = SafetySettings(store: store)
     }
 
     /// Local "Just for me" places matching a query.
@@ -632,6 +788,10 @@ final class AppModel {
         map.puckHeading = heading
         map.puckAccuracyM = fix.accuracyM
         retryStartIfWaiting()
+        if safetyCard != nil, SafetyPolicy.shouldCloseCard(speedKmh: fix.speedKmh) {
+            safetyCard = nil
+            if planner != nil, navigation == nil, screen == .routePreview { beginNavigation(); flashSafetyBanner() }
+        }
         checkStillClosed(at: fix.coordinate)
         gpsQuality.update(accuracyM: fix.accuracyM, at: fix.timestamp)
         // Poor fixes (> 100 m, e.g. approximate location) never advance instructions or trigger reroutes.
@@ -685,6 +845,10 @@ final class AppModel {
         map.onLongPress = { [weak self] p in
             guard let self, self.screen == .home else { return }
             self.longPressPoint = p
+        }
+        map.onRestrictedAreaTapped = { [weak self] in
+            guard let self, self.screen != .navigating else { return }
+            self.showRestrictedAreaInfo = true
         }
     }
 
@@ -759,6 +923,7 @@ final class AppModel {
 
     func go(_ s: Screen) {
         screen = s
+        if s != .routePreview { safetyCard = nil }
         syncRouteLayers()
         syncLiveLayers()
         map.navigationPuck = s == .navigating
@@ -969,7 +1134,12 @@ final class AppModel {
 
     func startNavigation() {
         // Navigation only ever starts from a fresh GPS fix, never from a chosen start.
-        guard let planner, planner.selected != nil, planner.start.isGPS, navigation == nil, !startingNavigation else { return }
+        guard let planner, planner.selected != nil, planner.start.isGPS, navigation == nil, !startingNavigation, safetyCard == nil else { return }
+        // Not agreed yet: the map, search and route preview work, but turn-by-turn waits for the agreement.
+        if needsSafetyAgreement {
+            showNotAgreedSheet = true
+            return
+        }
         startingNavigation = true
         Task {
             defer { startingNavigation = false }
@@ -977,7 +1147,7 @@ final class AppModel {
             if !shouldSimulate { await location.requestTemporaryPrecision() }
             // The user may have left route preview while the precision prompt was up.
             guard self.planner === planner, navigation == nil, screen == .routePreview else { return }
-            beginNavigation()
+            startWithReminder()
         }
     }
 
@@ -1087,6 +1257,7 @@ final class AppModel {
             showToast(String(localized: "Waiting for your location. Try again in a moment."))
             return false
         }
+        if refuseReportInRestrictedArea(p) { return false }
         guard await ensureRulesAccepted() else { return false }
         var data = payload ?? [:]
         if let nav = navigation { data["routeId"] = nav.route.id }
@@ -1096,6 +1267,8 @@ final class AppModel {
             _ = try await repo.createIssue(new)
             showToast(isDemo ? String(localized: "Demo mode: kept on this phone, not sent") : String(localized: "Thanks! Drivers nearby will be asked to confirm."))
             return true
+        } catch let e as APIError where e.isRestrictedArea {
+            showToast(e.localizedDescription)
         } catch let e as APIError where e.isServerSideGap {
             showToast(String(localized: "Road problem reports aren't available on the server yet."))
         } catch {
@@ -1520,6 +1693,7 @@ final class AppModel {
         let new = NewReport(type: type, subtype: subtype, lat: position.lat, lng: position.lng,
                             heading: heading, comment: comment?.isEmpty == true ? nil : comment)
         showReport = false
+        if refuseReportInRestrictedArea(position) { return }
         Task {
             guard await ensureRulesAccepted() else { return }
             do {
@@ -1527,6 +1701,8 @@ final class AppModel {
                 live.upsert(r)
                 syncLiveLayers()
                 showToast(isDemo ? String(localized: "Demo mode: kept on this phone, not sent") : String(localized: "Thanks! Your report is live."))
+            } catch let e as APIError where e.isRestrictedArea {
+                showToast(e.localizedDescription)
             } catch {
                 showToast(String(localized: "Couldn't send report"))
             }

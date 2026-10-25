@@ -10,12 +10,13 @@ using Microsoft.Extensions.Caching.Memory;
 namespace Gimano.Api.Services;
 
 
-public sealed class ReportService(GimanoDbContext db, IEventPublisher bus, GeoLookup geo, TimeProvider clock, IMemoryCache cache)
+public sealed class ReportService(GimanoDbContext db, IEventPublisher bus, GeoLookup geo, TimeProvider clock, IMemoryCache cache, RestrictedAreaService restricted)
 {
     public async Task<(ReportDto Report, bool Merged)> CreateAsync(Guid userId, CreateReportRequest req, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
         var loc = new GeoPoint(req.Lat, req.Lng);
+        await restricted.EnsureAllowedAsync(loc, ct);
         var user = Moderation.EnsureMayContribute(await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct) ?? throw new UnauthorizedAccessException("This account was deleted."));
 
         // Duplicate suppression: same type within 150 m along the same heading.

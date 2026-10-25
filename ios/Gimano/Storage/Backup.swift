@@ -339,6 +339,9 @@ struct BackupService: Sendable {
                     let rules = CommunityRules.merged(
                         local: (try setting("main", CommunityRules.versionKey), try setting("main", CommunityRules.acceptedAtKey)),
                         backup: (try setting("b", CommunityRules.versionKey), try setting("b", CommunityRules.acceptedAtKey)))
+                    let safety = SafetyPolicy.mergedAgreement(
+                        local: (try setting("main", SafetyPolicy.agreedVersionKey), try setting("main", SafetyPolicy.agreedAtKey)),
+                        backup: (try setting("b", SafetyPolicy.agreedVersionKey), try setting("b", SafetyPolicy.agreedAtKey)))
                     for t in ["private_place_photos", "planned_drives", "settings"] {
                         let c = try cols(t)
                         try db.execute(sql: "INSERT OR IGNORE INTO main.\(t) (\(c)) SELECT \(c) FROM b.\(t)")
@@ -354,6 +357,8 @@ struct BackupService: Sendable {
                     try put(BlockList.settingsKey, blocked)
                     try put(CommunityRules.versionKey, rules.version)
                     try put(CommunityRules.acceptedAtKey, rules.version == nil ? nil : rules.acceptedAt)
+                    try put(SafetyPolicy.agreedVersionKey, safety.version)
+                    try put(SafetyPolicy.agreedAtKey, safety.version == nil ? nil : safety.at)
                     // Keep the newest 50 recents.
                     try db.execute(sql: """
                         DELETE FROM main.recents WHERE id NOT IN (SELECT id FROM main.recents ORDER BY last_used_at DESC LIMIT \(LocalStore.maxRecents))

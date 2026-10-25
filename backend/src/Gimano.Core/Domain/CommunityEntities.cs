@@ -36,6 +36,8 @@ public sealed class CommunityPlace
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     /// <summary>Reports by users ("Report this place"); 3 hide it pending moderation, like reviews and photos.</summary>
     public int FlagCount { get; set; }
+    /// <summary>Near a restricted area or with sensitive words: hidden until a maintainer decides (docs/api.md "Restricted areas").</summary>
+    public bool HeldForReview { get; set; }
 
     public static string NewId() => "c" + Guid.CreateVersion7().ToString("N");
     public static bool IsCommunityId(string id) => id.Length == 33 && id[0] == 'c';
@@ -127,6 +129,8 @@ public sealed class Review
     public ReviewStatus Status { get; set; } = ReviewStatus.Published;
     public int HelpfulCount { get; set; }
     public int FlagCount { get; set; }
+    /// <summary>Sensitive words (security details): hidden until a maintainer decides.</summary>
+    public bool HeldForReview { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? EditedAt { get; set; }
 }
@@ -187,6 +191,21 @@ public sealed class WaterArea
 {
     public long Id { get; set; }
     public long OsmWayId { get; set; }
+    public required Polygon Geom { get; set; }
+}
+
+/// <summary>
+/// Military, strategic and other sensitive sites where no community content is accepted (docs/api.md "Restricted areas").
+/// OSM rows are rebuilt by every import; curated rows (shelters, safe houses, sites OSM doesn't tag) are kept and are
+/// checked on the server only: <see cref="Public"/> = false is never sent to phones.
+/// </summary>
+public sealed class RestrictedArea
+{
+    public long Id { get; set; }
+    /// <summary>OSM way id (positive) or relation id (negative); null for curated rows.</summary>
+    public long? OsmId { get; set; }
+    public bool Curated { get; set; }
+    public bool Public { get; set; } = true;
     public required Polygon Geom { get; set; }
 }
 

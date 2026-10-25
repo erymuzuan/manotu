@@ -3,6 +3,7 @@ using Gimano.Core.Contracts;
 using Gimano.Core.Data;
 using Gimano.Core.Domain;
 using Gimano.Core.Messaging;
+using Gimano.Core.Places;
 using Microsoft.EntityFrameworkCore;
 
 namespace Gimano.Api.Services;
@@ -14,7 +15,8 @@ public sealed class PayloadTooLargeException(string message) : Exception(message
 /// Upload: validate + header-probe synchronously (415 for undecodable/HEIC), store the original under uploads/,
 /// publish photo.uploaded; the worker does orientation → strip metadata → WebP and flips status to published/rejected.
 /// </summary>
-public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPublisher bus, TimeProvider clock, AuthorHandles handles)
+public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPublisher bus, TimeProvider clock, AuthorHandles handles,
+    RestrictedAreaService restricted)
 {
     public const int PageSize = 30;
     public const int UploadsPerDay = 50;
@@ -27,6 +29,8 @@ public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPu
         if (caption is { Length: > CommunityRules.MaxCaptionLength }) throw new ValidationException("caption", $"caption max {CommunityRules.MaxCaptionLength} chars.");
         if (TextFilter.Default.Check(caption) != TextVerdict.Ok) throw new ValidationException("caption", "Please keep captions friendly and without links.");
         await CheckPlaceAsync(placeId, userId, ct);
+        // No photos inside or near restricted areas (Act 298 forbids photographing them).
+        if (await restricted.LevelForPlaceAsync(placeId, ct) != RestrictedLevel.None) restricted.Refuse();
         var now = clock.GetUtcNow();
         if (await db.Photos.CountAsync(p => p.UserId == userId && p.CreatedAt > now.AddDays(-1), ct) >= UploadsPerDay)
             throw new RateLimitedException($"At most {UploadsPerDay} photos per day.");
@@ -91,7 +95,7 @@ public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPu
         if (await db.PhotoFlags.FindAsync([id, userId], ct) is not null) return;
         db.PhotoFlags.Add(new PhotoFlag { PhotoId = id, UserId = userId, Reason = reason });
         p.FlagCount++;
-        if (p.FlagCount >= CommunityRules.FlagsToHide && p.Status == PhotoStatus.Published) p.Status = PhotoStatus.Rejected;
+        if (p.FlagCount >= RestrictedAreaRules.FlagsToHide(reason, CommunityRules.FlagsToHide) && p.Status == PhotoStatus.Published) p.Status = PhotoStatus.Rejected;
         await db.SaveChangesAsync(ct);
         if (p.Status == PhotoStatus.Rejected) await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(p.PlaceId), ct);
     }

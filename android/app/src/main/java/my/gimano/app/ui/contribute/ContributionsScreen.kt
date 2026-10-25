@@ -45,7 +45,7 @@ fun ContributionsScreen(c: AppContainer, cvm: ContributeViewModel, vm: MainViewM
     var places by remember { mutableStateOf<List<PlaceSummary>?>(null) }
     val counts by cvm.log.counts.collectAsState(initial = 0 to emptyList())
     val reports by cvm.log.reports.collectAsState(initial = 0)
-    val reviewNames by cvm.log.reviewNames.collectAsState(initial = emptyList())
+    val reviewNames by cvm.log.reviewEntries.collectAsState(initial = emptyList())
     var tab by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { places = runCatching { c.repo.contributedPlaces() }.getOrDefault(emptyList()) }
     val points = user?.points ?: 0
@@ -111,16 +111,19 @@ fun ContributionsScreen(c: AppContainer, cvm: ContributeViewModel, vm: MainViewM
                             Text(p.name, fontWeight = FontWeight.Black, fontSize = 17.sp, color = col.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(stringResource(R.string.review_count, p.reviewCount), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = col.textMuted)
                         }
-                        val published = p.status == "published"
-                        Text(stringResource(if (published) R.string.status_published else R.string.status_pending),
+                        val published = p.status == "published" && !p.heldForReview
+                        // Held for a moderator (docs/safety.md): "Sedang disemak", whatever the status says.
+                        if (p.heldForReview) HeldChip()
+                        else Text(stringResource(if (published) R.string.status_published else R.string.status_pending),
                             Modifier.clip(RoundedCornerShape(999.dp)).background(if (published) Color(0xFFDDF4F2) else Color(0xFFFFF1CC)).padding(horizontal = 10.dp, vertical = 4.dp),
                             fontSize = 12.sp, fontWeight = FontWeight.Black, color = if (published) Color(0xFF0E5A54) else Color(0xFF7A5200))
                     }
                 }
-                1 -> items(reviewNames) { name ->
+                1 -> items(reviewNames) { (name, held) ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(col.surface).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         GIcon("star", null, size = 30.dp); Spacer(Modifier.width(12.dp))
-                        Text(name, fontWeight = FontWeight.Black, fontSize = 16.sp, color = col.text)
+                        Text(name, Modifier.weight(1f), fontWeight = FontWeight.Black, fontSize = 16.sp, color = col.text)
+                        if (held) HeldChip()
                     }
                 }
                 else -> items(counts.second) { url ->
@@ -141,3 +144,10 @@ private fun Stat(icon: String, value: String, label: String, modifier: Modifier)
     }
 }
 
+/** "Sedang disemak": hidden until a moderator checks it (near a restricted area, or security details in the text). */
+@Composable
+private fun HeldChip() {
+    Text(stringResource(R.string.status_held),
+        Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0xFFECEEF1)).padding(horizontal = 10.dp, vertical = 4.dp),
+        fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color(0xFF2F3640))
+}

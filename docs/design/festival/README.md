@@ -4,6 +4,10 @@ Open `index.html` in a browser. All illustrations, styles and interactions are l
 
 Adapted from the requested Design Report reference into responsive HTML, retaining the cover composition, typography hierarchy and section sequence. The original DOCX is unchanged. The requested frontend-design skill was not installed; responsive HTML/CSS was authored directly.
 
+## Desktop extension
+
+[Desktop and route planning specification](spec.md) describes the proposed Rust-backed app for macOS, Windows and Linux, complete event authoring, Garmin Connect-inspired route planning jobs, privacy gates and a copy-ready Claude `/design` prompt. The report includes a desktop workspace illustration. This is design only.
+
 ## Assets and generation
 
 - `assets/festival-cover.png`: generated with built-in imagegen, then copied into this workspace.

@@ -27,6 +27,19 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problems, ILogger
             pd.Extensions["existing"] = dup.Existing;
             return await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = http, ProblemDetails = pd });
         }
+        if (exception is RestrictedAreaException)
+        {
+            http.Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
+            var pd = new ProblemDetails
+            {
+                Status = 422, Title = "Restricted area",
+                Detail = http.Lang() == Gimano.Core.Community.L10n.Ms
+                    ? "Manotu tidak menerima tempat, gambar, ulasan atau laporan di kawasan tentera, keselamatan dan strategik."
+                    : "Manotu doesn't accept places, photos, reviews or reports in military, security and strategic areas.",
+            };
+            pd.Extensions["code"] = "restricted_area";
+            return await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = http, ProblemDetails = pd });
+        }
 
         var (status, title) = exception switch
         {

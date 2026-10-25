@@ -58,7 +58,7 @@ public enum ReviewStatus { Published, Hidden }
 
 public enum ReviewSort { Recent, Helpful }
 
-public enum FlagReason { Spam, Offensive, OffTopic, ConflictOfInterest, Other }
+public enum FlagReason { Spam, Offensive, OffTopic, ConflictOfInterest, Other, SensitiveLocation }
 
 public enum PhotoStatus { Processing, Published, Rejected }
 

@@ -45,6 +45,10 @@ class MainActivity : AppCompatActivity() {
         if (!BuildConfig.DEBUG || i == null) return
         if (i.hasExtra("gimano.simulateDrive")) vm.setSimulate(i.getBooleanExtra("gimano.simulateDrive", false))
         if (i.hasExtra("gimano.demoMode")) vm.setDemoMode(i.getBooleanExtra("gimano.demoMode", false))
+        // `--es gimano.moveTo 3.0745,101.7065[,zoom]`: pan the map there (desk-testing restricted areas).
+        i.getStringExtra("gimano.moveTo")?.split(",")?.mapNotNull { it.trim().toDoubleOrNull() }?.takeIf { it.size >= 2 }?.let {
+            vm.debugMoveTo(my.gimano.app.core.geo.GeoPoint(it[0], it[1]), it.getOrNull(2) ?: 15.0)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -154,7 +158,10 @@ class MainActivity : AppCompatActivity() {
                     val text = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
                     if (!text.isNullOrBlank()) vm.openSearch(SearchPurpose.NAVIGATE, text)
                 }
-                LaunchedEffect(Unit) {
+                // docs/safety.md §1: the first-run safety agreement comes BEFORE the location prompt.
+                val agreementFirst = uiState.safetyAgreement == my.gimano.app.ui.AgreementMode.FIRST_RUN
+                LaunchedEffect(agreementFirst) {
+                    if (agreementFirst) return@LaunchedEffect
                     val fine = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     val coarse = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     val notif = Build.VERSION.SDK_INT < 33 ||

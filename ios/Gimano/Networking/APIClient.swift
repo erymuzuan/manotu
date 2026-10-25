@@ -5,6 +5,8 @@ struct ProblemDetails: Codable, Sendable {
     var title: String?
     var status: Int?
     var detail: String?
+    /// Machine-readable reason, e.g. `restricted_area` (docs/api.md "Restricted areas").
+    var code: String?
 }
 
 enum APIError: Error, LocalizedError, Sendable {

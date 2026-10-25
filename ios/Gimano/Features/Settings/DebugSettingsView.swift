@@ -72,6 +72,27 @@ struct DebugSettingsView: View {
                 }
             }
 
+            #if DEBUG
+            Section {
+                Button("Reset safety agreement and reminder") { model.debugResetSafety() }
+                    .accessibilityIdentifier("debugResetSafety")
+                Button("Add a test restricted area at the map centre") {
+                    let c = model.map.visibleBBox.map { LatLng(lat: ($0.minLat + $0.maxLat) / 2, lng: ($0.minLng + $0.maxLng) / 2) } ?? model.position
+                    model.restricted.installFixture(around: c)
+                    model.syncRestrictedLayer()
+                    model.showToast("Test area added (memory only)")
+                }
+                .accessibilityIdentifier("debugRestrictedFixture")
+                Button("Clear test restricted areas") { model.restricted.clearFixture(); model.syncRestrictedLayer() }
+                Button("Download restricted areas now") { Task { await model.refreshRestrictedAreas(force: true) } }
+                LabeledContent("Restricted areas", value: model.restricted.set.map { "\($0.version) · \($0.areas.count) · \($0.terms.count) terms" } ?? "none")
+            } header: {
+                Text(verbatim: "Safety (DEBUG)")
+            } footer: {
+                Text(verbatim: "Reset puts the agreement back to 'never agreed' and the reminder on, without deleting the app or your data. Test areas are 400 m squares kept in memory only.")
+            }
+            #endif
+
             Section("Device") {
                 LabeledContent("Device ID", value: String(TokenStore.deviceId.prefix(8)) + "…")
                 Button("Reset device token", role: .destructive) {

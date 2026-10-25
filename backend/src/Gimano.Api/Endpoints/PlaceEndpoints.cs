@@ -17,8 +17,21 @@ public static class PlaceEndpoints
 
         api.MapGet("/places/{id}", GetPlace).WithTags("Search").AllowAnonymous();
         api.MapGet("/geocode/reverse", Reverse).WithTags("Search").AllowAnonymous();
+        api.MapGet("/restricted-areas", RestrictedAreas).WithTags("Community places").AllowAnonymous()
+            .WithSummary("Restricted areas (whole set, no names), distances and sensitive terms for the on-phone check. ETag; 304 when unchanged.");
 
         return api;
+    }
+
+    /// <summary>The whole set (never a bounding box), so the request says nothing about where the user is.</summary>
+    private static async Task<IResult> RestrictedAreas(HttpContext http, RestrictedAreaSnapshot snapshot, CancellationToken ct)
+    {
+        var (body, version) = await snapshot.GetAsync(ct);
+        var etag = $"\"{version}\"";
+        http.Response.Headers.ETag = etag;
+        http.Response.Headers.CacheControl = "public, max-age=86400";
+        if (http.Request.Headers.IfNoneMatch.Any(v => v == etag)) return Results.StatusCode(StatusCodes.Status304NotModified);
+        return Results.Bytes(body, "application/json");
     }
 
     private static async Task<Results<Ok<SearchResponse>, ValidationProblem>> Search(

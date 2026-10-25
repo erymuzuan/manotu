@@ -37,8 +37,19 @@ struct RoutePreviewView: View {
                     }
                     .padding(.horizontal, Tokens.Space.gutter)
                     Spacer()
-                    bottomCard(planner)
+                    if let card = model.safetyCard {
+                        // Safety reminder (docs/safety.md §2): over the map with the route drawn behind it; guidance
+                        // starts only after its button.
+                        SafetyReminderCard(request: card) { model.confirmSafetyCard(dontShowAgain: $0) }
+                            .id(card.id)
+                            .padding(.horizontal, Tokens.Space.gutter)
+                            .padding(.bottom, Tokens.Space.s)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else {
+                        bottomCard(planner)
+                    }
                 }
+                .animation(.snappy(duration: 0.25), value: model.safetyCard)
             }
             .sheet(isPresented: $showStartPicker) {
             if let planner = model.planner { StartPickerSheet(planner: planner).presentationDetents([.medium, .large]) }

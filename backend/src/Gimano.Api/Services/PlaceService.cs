@@ -150,7 +150,8 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
         new(c.Id, c.Name, c.Category, c.Address, c.Location.Y, c.Location.X, Distance(lat, lng, c.Location.Y, c.Location.X), null,
             c.Phone, c.Website, c.OpeningHours, OpeningHours.IsOpen(c.OpeningHours, local), c.Amenities, new Dictionary<string, string>(), null, null,
             PlaceSource.Community, c.Status, agg?.Rating, agg?.ReviewCount ?? 0, MediaKeys.Url(agg?.ThumbKey),
-            c.Description, c.Owner is null ? new AddedBy("Pemandu Manotu") : new AddedBy(c.Owner.DisplayName, ownerHandle), c.VerifiedCount, photos);
+            c.Description, c.Owner is null ? new AddedBy("Pemandu Manotu") : new AddedBy(c.Owner.DisplayName, ownerHandle), c.VerifiedCount, photos,
+            HeldForReview: c.HeldForReview);
 
     public async Task<IReadOnlyList<PhotoDto>> RecentPhotosAsync(string placeId, CancellationToken ct, int take = 10)
     {

@@ -12,6 +12,12 @@ struct DriveView: View {
             ZStack(alignment: .bottom) {
                 VStack(spacing: 0) {
                     TurnBanner(nav: nav)
+                    if model.showSafetyBanner {
+                        SafetyMovingBanner()
+                            .padding(.horizontal, 10)
+                            .padding(.top, 6)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     if let stop = nav.arrivedAtStop {
                         HStack(spacing: 10) {
                             GimanoIcon(icon: .addStop, size: 30, stroke: .brandOn, fill: .brandOn)

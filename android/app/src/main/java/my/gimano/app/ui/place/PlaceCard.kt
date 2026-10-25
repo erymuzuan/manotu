@@ -287,7 +287,20 @@ fun PlaceCard(sel: PlaceSel, vm: MainViewModel, cvm: ContributeViewModel, apiBas
                                     }, contentScale = ContentScale.Crop)
                                 }
                                 items(pending) { u -> UploadTile(u, 96) }
-                                if (d != null) item {
+                                // docs/safety.md B: no public photos within reviewM of a restricted area (the server refuses them).
+                                val photosOn = d != null && cvm.photosAllowedAt(d.lat, d.lng)
+                                if (d != null && !photosOn) item {
+                                    Column(
+                                        Modifier.sizeIn(minWidth = 96.dp, minHeight = 96.dp, maxWidth = 160.dp).clip(RoundedCornerShape(14.dp)).background(c.surfaceAlt).padding(6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                                    ) {
+                                        Icon(Icons.Filled.NoPhotography, null, tint = c.textMuted, modifier = Modifier.size(26.dp))
+                                        Text(stringResource(R.string.restricted_b_photos_off), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = c.textMuted,
+                                            maxLines = 4, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                            modifier = Modifier.padding(top = 2.dp))
+                                    }
+                                }
+                                if (d != null && photosOn) item {
                                     Column(
                                         // Grows with very large text (label on up to two lines) instead of truncating it.
                                         Modifier.sizeIn(minWidth = 96.dp, minHeight = 96.dp, maxWidth = 160.dp).clip(RoundedCornerShape(14.dp))
@@ -333,7 +346,10 @@ fun PlaceCard(sel: PlaceSel, vm: MainViewModel, cvm: ContributeViewModel, apiBas
         text = {
             Column {
                 FlagReasons.forEach { (k, l) ->
-                    Text(stringResource(l), Modifier.fillMaxWidth().clickable { reportPlace = false; cvm.flagPlace(d, k) }.padding(vertical = 12.dp), fontSize = 16.sp)
+                    Column(Modifier.fillMaxWidth().clickable { reportPlace = false; cvm.flagPlace(d, k) }.padding(vertical = 12.dp)) {
+                        Text(stringResource(l), fontSize = 16.sp)
+                        if (k == SENSITIVE) Text(stringResource(R.string.flag_sensitive_desc), fontSize = 13.sp, color = c.textMuted)
+                    }
                 }
             }
         },
@@ -611,8 +627,8 @@ private fun ReviewRow(r: Review, cvm: ContributeViewModel, apiBase: String, onPh
             Box {
                 TextButton(onClick = { flagMenu = true }) { Icon(Icons.Filled.Flag, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.flag), fontSize = 13.sp) }
                 DropdownMenu(flagMenu, { flagMenu = false }) {
-                    listOf("spam" to R.string.flag_spam, "offensive" to R.string.flag_offensive, "off_topic" to R.string.flag_off_topic, "conflict_of_interest" to R.string.flag_conflict, "other" to R.string.fb_other).forEach { (k, l) ->
-                        DropdownMenuItem(text = { Text(stringResource(l)) }, onClick = { flagMenu = false; cvm.flag(r, k) })
+                    FlagReasons.forEach { (k, l) ->
+                        DropdownMenuItem(text = { FlagReasonText(k, l) }, onClick = { flagMenu = false; cvm.flag(r, k) })
                     }
                 }
             }
@@ -659,19 +675,24 @@ private fun WriteReviewSheet(place: Place, d: my.gimano.app.ui.contribute.Review
             }
             OutlinedTextField(d.text, { v -> cvm.updateDraft { it.copy(text = v.take(2000)) } }, Modifier.fillMaxWidth(), minLines = 3, maxLines = 6,
                 placeholder = { Text(stringResource(R.string.review_hint)) }, shape = RoundedCornerShape(Radius.md))
+            // docs/safety.md C: security details → a warning; the review is held for a moderator.
+            val sensitiveText = cvm.sensitive.hasMatch(d.text)
+            if (sensitiveText) my.gimano.app.ui.safety.SensitiveWordsWarning(cvm::removeSensitiveFromReview, Modifier.padding(top = 6.dp))
+            val photosOn = cvm.photosAllowedAt(place.lat, place.lng)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 10.dp)) {
                 items(d.uploads) { u -> UploadTile(u, 72) }
-                if (d.uploads.size < 5) item {
+                if (d.uploads.size < 5 && photosOn) item {
                     Box(Modifier.size(72.dp).clip(RoundedCornerShape(Radius.md)).background(c.brandMist).clickable { pick() }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Filled.AddAPhoto, stringResource(R.string.add_photo), tint = c.brand)
                     }
                 }
             }
+            if (!photosOn) Text(stringResource(R.string.restricted_b_photos_off), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.textMuted, modifier = Modifier.padding(bottom = 8.dp))
             val uploading = d.uploads.any { it.photo == null && !it.failed }
             Button(onClick = { cvm.submitReview(place) }, enabled = d.rating in 1..5 && !d.sending && !uploading,
                 modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(Radius.md),
                 colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn)) {
-                Text(stringResource(if (d.editingId != null) R.string.save else R.string.post_review), style = GimanoType.button)
+                Text(stringResource(when { sensitiveText -> R.string.restricted_send_review; d.editingId != null -> R.string.save; else -> R.string.post_review }), style = GimanoType.button)
             }
         }
     }
@@ -728,7 +749,7 @@ private fun PhotoViewer(v: ViewerState, onClose: () -> Unit, onReport: (Photo, S
                             Text(stringResource(R.string.report_photo), color = Color.White, fontWeight = FontWeight.ExtraBold)
                         }
                         DropdownMenu(menu, { menu = false }) {
-                            FlagReasons.forEach { (k, l) -> DropdownMenuItem(text = { Text(stringResource(l)) }, onClick = { menu = false; onReport(photo, k) }) }
+                            FlagReasons.forEach { (k, l) -> DropdownMenuItem(text = { FlagReasonText(k, l) }, onClick = { menu = false; onReport(photo, k) }) }
                         }
                     }
                     val author = photo.uploadedBy
@@ -746,11 +767,25 @@ private fun PhotoViewer(v: ViewerState, onClose: () -> Unit, onReport: (Photo, S
     }
 }
 
-/** Report reasons for reviews and photos (POST /reviews|photos/{id}/flag). */
+private const val SENSITIVE = "sensitive_location"
+
+/**
+ * Report reasons for places, reviews and photos (POST /places|reviews|photos/{id}/flag). `sensitive_location` hides the
+ * item after one report (docs/safety.md §4 E).
+ */
 private val FlagReasons = listOf(
     "spam" to R.string.flag_spam, "offensive" to R.string.flag_offensive, "off_topic" to R.string.flag_off_topic,
-    "conflict_of_interest" to R.string.flag_conflict, "other" to R.string.fb_other,
+    "conflict_of_interest" to R.string.flag_conflict, SENSITIVE to R.string.flag_sensitive, "other" to R.string.fb_other,
 )
+
+/** A reason, with the explainer under "Lokasi sensitif atau keselamatan". */
+@Composable
+private fun FlagReasonText(key: String, label: Int) {
+    Column(Modifier.widthIn(max = 300.dp)) {
+        Text(stringResource(label))
+        if (key == SENSITIVE) Text(stringResource(R.string.flag_sensitive_desc), fontSize = 12.sp, color = Gimano.colors.textMuted, lineHeight = 16.sp)
+    }
+}
 
 @Composable
 private fun PlaceOverflow(vm: MainViewModel, canSuggest: Boolean, onSuggest: () -> Unit, onReportPlace: (() -> Unit)? = null) {

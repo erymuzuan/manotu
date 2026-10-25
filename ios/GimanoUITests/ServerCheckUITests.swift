@@ -4,7 +4,7 @@ import XCTest
 final class ServerCheckUITests: XCTestCase {
     func test_ServerAfterTests() {
         let app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(en)"]
+        app.launchArguments = ["-AppleLanguages", "(en)", "-GimanoSkipSafety", "YES"]
         app.launch()
         if app.buttons["Continue"].waitForExistence(timeout: 5) { app.buttons["Continue"].tap() }
         XCTAssertTrue(app.buttons["menuButton"].waitForExistence(timeout: 30))

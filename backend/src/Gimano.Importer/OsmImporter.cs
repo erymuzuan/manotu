@@ -52,6 +52,8 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
             var roads = new List<RoadWay>();
             var poiWays = new List<PoiWay>();
             var waterWays = new List<(long Id, long[] Nodes)>();
+            var restrictedWays = new List<(long Id, long[] Nodes)>();
+            var restrictedRels = new List<(long Id, long[] OuterWays)>();
             var adminAreas = new List<(long Id, long LabelNode, Dictionary<string, string> Tags)>();
             var addrWays = new List<(long Id, long[] Nodes, Dictionary<string, string> Tags)>();
             var boundaries = new List<(long Id, string Name, int Level, long[] OuterWays)>();
@@ -71,6 +73,7 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
                             needed.Add(a.LabelNode);
                         }
                         if (o.Places && g.Tags is { Count: > 0 } && Boundary((Relation)g) is { } b) boundaries.Add(b);
+                        if (o.Places && g.Tags is { Count: > 0 } && RestrictedRelation((Relation)g) is { } rr) restrictedRels.Add(rr);
                         continue;
                     }
                     var w = (Way)g;
@@ -101,13 +104,18 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
                         waterWays.Add((w.Id!.Value, w.Nodes));
                         needed.AddRange(w.Nodes);
                     }
+                    if (o.Places && w.Nodes.Length >= 4 && w.Nodes[0] == w.Nodes[^1] && RestrictedAreaRules.IsRestricted(tags))
+                    {
+                        restrictedWays.Add((w.Id!.Value, w.Nodes));
+                        needed.AddRange(w.Nodes);
+                    }
                 }
             }
-            // ---- Pass 1b: outer ways of admin boundaries (ways come before relations, so a second look) ----
+            // ---- Pass 1b: outer ways of admin boundaries and restricted multipolygons (ways come before relations, so a second look) ----
             var boundaryWays = new Dictionary<long, long[]>();
-            if (boundaries.Count > 0)
+            if (boundaries.Count > 0 || restrictedRels.Count > 0)
             {
-                var wanted = boundaries.SelectMany(b => b.OuterWays).ToHashSet();
+                var wanted = boundaries.SelectMany(b => b.OuterWays).Concat(restrictedRels.SelectMany(r => r.OuterWays)).ToHashSet();
                 await using var fs = File.OpenRead(o.PbfPath);
                 foreach (var g in new PBFOsmStreamSource(fs))
                 {
@@ -119,7 +127,8 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
                         needed.AddRange(wn);
                     }
                 }
-                logger.LogInformation("Pass 1b: {Boundaries} admin boundaries, {Ways} outer ways", boundaries.Count, boundaryWays.Count);
+                logger.LogInformation("Pass 1b: {Boundaries} admin boundaries, {Restricted} restricted multipolygons, {Ways} outer ways",
+                    boundaries.Count, restrictedRels.Count, boundaryWays.Count);
             }
             var neededIds = needed.Distinct().Order().ToArray();
             needed = null!;
@@ -203,6 +212,9 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
                     string.Join(", ", places.GroupBy(p => p.Country).Select(g => $"{g.Key}={g.Count()}")),
                     segments,
                     string.Join(", ", places.GroupBy(p => p.Category).OrderByDescending(g => g.Count()).Take(12).Select(g => $"{g.Key}={g.Count()}")));
+                logger.LogInformation("Dry run: {Ways} restricted closed ways, {Relations} restricted multipolygons ({Rings} rings)",
+                    restrictedWays.Count, restrictedRels.Count,
+                    restrictedRels.Sum(r => AssembleRings(r.OuterWays.Where(boundaryWays.ContainsKey).Select(id => boundaryWays[id])).Count));
                 foreach (var p in places.Where(p => p.Name.Contains("Petronas", StringComparison.OrdinalIgnoreCase)).Take(5))
                     logger.LogInformation("  sample: {Id} {Name} [{Cat}] {Country} '{Address}' ({Lat:F2},{Lng:F2})", p.Id, p.Name, p.Category, p.Country, p.Address, p.Location.Y, p.Location.X);
                 return;
@@ -212,6 +224,8 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
             if (o.Places) await UpsertPlacesAsync(places, ct);
             if (o.Places) await WriteAddressesAsync(addresses, ct);
             if (o.Places) await WriteBoundariesAsync(boundaries, boundaryWays, TryCoord, ct);
+            if (o.Places) await WriteRestrictedAsync(restrictedWays, restrictedRels, boundaryWays, TryCoord, ct);
+            else if (o.Roads) await DropRestrictedRoadsAsync(ct);
             if (o.Places && o.Roads) await EnrichAddressesAsync(ct);
         }
 
@@ -337,6 +351,60 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
         if (!int.TryParse(tags.GetValueOrDefault("admin_level"), out var level) || level is < 4 or > 8) return null;
         var outers = (r.Members ?? []).Where(m => m.Type == OsmGeoType.Way && m.Role is "outer" or "" or null).Select(m => m.Id).ToArray();
         return outers.Length == 0 ? null : (r.Id!.Value, name, level, outers);
+    }
+
+    /// <summary>Restricted multipolygon relations (RestrictedAreaRules.IsRestricted) and their outer member ways.</summary>
+    internal static (long Id, long[] OuterWays)? RestrictedRelation(Relation r)
+    {
+        var tags = ToDict(r.Tags);
+        if (tags.GetValueOrDefault("type") != "multipolygon" || !RestrictedAreaRules.IsRestricted(tags)) return null;
+        var outers = (r.Members ?? []).Where(m => m.Type == OsmGeoType.Way && m.Role is "outer" or "" or null).Select(m => m.Id).ToArray();
+        return outers.Length == 0 ? null : (r.Id!.Value, outers);
+    }
+
+    /// <summary>
+    /// Rebuilds the OSM rows of restricted_areas (curated rows are kept), then drops road segments inside public areas so
+    /// no traffic speeds are computed there from anonymous pings (docs/api.md "Restricted areas").
+    /// </summary>
+    private async Task WriteRestrictedAsync(List<(long Id, long[] Nodes)> closedWays, List<(long Id, long[] OuterWays)> relations,
+        Dictionary<long, long[]> ways, CoordLookup coord, CancellationToken ct)
+    {
+        var rings = closedWays.Select(w => (OsmId: w.Id, Nodes: (IReadOnlyList<long>)w.Nodes))
+            .Concat(relations.DistinctBy(r => r.Id).SelectMany(r =>
+                AssembleRings(r.OuterWays.Where(ways.ContainsKey).Select(id => ways[id])).Select(ring => (OsmId: -r.Id, Nodes: (IReadOnlyList<long>)ring))));
+        await using var conn = await dataSource.OpenConnectionAsync(ct);
+        await using (var del = new NpgsqlCommand("DELETE FROM restricted_areas WHERE NOT curated;", conn)) await del.ExecuteNonQueryAsync(ct);
+        var count = 0;
+        await using (var writer = await conn.BeginBinaryImportAsync("COPY restricted_areas (osm_id, curated, \"public\", geom) FROM STDIN (FORMAT BINARY)", ct))
+        {
+            foreach (var (osmId, nodes) in rings)
+            {
+                var pts = new List<NetTopologySuite.Geometries.Coordinate>(nodes.Count);
+                foreach (var n in nodes) if (coord(n, out var p)) pts.Add(new(p.Lng, p.Lat));
+                if (pts.Count < 4 || !pts[0].Equals2D(pts[^1])) continue;
+                var poly = GeoMath.Factory.CreatePolygon(pts.ToArray());
+                if (!poly.IsValid) poly = poly.Buffer(0) as NetTopologySuite.Geometries.Polygon ?? poly;
+                if (!poly.IsValid || poly.IsEmpty) continue;
+                if (!poly.Shell.IsCCW) poly = (NetTopologySuite.Geometries.Polygon)poly.Reverse();
+                await writer.StartRowAsync(ct);
+                await writer.WriteAsync(osmId, NpgsqlDbType.Bigint, ct);
+                await writer.WriteAsync(false, NpgsqlDbType.Boolean, ct);
+                await writer.WriteAsync(true, NpgsqlDbType.Boolean, ct);
+                await writer.WriteAsync(poly, NpgsqlDbType.Geography, ct);
+                count++;
+            }
+            await writer.CompleteAsync(ct);
+        }
+        logger.LogInformation("Wrote {Count} restricted areas", count);
+        await DropRestrictedRoadsAsync(ct);
+    }
+
+    private async Task DropRestrictedRoadsAsync(CancellationToken ct)
+    {
+        await using var conn = await dataSource.OpenConnectionAsync(ct);
+        await using var cmd = new NpgsqlCommand(
+            "DELETE FROM road_segments s USING restricted_areas r WHERE r.\"public\" AND ST_Intersects(s.geom, r.geom);", conn) { CommandTimeout = 600 };
+        logger.LogInformation("Dropped {Count} road segments inside restricted areas", await cmd.ExecuteNonQueryAsync(ct));
     }
 
     /// <summary>Joins way node lists end-to-end into closed rings (reversing ways as needed); open leftovers are dropped.</summary>

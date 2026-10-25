@@ -226,10 +226,18 @@ struct AddPlaceFlow: View {
     @State private var uploadProgress: Double?
     @State private var duplicate: PlaceSummary?
     @State private var error: String?
+    /// A · the pin is in a restricted area: the sheet instead of the form.
+    @State private var showBlocked = false
+    /// "Save just for me" from A: only the private choice is offered (it never leaves the phone).
+    @State private var privateOnly = false
 
     init(start: LatLng) {
         self.start = start
         _center = State(initialValue: start)
+        #if DEBUG
+        // `-GimanoAddPlaceStep details` (device screenshots): open at the form.
+        if UserDefaults.standard.string(forKey: "GimanoAddPlaceStep") == "details" { _step = State(initialValue: .details) }
+        #endif
     }
 
     static let amenityOptions: [(String, LocalizedStringKey)] = [
@@ -279,7 +287,31 @@ struct AddPlaceFlow: View {
         } message: {
             Text("A place called \(duplicate?.name ?? "") is already here.")
         }
+        .sheet(isPresented: $showBlocked) {
+            RestrictedBlockedSheet(onMove: {
+                showBlocked = false
+                step = .pin
+            }, onSavePrivate: {
+                showBlocked = false
+                privateOnly = true
+                step = .details
+            }, onCancel: {
+                showBlocked = false
+                dismiss()
+            })
+            .presentationDetents([.large])
+            .presentationCornerRadius(Tokens.Radius.sheetTop)
+        }
     }
+
+    // MARK: restricted areas (docs/safety.md part 4)
+
+    private var proximity: RestrictedProximity { model.restricted.proximity(of: center) }
+    /// B: public and within reviewM: photos off, held for a moderator.
+    private var isNear: Bool { !privateOnly && proximity == .near }
+    private func sensitive(_ text: String) -> Bool { !privateOnly && model.restricted.terms.matches(text) }
+    /// Held for review before others see it (near, or sensitive words).
+    private var willBeReviewed: Bool { isNear || sensitive(name) || sensitive(details) }
 
     // MARK: 1. pin
 
@@ -304,9 +336,11 @@ struct AddPlaceFlow: View {
                         .font(Tokens.Font.bodyBold)
                         .lineLimit(2)
                         .accessibilityIdentifier("pinAddress")
-                    Button("Next") { step = .details }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .accessibilityIdentifier("pinNext")
+                    Button("Next") {
+                        if proximity == .blocked && !privateOnly { showBlocked = true } else { step = .details }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .accessibilityIdentifier("pinNext")
                 }
                 .padding(Tokens.Space.gutter)
                 .background(Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.lg, style: .continuous))
@@ -319,7 +353,10 @@ struct AddPlaceFlow: View {
                 m.puck = model.position
                 m.camera = .center(start, zoom: 17)
                 m.cameraRevision = 1
+                m.restrictedAreas = model.restricted.rings
                 pinMap = m
+                // Long-press "Add a place" inside an area goes straight to A.
+                if model.restricted.proximity(of: start) == .blocked { showBlocked = true }
             }
         }
         .task(id: pinMap?.visibleBBox) {
@@ -336,12 +373,16 @@ struct AddPlaceFlow: View {
     private var detailsStep: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                if isNear { RestrictedNearNote() }
                 TextField(String(localized: "Name (required)"), text: $name)
                     .font(Tokens.Font.nunito(20, .bold))
                     .padding(.horizontal, 16)
                     .frame(height: 60)
                     .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: Tokens.Radius.searchField, style: .continuous))
                     .accessibilityIdentifier("placeName")
+                if sensitive(name) {
+                    SensitiveTermsWarning { name = model.restricted.terms.removingMatchingSentences(name) }
+                }
 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
                     ForEach(AddPlaceCategories.all, id: \.0) { cat, title in
@@ -359,7 +400,15 @@ struct AddPlaceFlow: View {
                     }
                 }
 
-                PhotoPickerRow(photos: $photos)
+                if isNear {
+                    VStack(alignment: .leading, spacing: 6) {
+                        PhotoPickerRow(photos: .constant([])).disabled(true).opacity(0.45)
+                        PhotosOffCaption(reviewM: model.restricted.set?.reviewM ?? 300)
+                    }
+                    .onAppear { photos = [] }
+                } else {
+                    PhotoPickerRow(photos: $photos)
+                }
 
                 Toggle("Opening hours", isOn: $hoursEnabled.animation()).font(Tokens.Font.bodyBold).accessibilityIdentifier("hoursToggle")
                 if hoursEnabled { OpeningHoursEditor(hours: $hours) }
@@ -371,6 +420,9 @@ struct AddPlaceFlow: View {
                 }
                 .padding(14)
                 .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: Tokens.Radius.md, style: .continuous))
+                if sensitive(details) {
+                    SensitiveTermsWarning { details = model.restricted.terms.removingMatchingSentences(details) }
+                }
 
                 Text("Amenities").font(Tokens.Font.label).foregroundStyle(Color.textMuted)
                 FlowChips(options: Self.amenityOptions, selection: $amenities)
@@ -392,8 +444,15 @@ struct AddPlaceFlow: View {
             Text("Make this place discoverable by other Gimano users?").font(Tokens.Font.title)
             visibilityCard(icon: .heart, title: "Just for me", subtitle: "Saved only on this phone (and in your own backups). Never sent to Gimano.",
                            id: "visibilityPrivate") { Task { await savePrivate() } }
-            visibilityCard(icon: .map, title: "Share with everyone", subtitle: "Other drivers will help verify it.",
-                           id: "visibilityPublic") { Task { await savePublic() } }
+            if !privateOnly {
+                if willBeReviewed {
+                    visibilityCard(icon: .map, title: "Send for review", subtitle: "A moderator will check this place before others can see it.",
+                                   id: "visibilityPublic") { Task { await savePublic() } }
+                } else {
+                    visibilityCard(icon: .map, title: "Share with everyone", subtitle: "Other drivers will help verify it.",
+                                   id: "visibilityPublic") { Task { await savePublic() } }
+                }
+            }
             if saving {
                 if let uploadProgress {
                     ProgressView(value: uploadProgress) { Text("Uploading photos…").font(Tokens.Font.caption) }
@@ -454,6 +513,8 @@ struct AddPlaceFlow: View {
     }
 
     private func savePublic() async {
+        // The pin may have moved since: check again before anything is sent.
+        if proximity == .blocked { showBlocked = true; return }
         guard await model.ensureRulesAccepted() else { return }
         saving = true
         defer { saving = false }
@@ -461,16 +522,27 @@ struct AddPlaceFlow: View {
                            description: opt(details), phone: opt(phone), website: opt(website),
                            openingHours: hoursEnabled ? opt(hours.osm) : nil, amenities: amenities.sorted())
         do {
+            let held = willBeReviewed
             let place = try await model.repo.createPlace(new)
             model.rememberOwnPlace(place.id)
-            if !photos.isEmpty {
+            if !photos.isEmpty, !isNear {
                 uploadProgress = 0
                 for (i, p) in photos.enumerated() {
                     let base = Double(i) / Double(photos.count), share = 1 / Double(photos.count)
-                    _ = try await model.repo.uploadPhoto(p.jpeg, placeId: place.id, caption: nil) { frac in
-                        Task { @MainActor in uploadProgress = base + frac * share }
+                    do {
+                        _ = try await model.repo.uploadPhoto(p.jpeg, placeId: place.id, caption: nil) { frac in
+                            Task { @MainActor in uploadProgress = base + frac * share }
+                        }
+                    } catch let e as APIError where e.isRestrictedArea {
+                        continue   // photos refused near a restricted area: the place itself was saved
                     }
                 }
+            }
+            if place.heldForReview == true || held {
+                // Hidden until a moderator checks it: nothing to open yet.
+                dismiss()
+                model.showToast(String(localized: "Checked within 24 hours. You'll get a note in your Inbox."), seconds: 4)
+                return
             }
             dismiss()
             model.showToast(String(localized: "Thanks! Other drivers will help verify it."))

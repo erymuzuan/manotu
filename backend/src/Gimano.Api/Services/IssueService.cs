@@ -14,7 +14,7 @@ namespace Gimano.Api.Services;
 
 /// <summary>Road and place complaints (docs/complaints.md, docs/api.md "Issues").</summary>
 public sealed class IssueService(GimanoDbContext db, IEventPublisher bus, IssueDirectory directory, TimeProvider clock, ILogger<IssueService> logger,
-    AuthorHandles? handles = null)
+    AuthorHandles? handles = null, RestrictedAreaService? restricted = null)
 {
     /// <summary>
     /// Dual carriageways are separate one-way ways; on the E12 (AKLEH) they are ~37 m apart, so a westbound driver whose fix
@@ -30,6 +30,7 @@ public sealed class IssueService(GimanoDbContext db, IEventPublisher bus, IssueD
         var kind = req.Kind ?? throw new ValidationException("kind", "kind is required.");
         if (!Gimano.Api.Endpoints.Validation.ValidLatLng(req.Lat, req.Lng)) throw new ValidationException("lat", "lat/lng must be valid.");
         if (!CommunityRules.InServiceArea(req.Lat, req.Lng)) throw new ValidationException("lat", "Location must be in Malaysia, Singapore or Brunei.");
+        if (restricted is not null) await restricted.EnsureAllowedAsync(new GeoPoint(req.Lat, req.Lng), ct);
         var user = Moderation.EnsureMayContribute(await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct) ?? throw new UnauthorizedAccessException("Unknown user."));
         var now = clock.GetUtcNow();
         if (user.SuspendedUntil > now) throw new ForbiddenException($"Contributions are paused until {user.SuspendedUntil:yyyy-MM-dd HH:mm} UTC.");

@@ -209,6 +209,51 @@ GET    /me/places/contributed         → PlaceSummary[]
 - text filter (profanity/spam/URLs in names), Malay and English;
 - coordinates inside MY/SG/BN and not in water (OSM water polygons).
 
+### Restricted areas: no military, national-security or at-risk sites
+
+Manotu never accepts community content in or next to military and strategic sites (Malaysia's Protected Areas and
+Protected Places Act 1959, Act 298, forbids photographing or sketching them), nor content that maps shelters, safe
+houses, private homes or security details (guards, CCTV, back entrances, patrol times). Design: canvas page "Safety",
+row 2.
+
+```
+GET /restricted-areas            (anonymous; ETag / If-None-Match → 304; Cache-Control: public, max-age=86400)
+→ 200 {
+    version: "3f9a1c2b7d4e5f60",          // changes when the shapes or terms change
+    blockM: 100,                           // inside a shape or within blockM: no public contributions
+    reviewM: 300,                          // within reviewM: places are held for a moderator, photos refused
+    terms: ["kem", "pangkalan", …],        // lower case; matched as whole words/phrases, accent- and case-insensitive
+    areas: [ [[lng, lat], …], … ]          // outer rings only, closed, simplified (~10 m); no names, no kinds
+  }
+```
+
+- The whole set is downloaded (never a bounding box), so the request says nothing about where the user is. The apps
+  cache it and re-check daily; the check on the phone works offline and sends nothing.
+- `areas` come from the OSM import: `landuse=military`, `military=*` (except `bunker`, `trench`, `danger_area`),
+  `power=plant`, `power=substation` at ≥ 132 kV, `man_made=water_works`, `amenity=prison`. Maintainer-curated sites
+  that must not be revealed (shelters, safe houses) are **checked on the server only** and never sent to phones.
+- Road segments inside an area are not imported for traffic, so no speeds are computed there from anonymous pings.
+
+Server checks (authoritative; the phone check can be bypassed):
+
+| Request | Inside a shape or ≤ `blockM` | ≤ `reviewM` | Matches a `terms` entry (name, description, text) |
+|---|---|---|---|
+| `POST /places`, `PATCH /places/{id}` (move) | 422 `restricted_area` | created `hidden`, `heldForReview: true` | created `hidden`, `heldForReview: true` |
+| `POST /places/{id}/suggest-edit` (lat/lng) | 422 `restricted_area` | accepted (never auto-applied) | accepted (never auto-applied) |
+| `POST /photos` (place within the distance) | 422 `restricted_area` | 422 `restricted_area` | — |
+| `POST /places/{id}/reviews` | 422 `restricted_area` | published as usual | review `hidden`, `heldForReview: true` |
+| `POST /issues`, `POST /reports` | 422 `restricted_area` | as usual | — |
+
+`422` body: ProblemDetails with `code: "restricted_area"` and a localized `detail`. A refusal is counted in a metric,
+never logged with the user or the coordinates. Held items wait in the moderation queue (`state=hidden`, `held: true`);
+the owner sees them in "My contributions" as "Sedang disemak" and gets an Inbox note when a maintainer decides.
+Trusted (emas) contributors are not exempt.
+
+**Reports:** flag reason `sensitive_location` (places, reviews, photos) hides the item after **one** report (other
+reasons need three); a maintainer acts within 24 h.
+
+**Private places ("Untuk saya")** never leave the phone, so the apps allow them anywhere, restricted areas included.
+
 ## Reviews & photos
 
 ```
@@ -216,7 +261,7 @@ GET    /places/{id}/reviews?sort=recent|helpful&cursor=   → {reviews: Review[]
 POST   /places/{id}/reviews           {rating: 1–5, text?: ≤ 2000, photoIds?: string[]} → 201 Review
 PATCH  /reviews/{id}  /  DELETE /reviews/{id}      (author only; one review per user per place)
 POST   /reviews/{id}/helpful          → 204   (toggle)
-POST   /reviews/{id}/flag             {reason: spam|offensive|off_topic|conflict_of_interest|other} → 202
+POST   /reviews/{id}/flag             {reason: spam|offensive|off_topic|conflict_of_interest|sensitive_location|other} → 202
 
 POST   /photos   multipart/form-data: file (JPEG/PNG/HEIC/WebP, ≤ 15 MB), placeId, caption?
   → 201 Photo   (status "processing" → "published" | "rejected")
