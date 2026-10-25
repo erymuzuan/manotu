@@ -31,9 +31,10 @@ struct SoundFab: View {
             .accessibilityIdentifier("soundButton")
             .popover(isPresented: $showPanel, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
                 SoundPanel(selected: mode, volume: Binding(get: { model.voiceVolume }, set: { model.voiceVolume = $0 })) { m in
-                    if m != model.soundMode, m == .off { model.lastSoundMode = model.soundMode }
+                    let r = SoundMode.pick(m, current: model.soundMode, last: model.lastSoundMode)
+                    model.lastSoundMode = r.last
                     showPanel = false
-                    apply(m)
+                    apply(r.mode)
                 }
                 .presentationCompactAdaptation(.popover)
             }
@@ -116,5 +117,12 @@ struct SoundPanel: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(on ? Color.brand : .clear, lineWidth: 2))
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+}
+
+extension SoundMode {
+    /// A row picked in the panel. Picking Mute remembers the mode before it, so a long-press can go back to it.
+    static func pick(_ m: SoundMode, current: SoundMode, last: SoundMode) -> (mode: SoundMode, last: SoundMode) {
+        (m, m == .off && current != .off ? current : last)
     }
 }
