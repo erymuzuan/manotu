@@ -97,8 +97,9 @@ fun RoutePreviewOverlay(plan: RoutePlan, settings: AppSettings, vm: MainViewMode
 
         SheetSurface(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(16.dp).windowInsetsPadding(WindowInsets.navigationBars)) {
-                ModeTabs(plan.mode) { vm.cancelCountdown(); vm.setMode(it) }
-                Spacer(Modifier.height(14.dp))
+                // With the route list showing, slimmer tabs leave room for the map (design RoPilihan).
+                ModeTabs(plan.mode, compact = plan.listMode && !plan.loading) { vm.cancelCountdown(); vm.setMode(it) }
+                Spacer(Modifier.height(if (plan.listMode && !plan.loading) 8.dp else 14.dp))
                 val r = plan.selected
                 when {
                     plan.originSource == OriginSource.LOCATING -> {
@@ -120,7 +121,10 @@ fun RoutePreviewOverlay(plan: RoutePlan, settings: AppSettings, vm: MainViewMode
                     else -> {
                         if (plan.originSource == OriginSource.CHOSEN) StartElsewhereNote(plan.originName ?: "")
                         my.gimano.app.ui.issues.RouteIssueBanner(r.issues, plan.ignoredIssues, vm::passAnyway)
-                        RouteInfo(r, plan, vm)
+                        if (plan.listMode) RouteChoiceList(plan, vm) else {
+                            RouteInfo(r, plan, vm)
+                            OtherRoutesRow(plan, vm)
+                        }
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -140,7 +144,7 @@ fun RoutePreviewOverlay(plan: RoutePlan, settings: AppSettings, vm: MainViewMode
                 } else Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     BigIconButton("add_stop", stringResource(R.string.add_stop), enabled = plan.stops.size < RouteLegs.MAX_STOPS, onClick = vm::addStopInPreview)
                     if (!plan.hasEventStop) BigIconButton("recent", stringResource(R.string.plan_this_drive), enabled = !plan.loading && !plan.error, onClick = vm::planThisDrive)
-                    GoNowButton(plan, Modifier.weight(1f), vm.goActionFor(plan), onGo = vm::startNavigation)
+                    GoNowButton(plan, Modifier.weight(1f), vm.goActionFor(plan), label = startLabel(plan), onGo = vm::startNavigation)
                 }
             }
         }
@@ -382,7 +386,7 @@ private fun RouteInfo(r: Route, plan: RoutePlan, vm: MainViewModel) {
 
 /** Primary button that fills left→right as a countdown and auto-starts navigation. */
 @Composable
-private fun GoNowButton(plan: RoutePlan, modifier: Modifier, goAction: GoAction = plan.goAction, onGo: () -> Unit) {
+private fun GoNowButton(plan: RoutePlan, modifier: Modifier, goAction: GoAction = plan.goAction, label: String? = null, onGo: () -> Unit) {
     val c = Gimano.colors
     val progress = remember { Animatable(0f) }
     val enabled = goAction == GoAction.NAVIGATE
@@ -403,27 +407,28 @@ private fun GoNowButton(plan: RoutePlan, modifier: Modifier, goAction: GoAction 
         contentAlignment = Alignment.Center,
     ) {
         if (enabled) Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(progress.value).background(c.brand))
-        Text(stringResource(R.string.go_now), color = if (enabled) c.brandOn else c.textMuted, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+        Text(label ?: stringResource(R.string.go_now), color = if (enabled) c.brandOn else c.textMuted, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
 
 /** Four big travel-mode tabs: Car, Motorcycle, Bicycle, Walk. */
 @Composable
-private fun ModeTabs(mode: TravelMode, onSelect: (TravelMode) -> Unit) {
+private fun ModeTabs(mode: TravelMode, compact: Boolean = false, onSelect: (TravelMode) -> Unit) {
     val c = Gimano.colors
     val labels = mapOf(TravelMode.CAR to R.string.car, TravelMode.MOTORCYCLE to R.string.motorbike, TravelMode.BICYCLE to R.string.bicycle, TravelMode.WALK to R.string.walk)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TravelMode.entries.forEach { m ->
             val sel = m == mode
             val label = stringResource(labels.getValue(m))
-            Column(
-                Modifier.weight(1f).height(72.dp).clip(RoundedCornerShape(Radius.tile))
-                    .background(if (sel) c.brandMist else c.surfaceAlt)
-                    .then(if (sel) Modifier.border(2.dp, c.brand, RoundedCornerShape(Radius.tile)) else Modifier)
-                    .clickable { onSelect(m) }
-                    .semantics { contentDescription = label },
-                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
-            ) {
+            val tile = Modifier.weight(1f).height(if (compact) 48.dp else 72.dp).clip(RoundedCornerShape(Radius.tile))
+                .background(if (sel) c.brandMist else c.surfaceAlt)
+                .then(if (sel) Modifier.border(2.dp, c.brand, RoundedCornerShape(Radius.tile)) else Modifier)
+                .clickable { onSelect(m) }
+                .semantics { contentDescription = label }
+            if (compact) Box(tile, contentAlignment = Alignment.Center) {
+                GIcon(m.icon, null, size = 30.dp, stroke = if (sel) c.brandInk else c.textMuted, fill = if (sel) c.brandTint else c.outline)
+            } else Column(tile, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 GIcon(m.icon, null, size = 34.dp, stroke = if (sel) c.brandInk else c.textMuted, fill = if (sel) c.brandTint else c.outline)
                 Text(label, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = if (sel) c.text else c.textMuted, maxLines = 1)
             }
@@ -468,7 +473,7 @@ private fun RouteBubbles(plan: RoutePlan, handle: MapHandle, vm: MainViewModel) 
     @Suppress("UNUSED_VARIABLE") val tick = handle.cameraVersion
     val geoms = remember(plan.decoded) { plan.decoded.mapValues { RouteGeometry(it.value) } }
     Box(Modifier.fillMaxSize()) {
-        plan.routes.forEachIndexed { i, r ->
+        plan.visibleRoutes.forEachIndexed { i, r ->
             val g = geoms[r.id] ?: return@forEachIndexed
             if (g.points.size < 2) return@forEachIndexed
             val frac = when (i) { 0 -> 0.5; 1 -> 0.38; else -> 0.62 }

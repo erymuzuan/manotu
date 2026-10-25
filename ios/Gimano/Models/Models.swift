@@ -849,6 +849,12 @@ struct Route: Codable, Sendable, Identifiable, Hashable {
     var issues: [RouteIssue]?
     /// A place destination routed to its entrance: where this route ends (docs/driving.md §4).
     var arrival: NavigationPoint?
+    /// Why this route is offered: fastest, shortest, lower_toll, no_tolls, fewer_reports, other_main_road (docs/api.md "Route options").
+    var reasons: [String]?
+    /// Main roads only this route uses, e.g. ["FT2"].
+    var viaRoads: [String]?
+    /// Not worth offering (same_road, slower, worse): shown only after "Show anyway".
+    var hidden: String?
     /// Client-side only (demo mode): explains that a captured route was substituted. Not part of the API contract.
     var demoNote: String?
 

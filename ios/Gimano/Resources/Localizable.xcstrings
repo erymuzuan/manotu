@@ -81,6 +81,16 @@
         }
       }
     },
+    "%@ longer" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lebih jauh"
+          }
+        }
+      }
+    },
     "%@ more accepted places" : {
       "localizations" : {
         "ms" : {
@@ -97,6 +107,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ hari lagi"
+          }
+        }
+      }
+    },
+    "%@ more toll" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tol lebih %@"
           }
         }
       }
@@ -137,6 +157,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ dilaporkan di hadapan"
+          }
+        }
+      }
+    },
+    "%@ shorter" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lebih dekat"
           }
         }
       }
@@ -313,6 +343,46 @@
         }
       }
     },
+    "%lld more routes hidden" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more route hidden"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more routes hidden"
+                }
+              }
+            }
+          }
+        },
+        "ms" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld lagi laluan disembunyikan"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld lagi laluan disembunyikan"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld of %lld" : {
       "localizations" : {
         "ms" : {
@@ -329,6 +399,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld daripada 3 tempat diterima untuk keluar daripada \"baharu\""
+          }
+        }
+      }
+    },
+    "%lld other routes" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld other route"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld other routes"
+                }
+              }
+            }
+          }
+        },
+        "ms" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld laluan lain"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld laluan lain"
+                }
+              }
+            }
           }
         }
       }
@@ -363,6 +473,16 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "%lld reports on route" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld laporan di laluan"
           }
         }
       }
@@ -517,6 +637,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "+ Masa"
+          }
+        }
+      }
+    },
+    "1 more route hidden: %@, %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 lagi laluan disembunyikan: %1$@, %2$@"
+          }
+        }
+      }
+    },
+    "1 other route" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 laluan lain"
           }
         }
       }
@@ -777,6 +917,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tempat yang sangat serupa sudah ada di peta di sini. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya."
+          }
+        }
+      }
+    },
+    "almost the same road" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "hampir jalan yang sama"
+          }
+        }
+      }
+    },
+    "and" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dan"
           }
         }
       }
@@ -1699,6 +1859,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mengelak %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "avoids %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "elak %@"
           }
         }
       }
@@ -2721,6 +2891,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Trip syarikat"
+          }
+        }
+      }
+    },
+    "Compared with the fastest" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Berbanding laluan terpantas"
           }
         }
       }
@@ -4515,6 +4695,16 @@
         }
       }
     },
+    "Fastest" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terpantas"
+          }
+        }
+      }
+    },
     "Favourites" : {
       "localizations" : {
         "ms" : {
@@ -4531,6 +4721,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Perkhidmatan maklum balas belum tersedia (menunggu pelayan)"
+          }
+        }
+      }
+    },
+    "Fewer reports" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kurang laporan"
           }
         }
       }
@@ -6298,6 +6498,16 @@
         }
       }
     },
+    "less toll" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kurang tol"
+          }
+        }
+      }
+    },
     "Level" : {
       "localizations" : {
         "ms" : {
@@ -6524,6 +6734,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Laluan panjang boleh menjadikan pautan terlalu besar; Manotu akan cadangkan fail acara."
+          }
+        }
+      }
+    },
+    "longer" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lebih jauh"
+          }
+        }
+      }
+    },
+    "Lower toll" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tol lebih murah"
           }
         }
       }
@@ -6944,6 +7174,16 @@
         }
       }
     },
+    "more toll" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lebih tol"
+          }
+        }
+      }
+    },
     "Mosque" : {
       "localizations" : {
         "ms" : {
@@ -7054,6 +7294,16 @@
         }
       }
     },
+    "much slower" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jauh lebih lama"
+          }
+        }
+      }
+    },
     "Mute" : {
       "localizations" : {
         "ms" : {
@@ -7120,6 +7370,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Laluan saya"
+          }
+        }
+      }
+    },
+    "no tolls" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tiada tol"
           }
         }
       }
@@ -8512,6 +8772,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pemandu lain akan membantu mengesahkannya."
+          }
+        }
+      }
+    },
+    "Other main road" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jalan utama lain"
           }
         }
       }
@@ -10146,6 +10416,86 @@
         }
       }
     },
+    "same time" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "masa sama"
+          }
+        }
+      }
+    },
+    "same toll" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tol sama"
+          }
+        }
+      }
+    },
+    "saves %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jimat %@"
+          }
+        }
+      }
+    },
+    "shorter" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lebih dekat"
+          }
+        }
+      }
+    },
+    "Shortest" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terpendek"
+          }
+        }
+      }
+    },
+    "Show anyway" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tunjuk juga"
+          }
+        }
+      }
+    },
+    "slower" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lebih lama"
+          }
+        }
+      }
+    },
+    "slower, longer and more toll" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lebih lama, jauh dan mahal tol"
+          }
+        }
+      }
+    },
     "SMS" : {
       "localizations" : {
         "ms" : {
@@ -11598,6 +11948,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mula berjalan"
+          }
+        }
+      }
+    },
+    "Start · %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mula · %@"
+          }
+        }
+      }
+    },
+    "Start · %@ via %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mula · %1$@ melalui %2$@"
           }
         }
       }
@@ -13084,6 +13454,16 @@
         }
       }
     },
+    "toll %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tol %@"
+          }
+        }
+      }
+    },
     "Toll ahead · fare unknown" : {
       "localizations" : {
         "ms" : {
@@ -13100,6 +13480,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tol masuk · bayar di tol keluar"
+          }
+        }
+      }
+    },
+    "toll from %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tol dari %@"
           }
         }
       }

@@ -1311,4 +1311,47 @@
     <string name="report_rate_limited">Too many reports. Try again in a while.</string>
     <string name="place_link_unavailable">Could not open this place. Check your connection or try again later.</string>
     <string name="place_link_finish_drive">Finish your drive before opening a shared place.</string>
+    <!-- Route options before a drive (design "Route options before driving") -->
+    <plurals name="route_count_n">
+        <item quantity="one">%1$d route</item>
+        <item quantity="other">%1$d routes</item>
+    </plurals>
+    <plurals name="other_routes_n">
+        <item quantity="one">%1$d other route</item>
+        <item quantity="other">%1$d other routes</item>
+    </plurals>
+    <plurals name="hidden_routes_n">
+        <item quantity="one">%1$d more route hidden</item>
+        <item quantity="other">%1$d more routes hidden</item>
+    </plurals>
+    <string name="reason_fastest">Fastest</string>
+    <string name="reason_shortest">Shortest</string>
+    <string name="reason_lower_toll">Lower toll</string>
+    <string name="reason_no_tolls">No tolls</string>
+    <string name="reason_fewer_reports">Fewer reports</string>
+    <string name="reason_other_main_road">Other main road</string>
+    <string name="route_toll">toll %1$s</string>
+    <string name="route_toll_from">toll from %1$s</string>
+    <string name="route_no_tolls">no tolls</string>
+    <string name="cmp_saves">saves %1$s</string>
+    <string name="cmp_shorter">%1$s shorter</string>
+    <string name="cmp_longer">%1$s longer</string>
+    <string name="cmp_avoids">avoids %1$s</string>
+    <string name="cmp_and">and</string>
+    <string name="compared_with_fastest">Compared with the fastest</string>
+    <string name="tile_slower">slower</string>
+    <string name="tile_same_time">same time</string>
+    <string name="tile_less_toll">less toll</string>
+    <string name="tile_same_toll">same toll</string>
+    <string name="tile_more_toll">more toll</string>
+    <string name="cmp_more_toll">%1$s more toll</string>
+    <string name="tile_shorter">shorter</string>
+    <string name="tile_longer">longer</string>
+    <string name="hidden_same_road">almost the same road</string>
+    <string name="hidden_slower">much slower</string>
+    <string name="hidden_worse">slower, longer and more toll</string>
+    <string name="show_routes">Show</string>
+    <string name="show_anyway">Show anyway</string>
+    <string name="start_route">Start · %1$s via %2$s</string>
+    <string name="start_route_short">Start · %1$s</string>
 </resources>

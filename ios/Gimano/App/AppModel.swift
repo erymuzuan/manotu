@@ -48,6 +48,10 @@ final class RoutePlanner {
     var quickPick = false
     /// To an imported event's stop (Acara): not saved to recents, and "Leave later" doesn't copy the stop's name.
     var isEventTrip = false
+    /// Short trips: the user tapped "N other routes" (long trips open the list by themselves, see `RouteChoices`).
+    var listOpen = false
+    /// "Show anyway": routes the server marked as not worth offering are drawn and listed too.
+    var showHidden = false
 
     init(destination: Destination, vehicle: Vehicle) {
         self.destination = destination
@@ -55,6 +59,9 @@ final class RoutePlanner {
     }
 
     var selected: Route? { routes.first { $0.id == selectedId } ?? routes.first }
+    /// The routes on the map and in the list.
+    var visibleRoutes: [Route] { showHidden ? routes : RouteChoices.shown(routes) }
+    var listMode: Bool { listOpen || RouteChoices.listFirst(routes, vehicle: vehicle, hasStops: !stops.isEmpty) }
 
     /// Seconds from departure to each stop, then the destination.
     var schedule: StopSchedule? { selected.map { StopSchedule.make(route: $0, stops: stops.map(\.location)) } }
@@ -927,7 +934,7 @@ final class AppModel {
         case .routePreview:
             guard let planner else { break }
             let sel = planner.selected?.id
-            map.routes = planner.routes.map {
+            map.routes = planner.visibleRoutes.map {
                 RouteLine(id: $0.id, points: Polyline.decode($0.polyline), selected: $0.id == sel, traffic: $0.trafficSegments ?? [])
             }
             // A substituted demo route ends at its own (captured) destination; pin that, not the requested place.
@@ -936,7 +943,7 @@ final class AppModel {
             } else {
                 map.destination = planner.destination.location
             }
-            map.bubbleAnchors = Self.bubbleAnchors(for: planner.routes.map { ($0.id, Polyline.decode($0.polyline)) })
+            map.bubbleAnchors = Self.bubbleAnchors(for: planner.visibleRoutes.map { ($0.id, Polyline.decode($0.polyline)) })
             map.tolls = (planner.selected?.tolls ?? []).map { LatLng(lat: $0.lat, lng: $0.lng) }
             if let r = planner.selected, r.demoNote == nil {
                 map.lastMetres = LastMetres.make(routeEnd: Polyline.decode(r.polyline).last, arrival: r.arrival?.location,
@@ -1213,6 +1220,7 @@ final class AppModel {
             let routes = try await repo.routes(req)
             guard self.planner === planner else { return }
             planner.routes = routes
+            planner.showHidden = false
             planner.selectedId = (routes.first(where: \.isBest) ?? routes.first)?.id
             if routes.isEmpty { planner.error = String(localized: "No route found") }
         } catch {
@@ -1221,15 +1229,26 @@ final class AppModel {
         planner.isLoading = false
         syncRouteLayers()
         if let r = planner.selected, let bbox = BBox(array: r.bbox) {
-            let all = planner.routes.compactMap { BBox(array: $0.bbox) }
+            let all = planner.visibleRoutes.compactMap { BBox(array: $0.bbox) }
             let union = BBox.around(all.flatMap { [LatLng(lat: $0.minLat, lng: $0.minLng), LatLng(lat: $0.maxLat, lng: $0.maxLng)] } + [origin]) ?? bbox
-            map.overviewInsets = (top: 170, bottom: 400)
+            // The route list (long trips) covers more of the screen than the single-route card.
+            map.overviewInsets = (top: 170, bottom: planner.listMode ? 580 : 400)
             map.setCamera(.overview(union))
         }
     }
 
     func selectRoute(_ id: String) {
         planner?.selectedId = id
+        syncRouteLayers()
+    }
+
+    /// Short trips: "N other routes" → the list.
+    func openRouteList() { planner?.listOpen = true }
+
+    /// "Show anyway": also draw and list the routes the server hid.
+    func showHiddenRoutes() {
+        planner?.showHidden = true
+        planner?.listOpen = true
         syncRouteLayers()
     }
 

@@ -205,7 +205,7 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
         },
         routes = when {
             navigating && nav.route != null -> listOf(RouteDraw(nav.route!!.id, navPoints, true, nav.route!!.trafficSegments))
-            screen == Screen.RoutePreview -> ui.plan?.routes.orEmpty().map { r ->
+            screen == Screen.RoutePreview -> ui.plan?.visibleRoutes.orEmpty().map { r ->
                 RouteDraw(r.id, ui.plan?.decoded?.get(r.id).orEmpty(), r.id == ui.plan?.selected?.id, r.trafficSegments)
             }
             // Sketch / GPX routes are drawn dashed (builder layer) so nobody mistakes them for roads.

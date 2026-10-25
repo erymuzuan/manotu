@@ -477,6 +477,12 @@ data class Route(
     /** Complaints v1: issues on this route or avoided by it. */
     val issues: List<RouteIssue> = emptyList(),
     val alerts: List<AlertOnRoute> = emptyList(),
+    /** Why this route is offered: fastest, shortest, lower_toll, no_tolls, fewer_reports, other_main_road (docs/api.md "Route options"). */
+    val reasons: List<String>? = null,
+    /** Main roads only this route uses, e.g. ["FT2"]. */
+    val viaRoads: List<String>? = null,
+    /** Not worth offering (same_road, slower, worse): shown only after "Show anyway". */
+    val hidden: String? = null,
 ) {
     val isBest get() = label == "best"
     val effectiveDurationS get() = trafficDurationS ?: durationS

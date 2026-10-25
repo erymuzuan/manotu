@@ -80,6 +80,8 @@ struct RoutePreviewView: View {
                    AutoStart.shouldCountdown(enabled: model.autoStartNav, quickPick: planner.quickPick, originIsGPS: planner.start.isGPS,
                                              hasStops: !planner.stops.isEmpty, departLater: planner.departAt != nil,
                                              foreground: model.isForeground),
+                   // A real choice on a long trip: the list opens and nothing starts until the driver picks.
+                   !RouteChoices.listFirst(planner.routes, vehicle: planner.vehicle, hasStops: !planner.stops.isEmpty),
                    !UserDefaults.standard.bool(forKey: "GimanoNoAutoStart") { startCountdown() }
             }
             .task(id: countdownToken) {
@@ -194,8 +196,8 @@ struct RoutePreviewView: View {
 
     private func bubbles(_ planner: RoutePlanner) -> some View {
         ZStack(alignment: .topLeading) {
-            let positions = Self.separated(planner.routes.compactMap { r in model.map.bubblePoints[r.id].map { (r.id, $0) } })
-            ForEach(planner.routes) { r in
+            let positions = Self.separated(planner.visibleRoutes.compactMap { r in model.map.bubblePoints[r.id].map { (r.id, $0) } })
+            ForEach(planner.visibleRoutes) { r in
                 if let pt = positions[r.id] {
                     let selected = r.id == planner.selected?.id
                     Button {
@@ -244,10 +246,11 @@ struct RoutePreviewView: View {
 
     private func bottomCard(_ planner: RoutePlanner) -> some View {
         VStack(alignment: .leading, spacing: 14) {
+            // With the route list showing, slimmer tabs leave room for the map (design RoPilihan).
             TravelModeTabs(selection: Binding(get: { planner.vehicle }, set: { v in
                 stopCountdown()
                 model.setTravelMode(v)
-            }))
+            }), compact: planner.listMode && !planner.isLoading)
 
             StopsStrip(planner: planner, onAdd: {
                 stopCountdown()
@@ -277,7 +280,14 @@ struct RoutePreviewView: View {
                     .accessibilityIdentifier("routeError")
             } else if let r = planner.selected {
                 if !(r.issues ?? []).isEmpty { RouteIssuesBanner(route: r) }
-                routeSummary(r, planner: planner)
+                if planner.listMode {
+                    RouteChoiceList(planner: planner) { id in stopCountdown(); model.selectRoute(id) } onShowHidden: {
+                        stopCountdown(); model.showHiddenRoutes()
+                    } onTolls: { stopCountdown(); showTolls = true }
+                } else {
+                    routeSummary(r, planner: planner)
+                    OtherRoutesRow(planner: planner) { stopCountdown(); model.openRouteList() }
+                }
             }
 
             if case .chosen(let name, _, _) = planner.start, planner.selected != nil {
@@ -314,7 +324,10 @@ struct RoutePreviewView: View {
                     stopCountdown()
                     model.startNavigation()
                 } label: {
-                    Text("Go now")
+                    Text(startLabel(planner) ?? String(localized: "Go now"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 10)
                         .frame(maxWidth: .infinity, minHeight: 52)
                         .background(alignment: .leading) {
                             // Fills left→right during the auto-start countdown.
@@ -339,6 +352,14 @@ struct RoutePreviewView: View {
                 .shadow(color: .black.opacity(0.15), radius: 10, y: -2)
                 .ignoresSafeArea(edges: .bottom)
         )
+    }
+
+    /// "Start · 43 min via E5" while the route list is showing; nil keeps "Go now".
+    private func startLabel(_ planner: RoutePlanner) -> String? {
+        guard planner.listMode, let r = planner.selected else { return nil }
+        let time = ETAFormatter.duration(r.effectiveDurationS)
+        if let via = RouteChoices.via(r) { return String(localized: "Start · \(time) via \(via)") }
+        return String(localized: "Start · \(time)")
     }
 
     private func startLabel(_ start: RouteStart) -> String {
@@ -427,17 +448,18 @@ struct RoutePreviewView: View {
 /// Four big icon tabs: Car, Motorcycle, Bicycle, Walk.
 struct TravelModeTabs: View {
     @Binding var selection: Vehicle
+    var compact = false
 
     var body: some View {
         HStack(spacing: 8) {
             ForEach(Vehicle.allCases) { v in
                 Button { selection = v } label: {
                     VStack(spacing: 2) {
-                        GimanoIcon(icon: v.gIcon, size: 34)
-                        Text(v.shortTitle).font(Tokens.Font.nunito(12, .extrabold))
+                        GimanoIcon(icon: v.gIcon, size: compact ? 28 : 34)
+                        if !compact { Text(v.shortTitle).font(Tokens.Font.nunito(12, .extrabold)) }
                     }
                     .foregroundStyle(Color.brandInk)
-                    .frame(maxWidth: .infinity, minHeight: 64)
+                    .frame(maxWidth: .infinity, minHeight: compact ? 44 : 64)
                     .selectableTile(selection == v, radius: 18)
                 }
                 .buttonStyle(.plain)
@@ -767,4 +789,293 @@ struct StartPickerSheet: View {
         dismiss()
         model.setRouteStart(s)
     }
+}
+
+// MARK: - Route options before a drive (design RoPilihan / RoBanding / RoPendek / RoSatu)
+
+private extension Color {
+    static let tollTag = Color(light: 0xFFE7C7, dark: 0x3D2A10)
+    static let tollTagInk = Color(light: 0x7A4100, dark: 0xF5C98A)
+    static let roadTag = Color(light: 0xD6F2E8, dark: 0x123A2E)
+    static let roadTagInk = Color(light: 0x0B4A3A, dark: 0x9EE3C8)
+    static let worse = Color(light: 0x9A3412, dark: 0xFFB08A)
+    static let better = Color(light: 0x0B5D45, dark: 0x8FE0BE)
+}
+
+/// Every shown route as a card; with another route picked, it grows a comparison and the rest shrink to rows.
+struct RouteChoiceList: View {
+    let planner: RoutePlanner
+    let onSelect: (String) -> Void
+    let onShowHidden: () -> Void
+    let onTolls: () -> Void
+
+    var body: some View {
+        let shown = RouteChoices.shown(planner.routes)
+        let fastest = shown.first ?? planner.routes.first
+        let selected = planner.selected
+        let altPicked = selected != nil && selected?.id != fastest?.id
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("\(planner.visibleRoutes.count) routes")
+                    .font(Tokens.Font.nunito(18, .black))
+                    .padding(.horizontal, 4)
+                    .accessibilityIdentifier("routeCount")
+                if let fastest {
+                    ForEach(planner.visibleRoutes) { r in
+                        let isSel = r.id == selected?.id
+                        if altPicked && !isSel {
+                            compactRow(r)
+                        } else {
+                            card(r, fastest: fastest, shown: shown, selected: isSel, expanded: isSel && altPicked)
+                        }
+                    }
+                }
+                let hidden = RouteChoices.hidden(planner.routes)
+                if !hidden.isEmpty && !planner.showHidden { hiddenRow(hidden) }
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(maxHeight: 400)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func card(_ r: Route, fastest: Route, shown: [Route], selected: Bool, expanded: Bool) -> some View {
+        let cmp = RouteChoices.compare(r, fastest: fastest, shown: shown)
+        return Button { onSelect(r.id) } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Capsule().fill(selected ? Color.brand : Color.textMuted.opacity(0.5)).frame(width: 6).frame(minHeight: 56)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(ETAFormatter.duration(r.effectiveDurationS))
+                            .font(Tokens.Font.nunito(selected ? 24 : 22, .black))
+                            .foregroundStyle(selected ? Color.brand : Color.textPrimary)
+                        RouteTags(route: r)
+                        Spacer(minLength: 4)
+                        Text(ManeuverFormatter.distance(r.distanceM)).font(Tokens.Font.nunito(14, .extrabold)).foregroundStyle(Color.textMuted)
+                    }
+                    Text([tollText(r), r.summary.isEmpty ? nil : r.summary].compactMap { $0 }.joined(separator: " · "))
+                        .font(Tokens.Font.nunito(14, .bold))
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                    if r.id == fastest.id {
+                        let bits = [planner.vehicle.isMotorized ? (r.trafficDescription ?? String(localized: "Typical traffic")) : nil,
+                                    (r.alerts ?? []).isEmpty ? nil : String(localized: "\((r.alerts ?? []).count) reports on route")].compactMap { $0 }
+                        if !bits.isEmpty { Text(bits.joined(separator: " · ")).font(Tokens.Font.nunito(13, .bold)).foregroundStyle(Color.textMuted) }
+                    } else if !expanded {
+                        Text(Self.compareLine(cmp)).font(Tokens.Font.nunito(13, .bold)).foregroundStyle(Color.textMuted)
+                    }
+                    if expanded { tiles(cmp, route: r) }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? Color.brandMist : Color.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(selected ? Color.brand : Color.surfaceAlt, lineWidth: 2))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("routeCard")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func tiles(_ cmp: RouteChoices.Compare, route r: Route) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Compared with the fastest").textCase(.uppercase)
+                .font(Tokens.Font.nunito(12, .black)).foregroundStyle(Color.brandInk).padding(.top, 4)
+            HStack(spacing: 6) {
+                if cmp.extraS >= 60 {
+                    tile("+" + ETAFormatter.duration(cmp.extraS), String(localized: "slower"), .worse)
+                } else {
+                    tile("=", String(localized: "same time"), .textPrimary)
+                }
+                if let saved = cmp.tollSavedMyr {
+                    tile(TollBadge.myr(saved), String(localized: "less toll"), .better)
+                } else if let extra = cmp.tollExtraMyr {
+                    tile(TollBadge.myr(extra), String(localized: "more toll"), .worse)
+                } else {
+                    tile("=", String(localized: "same toll"), .textPrimary)
+                }
+                if let m = cmp.shorterM {
+                    tile(ManeuverFormatter.distance(m), String(localized: "shorter"), .better)
+                } else if let m = cmp.longerM {
+                    tile(ManeuverFormatter.distance(m), String(localized: "longer"), .worse)
+                } else {
+                    Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
+                }
+            }
+            if let n = r.alerts?.count, n > 0 {
+                Text("\(n) reports on route").font(Tokens.Font.nunito(13, .bold)).foregroundStyle(Color.textMuted)
+            }
+            if !(r.tolls ?? []).isEmpty {
+                Button("Toll plazas", action: onTolls).font(Tokens.Font.nunito(14, .black)).foregroundStyle(Color.brand)
+                    .accessibilityIdentifier("routeTolls")
+            }
+        }
+    }
+
+    private func tile(_ value: String, _ label: String, _ colour: Color) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(value).font(Tokens.Font.nunito(17, .black)).foregroundStyle(colour).lineLimit(1).minimumScaleFactor(0.8)
+            Text(label).font(Tokens.Font.nunito(12, .bold)).foregroundStyle(Color.textMuted).lineLimit(1)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func compactRow(_ r: Route) -> some View {
+        Button { onSelect(r.id) } label: {
+            HStack(spacing: 10) {
+                Capsule().fill(Color.textMuted.opacity(0.5)).frame(width: 6, height: 30)
+                Text(ETAFormatter.duration(r.effectiveDurationS)).font(Tokens.Font.nunito(18, .black)).foregroundStyle(Color.textPrimary)
+                Text([r.reasons?.first.flatMap(RouteTags.label), RouteChoices.via(r), tollText(r)].compactMap { $0 }.joined(separator: " · "))
+                    .font(Tokens.Font.nunito(13, .bold)).foregroundStyle(Color.textMuted).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .background(Color.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.surfaceAlt, lineWidth: 2))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("routeRow")
+    }
+
+    private func hiddenRow(_ hidden: [Route]) -> some View {
+        Button(action: onShowHidden) {
+            HStack {
+                Group {
+                    if hidden.count == 1, let r = hidden.first {
+                        Text("1 more route hidden: \(ETAFormatter.duration(r.effectiveDurationS)), \(RouteTags.hiddenLabel(r.hidden))")
+                    } else {
+                        Text("\(hidden.count) more routes hidden")
+                    }
+                }
+                .font(Tokens.Font.nunito(13, .bold)).foregroundStyle(Color.textMuted)
+                Spacer()
+                Text("Show anyway").font(Tokens.Font.nunito(14, .black)).foregroundStyle(Color.brand)
+            }
+            .frame(minHeight: 44)
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("showHiddenRoutes")
+    }
+
+    static func compareLine(_ c: RouteChoices.Compare) -> String {
+        var bits = ["+" + ETAFormatter.duration(max(60, c.extraS))]
+        if let s = c.tollSavedMyr { bits.append(String(localized: "saves \(TollBadge.myr(s))")) }
+        if let e = c.tollExtraMyr { bits.append(String(localized: "\(TollBadge.myr(e)) more toll")) }
+        if let m = c.shorterM { bits.append(String(localized: "\(ManeuverFormatter.distance(m)) shorter")) }
+        if let m = c.longerM { bits.append(String(localized: "\(ManeuverFormatter.distance(m)) longer")) }
+        if !c.avoids.isEmpty {
+            let roads = c.avoids.prefix(2).joined(separator: " " + String(localized: "and") + " ")
+            bits.append(String(localized: "avoids \(roads)"))
+        }
+        return bits.joined(separator: " · ")
+    }
+}
+
+/// Up to two reason tags ("Fastest", "Lower toll", …), or why a hidden route was hidden.
+struct RouteTags: View {
+    let route: Route
+
+    var body: some View {
+        HStack(spacing: 6) {
+            let codes = Array((route.reasons ?? []).prefix(2))
+            if codes.isEmpty, route.hidden != nil {
+                tag(Self.hiddenLabel(route.hidden), .surfaceAlt, .textMuted)
+            }
+            ForEach(codes, id: \.self) { code in
+                if let label = Self.label(code) {
+                    let (bg, ink) = Self.colours(code)
+                    tag(label, bg, ink)
+                }
+            }
+        }
+    }
+
+    private func tag(_ text: String, _ bg: Color, _ ink: Color) -> some View {
+        Text(text).font(Tokens.Font.nunito(12, .black)).foregroundStyle(ink).lineLimit(1)
+            .padding(.horizontal, 8).padding(.vertical, 2)
+            .background(bg, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    static func label(_ code: String) -> String? {
+        switch code {
+        case "fastest": String(localized: "Fastest")
+        case "shortest": String(localized: "Shortest")
+        case "lower_toll": String(localized: "Lower toll")
+        case "no_tolls": String(localized: "No tolls")
+        case "fewer_reports": String(localized: "Fewer reports")
+        case "other_main_road": String(localized: "Other main road")
+        default: nil
+        }
+    }
+
+    static func hiddenLabel(_ code: String?) -> String {
+        switch code {
+        case "same_road": String(localized: "almost the same road")
+        case "slower": String(localized: "much slower")
+        default: String(localized: "slower, longer and more toll")
+        }
+    }
+
+    private static func colours(_ code: String) -> (Color, Color) {
+        switch code {
+        case "fastest": (.brand, .brandOn)
+        case "shortest": (.surfaceAlt, .brandInk)
+        case "lower_toll", "no_tolls": (.tollTag, .tollTagInk)
+        default: (.roadTag, .roadTagInk)
+        }
+    }
+}
+
+/// Short trips (design RoPendek): "2 other routes · +6 min via FT20 · …"; Show opens the list and stops the countdown.
+struct OtherRoutesRow: View {
+    let planner: RoutePlanner
+    let onShow: () -> Void
+
+    var body: some View {
+        let shown = RouteChoices.shown(planner.routes)
+        let others = shown.filter { $0.id != planner.selected?.id }
+        if shown.count >= 2, let fastest = shown.first, !others.isEmpty {
+            Button(action: onShow) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(others.count == 1 ? String(localized: "1 other route") : String(localized: "\(others.count) other routes"))
+                            .font(Tokens.Font.nunito(16, .black)).foregroundStyle(Color.textPrimary)
+                        Text(others.map { r in
+                            let t = r.id == fastest.id ? ETAFormatter.duration(r.effectiveDurationS)
+                                : "+" + ETAFormatter.duration(max(60, r.effectiveDurationS - fastest.effectiveDurationS))
+                            // Same road name as the fastest says nothing: show the distance instead.
+                            let via = RouteChoices.via(r)
+                            let road = via != nil && via != RouteChoices.via(fastest) ? via! : ManeuverFormatter.distance(r.distanceM)
+                            return "\(t) \(road)"
+                        }.joined(separator: " · "))
+                        .font(Tokens.Font.nunito(13, .bold)).foregroundStyle(Color.textMuted).lineLimit(1)
+                    }
+                    Spacer()
+                    Text("Show").font(Tokens.Font.nunito(14, .black)).foregroundStyle(Color.brand)
+                }
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("otherRoutes")
+        }
+    }
+}
+
+/// "toll RM 8.56", "toll from RM 2.50", "no tolls"; nil for bicycle and walk.
+private func tollText(_ r: Route) -> String? {
+    if r.vehicle == .bicycle || r.vehicle == .walk { return nil }
+    if !r.hasTolls { return String(localized: "no tolls") }
+    guard let v = r.tollEstimateMyr else { return nil }
+    return r.tollFareComplete == true ? String(localized: "toll \(TollBadge.myr(v))") : String(localized: "toll from \(TollBadge.myr(v))")
 }

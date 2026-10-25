@@ -126,12 +126,19 @@ data class RoutePlan(
     /** "Lalu juga": issues whose exclusion is ignored for this trip only. */
     val ignoredIssues: Set<String> = emptySet(),
     val countdownRunning: Boolean = false,
+    /** Short trips: the user tapped "N other routes" (long trips open the list by themselves, see [RouteChoices]). */
+    val listOpen: Boolean = false,
+    /** "Show anyway": routes the server marked as not worth offering are drawn and listed too. */
+    val showHidden: Boolean = false,
     val request: RouteRequest? = null,
     val computedAt: Instant = Instant.now(),
     /** Opened from an event's stop: back returns to that event. */
     val returnToEvent: String? = null,
 ) {
     val selected: Route? get() = routes.firstOrNull { it.id == selectedId } ?: routes.firstOrNull()
+    /** The routes on the map and in the list. */
+    val visibleRoutes: List<Route> get() = if (showHidden) routes else my.gimano.app.core.trip.RouteChoices.shown(routes)
+    val listMode: Boolean get() = listOpen || my.gimano.app.core.trip.RouteChoices.listFirst(routes, mode, stops.isNotEmpty())
     /** An event stop is the destination or a stop: no "Plan this drive" (its label must not be saved). */
     val hasEventStop: Boolean get() = destination.eventStop || stops.any { it.eventStop }
     val originName: String? get() = originPlace?.name
@@ -1742,10 +1749,13 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                 if (it.plan == null) return@update it   // preview closed meanwhile: no routes, no camera jump
                 it.copy(
                     plan = it.plan.copy(routes = routes, decoded = decoded, selectedId = best.id, loading = false, error = false, request = req,
+                        // A real choice on a long trip: the list opens and nothing starts until the driver picks (design RoPilihan).
                         countdownRunning = my.gimano.app.core.trip.AutoStart.shouldCountdown(settings.current.autoStartNav, plan.quickPick,
-                            plan.originSource == OriginSource.GPS, plan.stops.isNotEmpty(), plan.departAt != null, my.gimano.app.core.net.AppForeground.foreground),
-                        computedAt = Instant.now()),
-                    camera = CameraCommand.Fit(decoded.values.flatten() + origin + plan.destination.point, topDp = 170, bottomDp = 430),
+                            plan.originSource == OriginSource.GPS, plan.stops.isNotEmpty(), plan.departAt != null, my.gimano.app.core.net.AppForeground.foreground)
+                            && !my.gimano.app.core.trip.RouteChoices.listFirst(routes, plan.mode, plan.stops.isNotEmpty()),
+                        showHidden = false, computedAt = Instant.now()),
+                    camera = CameraCommand.Fit(my.gimano.app.core.trip.RouteChoices.shown(routes).flatMap { r -> decoded[r.id].orEmpty() } + origin + plan.destination.point,
+                        topDp = 170, bottomDp = if (my.gimano.app.core.trip.RouteChoices.listFirst(routes, plan.mode, plan.stops.isNotEmpty())) 570 else 430),
                 )
             }
         }
@@ -1753,6 +1763,8 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
 
     fun selectRoute(id: String) = _ui.update { s -> s.copy(plan = s.plan?.copy(selectedId = id, countdownRunning = false)) }
     fun cancelCountdown() = _ui.update { s -> s.copy(plan = s.plan?.copy(countdownRunning = false)) }
+    fun openRouteList() = _ui.update { s -> s.copy(plan = s.plan?.copy(listOpen = true, countdownRunning = false)) }
+    fun showHiddenRoutes() = _ui.update { s -> s.copy(plan = s.plan?.copy(showHidden = true, listOpen = true, countdownRunning = false)) }
 
     /** Travel mode tabs. The choice is remembered on the device and on the profile (PATCH /me). */
     fun setMode(m: TravelMode) {

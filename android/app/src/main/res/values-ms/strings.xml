@@ -1302,4 +1302,47 @@
     <string name="report_rate_limited">Terlalu banyak laporan. Cuba lagi sebentar lagi.</string>
     <string name="place_link_unavailable">Tempat ini tidak dapat dibuka. Semak sambungan anda atau cuba lagi nanti.</string>
     <string name="place_link_finish_drive">Tamatkan perjalanan anda sebelum membuka tempat yang dikongsi.</string>
+    <!-- Pilihan laluan sebelum memandu -->
+    <plurals name="route_count_n">
+        <item quantity="one">%1$d laluan</item>
+        <item quantity="other">%1$d laluan</item>
+    </plurals>
+    <plurals name="other_routes_n">
+        <item quantity="one">%1$d laluan lain</item>
+        <item quantity="other">%1$d laluan lain</item>
+    </plurals>
+    <plurals name="hidden_routes_n">
+        <item quantity="one">%1$d lagi laluan disembunyikan</item>
+        <item quantity="other">%1$d lagi laluan disembunyikan</item>
+    </plurals>
+    <string name="reason_fastest">Terpantas</string>
+    <string name="reason_shortest">Terpendek</string>
+    <string name="reason_lower_toll">Tol lebih murah</string>
+    <string name="reason_no_tolls">Tiada tol</string>
+    <string name="reason_fewer_reports">Kurang laporan</string>
+    <string name="reason_other_main_road">Jalan utama lain</string>
+    <string name="route_toll">tol %1$s</string>
+    <string name="route_toll_from">tol dari %1$s</string>
+    <string name="route_no_tolls">tiada tol</string>
+    <string name="cmp_saves">jimat %1$s</string>
+    <string name="cmp_shorter">%1$s lebih dekat</string>
+    <string name="cmp_longer">%1$s lebih jauh</string>
+    <string name="cmp_avoids">elak %1$s</string>
+    <string name="cmp_and">dan</string>
+    <string name="compared_with_fastest">Berbanding laluan terpantas</string>
+    <string name="tile_slower">lebih lama</string>
+    <string name="tile_same_time">masa sama</string>
+    <string name="tile_less_toll">kurang tol</string>
+    <string name="tile_same_toll">tol sama</string>
+    <string name="tile_more_toll">lebih tol</string>
+    <string name="cmp_more_toll">tol lebih %1$s</string>
+    <string name="tile_shorter">lebih dekat</string>
+    <string name="tile_longer">lebih jauh</string>
+    <string name="hidden_same_road">hampir jalan yang sama</string>
+    <string name="hidden_slower">jauh lebih lama</string>
+    <string name="hidden_worse">lebih lama, jauh dan mahal tol</string>
+    <string name="show_routes">Tunjuk</string>
+    <string name="show_anyway">Tunjuk juga</string>
+    <string name="start_route">Mula · %1$s melalui %2$s</string>
+    <string name="start_route_short">Mula · %1$s</string>
 </resources>

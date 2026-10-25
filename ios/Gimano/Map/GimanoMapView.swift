@@ -178,10 +178,13 @@ struct GimanoMapView: UIViewRepresentable {
                     if let puck { followPuck(.navigation, puck: puck, heading: heading, duration: 0.6) }
                 }
             case .overview(let bbox):
-                map.setContentInset(.zero, animated: false, completionHandler: nil)
+                // The covered edges become the content inset, so the camera centres the bounds in the strip that stays
+                // visible; as edge padding alone, a tall sheet (the route list) left the routes centred behind it.
+                map.setContentInset(UIEdgeInsets(top: state.overviewInsets.top, left: 0, bottom: state.overviewInsets.bottom, right: 0),
+                                    animated: false, completionHandler: nil)
                 let bounds = MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: bbox.minLat, longitude: bbox.minLng),
                                                  ne: CLLocationCoordinate2D(latitude: bbox.maxLat, longitude: bbox.maxLng))
-                let insets = UIEdgeInsets(top: state.overviewInsets.top, left: 48, bottom: state.overviewInsets.bottom, right: 48)
+                let insets = UIEdgeInsets(top: 16, left: 48, bottom: 16, right: 48)
                 let cam = map.cameraThatFitsCoordinateBounds(bounds, edgePadding: insets)
                 cam.pitch = 0
                 cam.heading = 0
