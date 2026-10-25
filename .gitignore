@@ -61,3 +61,13 @@ Pods/
 ios/Config/Local.xcconfig
 .claude/worktrees/
 .claude/settings.local.json
+
+# Kept local (owner's decision, 25 Oct 2026): security review findings, and outreach logs with other people's contact
+# details or internal status notes, plus large zip bundles.
+docs/reviews/
+marketing/early-access/editorial-outreach-*.md
+marketing/early-access/admin-permission-status-*.md
+marketing/early-access/facebook-publication-status-*.md
+marketing/early-access/ws556-*.md
+marketing/early-access/ws556-*.txt
+marketing/early-access/*.zip
