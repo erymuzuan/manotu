@@ -91,6 +91,8 @@ fun HoldReportFab(fan: QuickFanState, onTap: () -> Unit, onSend: (String) -> Uni
                 val roomUpDp = (fan.center.y - statusTopPx) / density.density - 110f
                 fan.scale = QuickFan.scaleToFit(roomLeftDp, roomUpDp)
             }
+            // While the fan is open the overlay draws a navy close button here; the coral one would show round it.
+            .alpha(if (fan.open) 0f else 1f)
             .shadow(12.dp, RoundedCornerShape(Radius.reportFab), ambientColor = Color(0x73FF6B4A), spotColor = Color(0x73FF6B4A))
             .clip(RoundedCornerShape(Radius.reportFab))
             .background(c.report)
@@ -186,7 +188,7 @@ fun QuickFanOverlay(fan: QuickFanState) {
                 .size(Sizes.reportFab).shadow(10.dp, CircleShape).clip(CircleShape).background(Navy),
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Filled.Close, stringResource(R.string.qr_close), tint = Color.White, modifier = Modifier.size(32.dp)) }
-        FanBanner(sel, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(top = 118.dp, start = 10.dp, end = 10.dp))
+        FanBanner(sel, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(top = 162.dp, start = 10.dp, end = 10.dp))
     }
 }
 
@@ -252,7 +254,7 @@ fun QuickReportSentCard(card: QuickReportCard, onDetails: () -> Unit, onUndo: ()
             Text(stringResource(R.string.qr_reported, what), fontSize = 18.sp, fontWeight = FontWeight.Black, color = c.text,
                 lineHeight = 21.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(listOfNotNull(card.street?.takeIf { it.isNotBlank() }, stringResource(R.string.qr_just_now)).joinToString(" · "),
-                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.textMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Box(
