@@ -45,6 +45,8 @@ class MainActivity : AppCompatActivity() {
         if (!BuildConfig.DEBUG || i == null) return
         if (i.hasExtra("gimano.simulateDrive")) vm.setSimulate(i.getBooleanExtra("gimano.simulateDrive", false))
         if (i.hasExtra("gimano.demoMode")) vm.setDemoMode(i.getBooleanExtra("gimano.demoMode", false))
+        // `--ez gimano.resetSafety true`: forget the safety agreement (tests the car's "open the phone" message).
+        if (i.getBooleanExtra("gimano.resetSafety", false)) { vm.debugResetSafety(); i.removeExtra("gimano.resetSafety") }
         // `--es gimano.moveTo 3.0745,101.7065[,zoom]`: pan the map there (desk-testing restricted areas).
         i.getStringExtra("gimano.moveTo")?.split(",")?.mapNotNull { it.trim().toDoubleOrNull() }?.takeIf { it.size >= 2 }?.let {
             vm.debugMoveTo(my.gimano.app.core.geo.GeoPoint(it[0], it[1]), it.getOrNull(2) ?: 15.0)

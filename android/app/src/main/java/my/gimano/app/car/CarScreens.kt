@@ -54,15 +54,17 @@ import java.util.TimeZone
 
 /** Not agreed on the phone yet: "Buka Manotu di telefon untuk bermula" + "Faham" (docs/driving.md §5). */
 class CarAgreementScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
-    override fun onGetTemplate(): Template = MessageTemplate.Builder(s.str(R.string.car_open_phone))
-        .setTitle(s.str(R.string.app_name))
-        .setHeaderAction(Action.APP_ICON)
-        .addAction(Action.Builder().setTitle(s.str(R.string.car_got_it)).setOnClickListener {
-            // Agreed on the phone meanwhile → straight to "Ke mana?"; otherwise the message stays.
-            if (s.agreed()) { screenManager.push(CarHomeScreen(s)); finish() } else invalidate()
-        }.build())
-        .build()
+    override fun onGetTemplate(): Template = agreementTemplate(s) {
+        // Agreed on the phone meanwhile → straight to "Ke mana?"; otherwise the message stays.
+        if (s.agreed()) { screenManager.push(CarHomeScreen(s)); finish() } else invalidate()
+    }
 }
+
+internal fun agreementTemplate(s: ManotuCarSession, onGotIt: () -> Unit): Template = MessageTemplate.Builder(s.str(R.string.car_open_phone))
+    .setTitle(s.str(R.string.app_name))
+    .setHeaderAction(Action.APP_ICON)
+    .addAction(Action.Builder().setTitle(s.str(R.string.car_got_it)).setOnClickListener(onGotIt).build())
+    .build()
 
 /** "Ke mana?": Rumah, Kerja, favourites and recents from this phone (≤ 6 rows while driving). */
 class CarHomeScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
@@ -82,6 +84,8 @@ class CarHomeScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
     }
 
     override fun onGetTemplate(): Template {
+        // The agreement may be withdrawn (or reset) while the car is connected: never offer a drive without it.
+        if (!s.agreed()) return agreementTemplate(s) { invalidate() }
         val b = PlaceListNavigationTemplate.Builder().setTitle(s.str(R.string.car_where_to)).setHeaderAction(Action.APP_ICON)
             .setActionStrip(ActionStrip.Builder().addAction(Action.Builder().setTitle(s.str(R.string.car_search))
                 .setOnClickListener { screenManager.push(CarSearchScreen(s)) }.build()).build())
@@ -90,10 +94,7 @@ class CarHomeScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
             .getOrDefault(CarRules.MAX_ROWS_DRIVING).coerceAtMost(CarRules.MAX_ROWS_DRIVING)
         val items = ItemList.Builder()
         if (r.isEmpty()) items.setNoItemsMessage(s.str(R.string.car_nothing_saved))
-        r.take(limit).forEach { d ->
-            items.addItem(Row.Builder().setTitle(d.name).apply { d.address.takeIf { it.isNotBlank() }?.let { addText(it) } }
-                .setOnClickListener { screenManager.push(CarRoutePreviewScreen(s, d)) }.build())
-        }
+        r.take(limit).forEach { d -> items.addItem(placeRow(s, d) { screenManager.push(CarRoutePreviewScreen(s, d)) }) }
         return b.setItemList(items.build()).build()
     }
 }
@@ -124,10 +125,8 @@ class CarSearchScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
         if (loading) return b.setLoading(true).build()
         val items = ItemList.Builder()
         results.take(CarRules.MAX_ROWS_DRIVING).forEach { p ->
-            items.addItem(Row.Builder().setTitle(p.name).apply { p.address.takeIf { it.isNotBlank() }?.let { addText(it) } }
-                .setOnClickListener {
-                    screenManager.push(CarRoutePreviewScreen(s, NavDestination(p.name, p.address, GeoPoint(p.lat, p.lng), p.id.takeUnless { it.startsWith("pin:") })))
-                }.build())
+            val d = NavDestination(p.name, p.address, GeoPoint(p.lat, p.lng), p.id.takeUnless { it.startsWith("pin:") })
+            items.addItem(placeRow(s, d) { screenManager.push(CarRoutePreviewScreen(s, d)) })
         }
         return b.setItemList(items.build()).build()
     }
@@ -162,8 +161,10 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
         }
         val items = ItemList.Builder()
         p.routes.forEach { r ->
-            val dur = Formatters.duration(r.effectiveDurationS, s.lang)
-            items.addItem(Row.Builder().setTitle("$dur · ${Formatters.distance(r.distanceM)}")
+            // The host requires a duration / distance span on every route row: it formats the time itself.
+            val title = android.text.SpannableString("  ·  ${Formatters.distance(r.distanceM)}")
+            title.setSpan(androidx.car.app.model.DurationSpan.create(r.effectiveDurationS.toLong()), 0, 1, android.text.Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            items.addItem(Row.Builder().setTitle(title)
                 .addText(listOf(CarRules.tollLabel(r, s.lang), r.summary).filter { it.isNotBlank() }.joinToString(" · ")).build())
         }
         items.setSelectedIndex(p.selected)
@@ -254,10 +255,31 @@ class CarNavigationScreen(private val s: ManotuCarSession) : Screen(s.carContext
         return sb.build()
     }
 
-    private fun distance(m: Double): Distance = when {
-        m >= 1_000 -> Distance.create(Math.round(m / 100) / 10.0, Distance.UNIT_KILOMETERS)
-        else -> Distance.create(Formatters.navDistance(m).substringBefore(" ").toDoubleOrNull() ?: m, Distance.UNIT_METERS)
+    private fun distance(m: Double): Distance = carDistance(m)
+}
+
+internal fun carDistance(m: Double): Distance = when {
+    m >= 1_000 -> Distance.create(Math.round(m / 100) / 10.0, Distance.UNIT_KILOMETERS)
+    else -> Distance.create(Formatters.navDistance(m).substringBefore(" ").toDoubleOrNull() ?: m, Distance.UNIT_METERS)
+}
+
+/**
+ * A place row on the car. The host requires non-browsable place rows to carry a DistanceSpan: the distance from here
+ * (computed on the phone) when the location is known, else the row is marked browsable (it opens the route choice).
+ */
+internal fun placeRow(s: ManotuCarSession, d: NavDestination, onClick: () -> Unit): Row {
+    val b = Row.Builder().setTitle(d.name).setOnClickListener(onClick)
+    val here = s.myLocation.value?.point
+    if (here != null) {
+        val text = android.text.SpannableString(if (d.address.isBlank()) " " else "  ·  ${d.address}")
+        text.setSpan(androidx.car.app.model.DistanceSpan.create(carDistance(GeoMath.distanceM(here, d.point))), 0, 1,
+            android.text.Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+        b.addText(text)
+    } else {
+        d.address.takeIf { it.isNotBlank() }?.let { b.addText(it) }
+        b.setBrowsable(true)
     }
+    return b.build()
 }
 
 /** "Lapor": six types, one tap. Never sent inside a restricted area; nothing sent without the terms agreed on the phone. */

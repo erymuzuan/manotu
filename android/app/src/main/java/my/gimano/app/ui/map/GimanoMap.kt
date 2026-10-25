@@ -181,6 +181,10 @@ fun GimanoMap(
     /** Map covered by the turn banner (top) and the trip bar (bottom) while driving: the arrow is placed between them. */
     driveTopDp: Int = 0,
     driveBottomDp: Int = 0,
+    /** Frame cap of the steady arrow / camera loop. */
+    driveFrameMs: Long = 33,
+    /** Covered on the left (the car's template card): the camera centres in the rest. */
+    startInsetDp: Int = 0,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -308,7 +312,7 @@ fun GimanoMap(
         val map = handle.map ?: return@LaunchedEffect
         try {
             runDriveFrames(map, src, d, { followCb }, { mapView.height.toDouble() }, density.density.toDouble(),
-                { driveTopDp * density.density.toDouble() }, { driveBottomDp * density.density.toDouble() })
+                { driveTopDp * density.density.toDouble() }, { driveBottomDp * density.density.toDouble() }, driveFrameMs)
         } finally {
             src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
         }
@@ -326,15 +330,16 @@ fun GimanoMap(
     LaunchedEffect(camera?.id, handle.ready) {
         val map = handle.map ?: return@LaunchedEffect
         val cmd = camera ?: return@LaunchedEffect
-        applyCamera(map, cmd, density, bottomInsetDp, topInsetDp)
+        applyCamera(map, cmd, density, bottomInsetDp, topInsetDp, startInsetDp)
     }
     // When the covered area changes (home sheet appears / grows, place card swiped), shift the view so its centre
     // (or the focus point) stays in the middle of the visible map.
-    LaunchedEffect(bottomInsetDp, topInsetDp, focus, handle.ready) {
+    LaunchedEffect(bottomInsetDp, topInsetDp, startInsetDp, focus, handle.ready) {
         val map = handle.map ?: return@LaunchedEffect
         if (camera is CameraCommand.Follow || drive != null) return@LaunchedEffect
         val top = (topInsetDp * density.density).toDouble()
         val bottom = (bottomInsetDp * density.density).toDouble()
+        val start = (startInsetDp * density.density).toDouble()
         if (focus != null) {
             // A pending MoveTo to the same point (the card just opened) keeps its zoom; this animation replaces it.
             val zoom = (camera as? CameraCommand.MoveTo)?.takeIf { it.point == focus }?.zoom
@@ -342,7 +347,7 @@ fun GimanoMap(
             zoom?.let { b.zoom(it) }
             map.animateCamera(CameraUpdateFactory.newCameraPosition(b.build()), 350)
         } else {
-            map.animateCamera(CameraUpdateFactory.paddingTo(0.0, top, 0.0, bottom), 300)
+            map.animateCamera(CameraUpdateFactory.paddingTo(start, top, 0.0, bottom), 300)
         }
     }
 
@@ -351,11 +356,11 @@ fun GimanoMap(
     }
 }
 
-private fun applyCamera(map: MapLibreMap, cmd: CameraCommand, density: Density, bottomInsetDp: Int = 0, topInsetDp: Int = 0) {
+private fun applyCamera(map: MapLibreMap, cmd: CameraCommand, density: Density, bottomInsetDp: Int = 0, topInsetDp: Int = 0, startInsetDp: Int = 0) {
     val px = { dp: Int -> (dp * density.density).toDouble() }
     when (cmd) {
         is CameraCommand.MoveTo -> {
-            val b = CameraPosition.Builder().target(LatLng(cmd.point.lat, cmd.point.lng)).padding(0.0, px(topInsetDp), 0.0, px(bottomInsetDp))
+            val b = CameraPosition.Builder().target(LatLng(cmd.point.lat, cmd.point.lng)).padding(px(startInsetDp), px(topInsetDp), 0.0, px(bottomInsetDp))
             cmd.zoom?.let { b.zoom(it) }
             val u = CameraUpdateFactory.newCameraPosition(b.build())
             if (cmd.animate) map.animateCamera(u, 700) else map.moveCamera(u)
@@ -365,7 +370,7 @@ private fun applyCamera(map: MapLibreMap, cmd: CameraCommand, density: Density, 
             val bounds = LatLngBounds.Builder().includes(cmd.points.map { LatLng(it.lat, it.lng) }).build()
             val side = px(cmd.sideDp).toInt()
             map.animateCamera(
-                CameraUpdateFactory.newLatLngBounds(bounds, 0.0, 0.0, cmd.startDp?.let { px(it).toInt() } ?: side, px(cmd.topDp).toInt(), side, px(cmd.bottomDp).toInt()),
+                CameraUpdateFactory.newLatLngBounds(bounds, 0.0, 0.0, px(startInsetDp).toInt() + (cmd.startDp?.let { px(it).toInt() } ?: side), px(cmd.topDp).toInt(), side, px(cmd.bottomDp).toInt()),
                 800,
             )
         }
@@ -515,13 +520,18 @@ internal suspend fun runDriveFrames(
     follow: () -> Boolean, heightPx: () -> Double, density: Double,
     topInsetPx: () -> Double = { 0.0 },
     bottomInsetPx: () -> Double = { 0.0 },
+    /** Frame cap: the arrow and camera need ~30 fps, not the display's 120 Hz (the main thread also serves the car). */
+    minFrameMs: Long = 33,
 ) {
     var wasFollowing = false
+    var lastFrame = 0L
     var blendFrom: CameraPosition? = null
     var blendStart = 0L
     while (true) {
         androidx.compose.runtime.withFrameNanos { }
         val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastFrame < minFrameMs) continue
+        lastFrame = now
         val hPx = heightPx()
         val inset = topInsetPx()
         val visible = (hPx - inset - bottomInsetPx()).coerceAtLeast(hPx * 0.3)

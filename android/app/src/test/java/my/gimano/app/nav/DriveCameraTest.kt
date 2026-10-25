@@ -117,6 +117,24 @@ class DriveCameraTest {
         assertEquals(CameraMode.SIMPANG, c.update(60.0, jamAt - 3_650, "left", 250.0, null, null, 3_000).mode)
     }
 
+    /** Seen on the Desktop Head Unit: a jam 5 km ahead, an exit 320 m ahead at 50 km/h (23 s): Simpang would cut it at once. */
+    @Test fun tinjauWaitsUntilSimpangWouldNotCutItShortAndIsReArmedWhenCut() {
+        val c = CameraModeController()
+        c.setRoute(route(listOf(TrafficSegment(150, 170, 4))), g)
+        val jamAt = g.distanceAtIndex(150)
+        assertNotEquals(CameraMode.TINJAU, c.update(50.0, jamAt - 4_900, "exit_left", 320.0, null, null, 0).mode)
+        assertEquals(CameraMode.SIMPANG, c.update(50.0, jamAt - 4_880, "exit_left", 300.0, null, null, 1_000).mode)
+        // After the exit: shown now (not used up while it was skipped).
+        assertEquals(CameraMode.TINJAU, c.update(50.0, jamAt - 4_500, "exit_left", 9_000.0, "exit_left", 80.0, 30_000).mode)
+
+        // Cut short by a turn that came up faster (speeding up): shown again afterwards.
+        val d = CameraModeController()
+        d.setRoute(route(listOf(TrafficSegment(150, 170, 4))), g)
+        assertEquals(CameraMode.TINJAU, d.update(60.0, jamAt - 4_800, null, null, null, null, 0).mode)
+        assertEquals(CameraMode.SIMPANG, d.update(60.0, jamAt - 4_780, "right", 250.0, null, null, 1_500).mode)
+        assertEquals(CameraMode.TINJAU, d.update(60.0, jamAt - 4_400, "left", 3_000.0, "right", 100.0, 30_000).mode)
+    }
+
     @Test fun closureAccidentAndHazardAlertsAlsoTriggerTinjau() {
         val alert = AlertOnRoute("a1", "accident", lat = 3.0, lng = 101.05, createdAt = "", expiresAt = "", distanceAlongRouteM = 5_000.0)
         val police = alert.copy(id = "p1", type = "police", distanceAlongRouteM = 4_000.0)
