@@ -7,7 +7,7 @@ say so in the first line, because a peer can't approve it for itself.
 
 ```
 Deploy Manotu backend <sha> to 172.30.30.150. The user approved this production release; do it now.
-The images are already in ACR (built on WS556): myhiro.azurecr.io/gimano-{api,worker,importer}:<sha>
+The images are already in ACR (built on WS556): myhiro.azurecr.io/gimano-{api,worker,importer,backoffice}:<sha>
   api <digest>  worker <digest>  importer <digest>
 Do NOT build images on WS556-SERVER (low on memory). BespokeTech VPN must be connected; if it isn't, stop and tell me.
 
@@ -21,12 +21,12 @@ On .150, in /opt/gimano, with C="sudo docker compose -f deploy/docker-compose.pr
    Check the file is non-empty.
 4. deploy/.env.prod: <new variable and how to generate it, e.g. DROPS_OWNER_KEY=$(openssl rand -base64 32), only if empty>. Never echo secret values in your report.
 5. sed -i 's/^TAG=.*/TAG=<sha>/' deploy/.env.prod
-6. $C pull api worker importer && $C up -d api worker
+6. $C pull api worker backoffice importer && $C up -d api worker backoffice
 7. Wait for healthy, then: curl -s http://172.30.30.150:5080/readyz (the port binds the host IP, not localhost) ; $C logs --tail 80 api worker (errors only in the report).
    <release-specific check, e.g. curl -s -o /dev/null -w '%{http_code}' -X POST http://172.30.30.150:5080/api/v1/drops → 401>
 
 Touch only the gimano compose project. No docker system prune, no other containers, no Cloudflare or IIS changes.
-If anything fails after step 6, roll back: TAG=<previous> in .env.prod, $C up -d api worker; restore the dump only if
+If anything fails after step 6, roll back: TAG=<previous> in .env.prod, $C up -d api worker backoffice; restore the dump only if
 the old image can't run on the migrated schema. Then report.
 
 Report: previous TAG, dump file name and size, image digests running (docker inspect), readyz output,

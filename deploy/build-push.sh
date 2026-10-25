@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the Gimano images (api, worker, importer) from this git checkout and pushes them to ACR.
+# Builds the Gimano images (api, worker, importer, backoffice) from this git checkout and pushes them to ACR.
 # Linux equivalent of deploy/build-push.ps1 (e.g. on 172.30.30.150).
 #   deploy/build-push.sh myhiro.azurecr.io [tag]      # tag defaults to the git short sha; also tags :latest
 #   DRY_RUN=1 deploy/build-push.sh myhiro.azurecr.io  # print what would run
@@ -14,7 +14,7 @@ REV="$(git rev-parse HEAD)"
 run() { if [[ "${DRY_RUN:-}" == "1" ]]; then echo "+ $*"; else "$@"; fi; }
 [[ -z "$(git status --porcelain -- backend deploy data/moderation)" ]] || echo "warning: uncommitted changes; the image won't match tag $TAG" >&2
 
-for img in api worker importer; do
+for img in api worker importer backoffice; do
   repo="$REGISTRY/gimano-$img"
   run docker build --pull -f "deploy/Dockerfile.$img" -t "$repo:$TAG" -t "$repo:latest" --label "org.opencontainers.image.revision=$REV" .
   run docker push "$repo:$TAG"

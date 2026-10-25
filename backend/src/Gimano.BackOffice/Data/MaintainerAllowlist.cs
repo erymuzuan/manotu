@@ -6,7 +6,7 @@ namespace Gimano.BackOffice.Data;
 public sealed class BackOfficeOptions
 {
     public const string Section = "BackOffice";
-    /// <summary>Emails allowed to register and sign in. "*" allows anyone (Development only).</summary>
+    /// <summary>Emails allowed to register and sign in; an entry may hold several, comma-separated. "*" allows anyone (Development only).</summary>
     public string[] Maintainers { get; set; } = [];
 }
 
@@ -15,8 +15,8 @@ public sealed class MaintainerAllowlist(IOptionsMonitor<BackOfficeOptions> optio
     public bool Allows(string? email)
     {
         if (string.IsNullOrWhiteSpace(email)) return false;
-        var list = options.CurrentValue.Maintainers;
-        return list.Contains("*") || list.Any(m => string.Equals(m.Trim(), email.Trim(), StringComparison.OrdinalIgnoreCase));
+        var list = options.CurrentValue.Maintainers.SelectMany(m => m.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return list.Any(m => m == "*" || string.Equals(m, email.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 }
 

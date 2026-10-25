@@ -266,6 +266,16 @@ public class BackOfficeTests
         Assert.False(allow.Allows(null));
     }
 
+    [Fact]
+    public void Maintainer_list_may_be_comma_separated()
+    {
+        var allow = new MaintainerAllowlist(new StaticMonitor(new BackOfficeOptions { Maintainers = ["a@example.com, B@example.com;c@example.com"] }));
+        Assert.True(allow.Allows("a@example.com"));
+        Assert.True(allow.Allows("b@example.com"));
+        Assert.True(allow.Allows("c@example.com"));
+        Assert.False(allow.Allows("example.com"));
+    }
+
     // ---- invites (no self-registration) ---------------------------------------------------------------------------
 
     [Fact]

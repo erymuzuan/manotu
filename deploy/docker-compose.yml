@@ -175,6 +175,10 @@ services:
       # Optional GitHub-issue sink for feedback (off unless both are set).
       Feedback__GitHubRepo: ${FEEDBACK_GITHUB_REPO:-}
       Feedback__GitHubToken: ${FEEDBACK_GITHUB_TOKEN:-}
+      # Optional maintainer digest email (off unless both are set; docs/back-office.md).
+      Digest__AcsConnectionString: ${DIGEST_ACS_CONNECTION_STRING:-}
+      Digest__To__0: ${DIGEST_TO:-}
+      Digest__BackOfficeUrl: ${BACKOFFICE_PUBLIC_URL:-http://100.101.150.9:5090}
     volumes: ["media:/data/media"]
     depends_on:
       api: { condition: service_started }   # the API applies EF migrations on start

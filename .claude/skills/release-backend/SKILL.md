@@ -25,7 +25,7 @@ migration can't be undone. Each step below exists to keep a rollback possible.
 | **WS556** | **builds and pushes the images** (the bigger box) | Orca terminal `--environment WS556`, repo `E:/project/work/gimano`, PowerShell |
 | **WS556-SERVER** | **deploys only** (low on memory: never build there). BespokeTech VPN to .150/.13 | the Claude session **SERVER.Manotu** (or SERVER.HiRO) via SendMessage |
 | 172.30.30.150 | runs `/opt/gimano`, compose `deploy/docker-compose.prod.yml` + `deploy/.env.prod` | from WS556-SERVER only |
-| myhiro.azurecr.io | `gimano-{api,worker,importer}:<git short sha>` | `docker login` typed by a person |
+| myhiro.azurecr.io | `gimano-{api,worker,importer,backoffice}:<git short sha>` | `docker login` typed by a person |
 
 ## Ground rules
 
@@ -66,7 +66,7 @@ From the repo root, with `R=.claude/skills/release-backend/scripts/release.py`:
 
 3. **Deploy from WS556-SERVER.** Fill in [references/server-deploy.md](references/server-deploy.md) and send
    it to SERVER.Manotu with SendMessage. It covers the VPN check, the rollback tag, the `pg_dump` (when the
-   release has a migration), new `.env.prod` values, `TAG=<sha>`, `pull` + `up -d api worker`, and a local
+   release has a migration), new `.env.prod` values, `TAG=<sha>`, `pull` + `up -d api worker backoffice`, and a local
    readyz check. The API applies EF migrations when it starts, which is why the dump comes first. Wait for its
    report; don't poll it with "are you done?" messages.
 
@@ -87,7 +87,7 @@ From the repo root, with `R=.claude/skills/release-backend/scripts/release.py`:
 ## Rollback
 
 Images are immutable per sha. Ask the deploy session to set `TAG=<previous>` in `deploy/.env.prod` and run
-`up -d api worker`. Migrations only move forward: if the old image can't run on the migrated schema, restore
+`up -d api worker backoffice`. Migrations only move forward: if the old image can't run on the migrated schema, restore
 the pre-release dump too (`pg_restore -c -d gimano` in the postgis container). Rollback in production needs the
 user's go-ahead like the deploy itself, unless the new release is down and the user said in advance to roll back
 on failure.

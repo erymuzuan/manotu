@@ -84,8 +84,9 @@ A feedback status change (by anyone) puts the standard status notice in the repo
 (`CF-Connecting-IP` / `CF-Ray`). Agents use Tailscale (`http://100.101.150.9:5080`). `Admin:AllowedNetworks`
 (CIDRs) can tighten this further, and `Admin:Enabled=false` turns both endpoints off.
 
-**Production** (`deploy/docker-compose.prod.yml`) ships with the agent endpoints **off** (`Admin__Enabled=false`) until
-the back office is deliberately deployed there. To enable them, set in `deploy/.env.prod`:
+**Production** (`deploy/docker-compose.prod.yml`) runs the back office bound to `127.0.0.1` on .150 (see
+deploy/PRODUCTION.md, "Back office and maintainer digest"). The agent endpoints stay **off** (`Admin__Enabled=false`) until
+you turn them on. To enable them, set in `deploy/.env.prod`:
 
 ```
 AGENT_ADMIN_ENABLED=true
@@ -179,6 +180,21 @@ also hide a contributor on their own device by `authorRef`, without telling the 
 
 Bans follow the pseudonymous model: a banned person can delete the account and start a new pseudonym, which then starts
 at the lowest tier (votes weigh less, new places need more confirmations), and its content can be reported and banned again.
+
+## Maintainer digest (worker)
+
+Without it, nobody would know that feedback or reported content is waiting. `MaintainerDigestJob` checks every 15 minutes
+and emails the maintainers (`Digest:To`) through Azure Communication Services:
+
+- **Daily digest**, once between 08:00 and 09:00 Malaysia time (`Digest:SendAtHour`), skipped on quiet days: new
+  feedback in 24 h by category, feedback not yet triaged and its oldest age, new / open / regressed crash groups,
+  moderation items waiting (same predicates as the moderation queue) and how many are places held for review.
+- **Moderation alert** when the oldest waiting item reaches 20 h, at most every 12 h, so the 24-hour promise holds.
+
+It carries **counts and ages only**: no message text, contacts, display names, ids or coordinates, so nothing private
+leaves the server in an email. The link points at the back office, which is reachable only over Tailscale/VPN. It is
+off unless `Digest:AcsConnectionString` (env `DIGEST_ACS_CONNECTION_STRING`) and a recipient are set. State is in memory:
+a worker restarted inside the send hour may send that day's digest twice, and one that is down for the whole hour skips it.
 
 ## Retention (worker, hourly)
 
