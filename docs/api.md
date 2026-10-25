@@ -376,7 +376,9 @@ Route = {
   trafficDescription: "Typical traffic" | "Heavier than usual" | "Light traffic",
   vehicle: "car"|"motorcycle"|"bicycle"|"walk",
   hasTolls: bool, tollEstimateMyr?: number, tollFareComplete: bool,
-  tolls: [{plazaId, name, highway?, lat, lng, fareMyr?: number, system: "open"|"closed_entry"|"closed_exit", source?}],
+  tolls: [{plazaId, name, highway?, lat, lng, fareMyr?: number, system: "open"|"closed_entry"|"closed_exit", source?,
+           distanceAlongRouteM?}],   // metres from the route start to the plaza: drives the "toll ahead" alert
+  arrival?: NavigationPoint,       // a place destination routed to its entrance (see "Arriving at the entrance")
   polyline,                         // encoded, precision 6
   bbox: [minLng,minLat,maxLng,maxLat],
   legs: [{ durationS, distanceM, to: {lat, lng, name?}, maneuvers: Maneuver[] }],
@@ -510,8 +512,18 @@ ignored ones), with `distanceAlongRouteM`.
 `place_closed_temp`, `place_hours_wrong` (`label` in the request language: "Dilaporkan tutup · sahkan?", "Tutup sementara
 sehingga 2026-11-01", "Waktu mungkin berubah"). While a `place_closed_temp` is open (until its date) or a
 `place_closed_perm` is confirmed, `openNow` is `false` whatever the opening hours say. Confirmed `place_closed_perm` places are left out of `/search` and
-`/search/nearby`. `Place.navigationPoint?` = `{lat, lng, issueId}` (confirmed entrance correction; the display pin is
+`/search/nearby`. `Place.navigationPoint?` = `NavigationPoint` (see "Arriving at the entrance"; the display pin is
 unchanged).
+
+### Arriving at the entrance
+
+`NavigationPoint = {lat, lng, issueId?, source: "confirmed"|"osm_entrance"|"outline", kind?}` is where a route to a
+place ends. `confirmed`: a confirmed `place_entrance_wrong` (`issueId` set). `osm_entrance`: an OSM `entrance=*` node on
+the building outline (`kind` = its value, `main` first; exits and emergency doors are skipped). `outline`: the outline
+point nearest the closest named drivable road within 150 m, used only when the pin is more than 25 m from that road.
+Map places carry it in `Place.navigationPoint`; a route whose destination has a `placeId` is routed to it and returns it
+as `Route.arrival`. The apps draw the last metres from the route end to the pin dashed, and say which side the entrance is
+on (docs/driving.md).
 
 **Maintainers** (X-Admin-Key): `GET /admin/osm-queue?includeExported=` lists odd routes, new roads, "actually two-way"
 and issues confirmed for 7+ days that OSM should fix, with a suggested note text and links (export only; nothing is posted

@@ -26,7 +26,11 @@ public sealed class RouteService(
     {
         var vehicle = req.Vehicle ?? Vehicle.Car;
         var snapshot = await issues.GetAsync(ct);
-        var routed = WithNavigationPoints(req, snapshot);
+        var placeIds = new[] { req.Destination }.Concat(req.Waypoints ?? []).Select(p => p.PlaceId).OfType<string>().Distinct().ToList();
+        var entrances = placeIds.Count == 0 ? new Dictionary<string, PlaceEntrance>()
+            : await db.PlaceEntrances.AsNoTracking().Where(e => placeIds.Contains(e.PlaceId)).ToDictionaryAsync(e => e.PlaceId, ct);
+        var routed = WithNavigationPoints(req, snapshot, entrances);
+        var arrival = ArrivalPoint(req.Destination, snapshot, entrances);
         var excluded = Exclusions(routed, vehicle, snapshot);
         var candidates = await CandidatesAsync(routed, originHeading, excluded, ct);
         if (candidates.Count == 0) throw new NoRouteException("No route found.");
@@ -54,7 +58,7 @@ public sealed class RouteService(
         }
 
         var routes = RouteDecorator.Decorate(candidates, activeReports, jams, NewRouteId(req.Stored), vehicle, plazas, tariffs)
-            .Select(r => r with { Issues = IssuesFor(r, excluded, snapshot, req.IgnoreIssues, lang) }).ToList();
+            .Select(r => r with { Issues = IssuesFor(r, excluded, snapshot, req.IgnoreIssues, lang), Arrival = arrival }).ToList();
         Remember(routes, cacheAs ?? req);
 
         // Privacy rule: destinations/recents are never recorded server-side (they live on the device). userId is not
@@ -109,14 +113,29 @@ public sealed class RouteService(
         return [ValhallaMapper.Join(parts)];
     }
 
-    /// <summary>A confirmed entrance correction replaces a place stop's coordinates (the display pin is unchanged).</summary>
-    internal static RouteRequest WithNavigationPoints(RouteRequest req, IssueDirectory.Snapshot s)
+    /// <summary>
+    /// A place stop is routed to its navigation point (the display pin is unchanged): a confirmed entrance correction first,
+    /// else the imported entrance (OSM entrance node, or the outline point nearest the road).
+    /// </summary>
+    internal static RouteRequest WithNavigationPoints(RouteRequest req, IssueDirectory.Snapshot s, IReadOnlyDictionary<string, PlaceEntrance>? entrances = null)
     {
-        LatLng Nav(LatLng p) => p.PlaceId is { } id && s.NavPoints.TryGetValue(id, out var i)
-            && double.TryParse(i.Payload.GetValueOrDefault("navLat"), NumberStyles.Float, CultureInfo.InvariantCulture, out var la)
-            && double.TryParse(i.Payload.GetValueOrDefault("navLng"), NumberStyles.Float, CultureInfo.InvariantCulture, out var lo)
-            ? p with { Lat = la, Lng = lo } : p;
+        LatLng Nav(LatLng p) => NavigationPointFor(p, s, entrances) is { } n ? p with { Lat = n.Lat, Lng = n.Lng } : p;
         return req with { Destination = Nav(req.Destination), Waypoints = req.Waypoints?.Select(Nav).ToList() };
+    }
+
+    /// <summary>Where the route ends for a place destination; null when it ends at the given point.</summary>
+    internal static NavigationPoint? ArrivalPoint(LatLng destination, IssueDirectory.Snapshot s, IReadOnlyDictionary<string, PlaceEntrance>? entrances) =>
+        NavigationPointFor(destination, s, entrances);
+
+    internal static NavigationPoint? NavigationPointFor(LatLng p, IssueDirectory.Snapshot s, IReadOnlyDictionary<string, PlaceEntrance>? entrances)
+    {
+        if (p.PlaceId is not { } id) return null;
+        if (s.NavPoints.TryGetValue(id, out var i)
+            && double.TryParse(i.Payload.GetValueOrDefault("navLat"), NumberStyles.Float, CultureInfo.InvariantCulture, out var la)
+            && double.TryParse(i.Payload.GetValueOrDefault("navLng"), NumberStyles.Float, CultureInfo.InvariantCulture, out var lo))
+            return new NavigationPoint(la, lo, i.Id);
+        return entrances is not null && entrances.TryGetValue(id, out var e)
+            ? new NavigationPoint(e.Location.Y, e.Location.X, null, e.Source, e.Kind) : null;
     }
 
     /// <summary>

@@ -114,7 +114,9 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
         NavigationPoint? nav = s.NavPoints.TryGetValue(id, out var ni)
             && double.TryParse(ni.Payload.GetValueOrDefault("navLat"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var nla)
             && double.TryParse(ni.Payload.GetValueOrDefault("navLng"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var nlo)
-            ? new NavigationPoint(nla, nlo, ni.Id) : null;
+            ? new NavigationPoint(nla, nlo, ni.Id)
+            : await db.PlaceEntrances.AsNoTracking().Where(e => e.PlaceId == id)
+                .Select(e => new NavigationPoint(e.Location.Y, e.Location.X, null, e.Source, e.Kind)).FirstOrDefaultAsync(ct);
         // Confirmed corrected opening hours replace the OSM ones until the map catches up.
         var hours = s.Hours.TryGetValue(id, out var h) ? h : dto.OpeningHours;
         return dto with
