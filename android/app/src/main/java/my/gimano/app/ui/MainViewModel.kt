@@ -252,7 +252,7 @@ data class PinSel(val place: PlaceSummary, val etaS: Double? = null, val routeM:
 sealed interface UiEvent {
     data class Toast(@StringRes val res: Int) : UiEvent
     /** A 2 s toast (sound mode changes while driving). */
-    data class BriefToast(@StringRes val res: Int) : UiEvent
+    data class BriefToast(@StringRes val res: Int, val sound: SoundMode? = null) : UiEvent
     data class ToastText(val text: String) : UiEvent
     data class Share(val text: String) : UiEvent
     data class Dial(val phone: String) : UiEvent
@@ -1977,7 +1977,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         if (mode == settings.current.soundMode) return
         viewModelScope.launch { settings.setSoundMode(mode) }
         if (mode == SoundMode.OFF) c.voice.stop()   // mute takes effect mid-sentence
-        _events.tryEmit(UiEvent.BriefToast(soundToast(mode)))
+        _events.tryEmit(UiEvent.BriefToast(soundToast(mode), mode))
     }
 
     /** Long-press on the sound FAB: quick mute, or back to the last non-mute mode. */
