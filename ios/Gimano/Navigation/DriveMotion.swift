@@ -28,6 +28,8 @@ struct DriveFrame: Sendable, Equatable {
     /// Arrow position as a fraction of the map height from the top.
     var puckY: Double
     var mode: DriveCameraMode
+    /// The arrow's distance along the route when it is on it (the travelled part ends here, docs/driving.md §6.3).
+    var alongM: Double? = nil
 }
 
 /// The moving picture of a drive (docs/driving.md §2–3), shared by the phone map and the car screen: fixes go in,
@@ -131,7 +133,7 @@ final class DriveMotion {
         let dt = lastFrame.map { min(0.25, max(0, t - $0.t)) } ?? 0
         let p = animator.sample(at: t)
         let f = DriveFrame(point: p.point, heading: heading.step(dt: dt), zoom: zoom.value(at: t), pitch: pitch.value(at: t),
-                           puckY: puckY.value(at: t), mode: mode)
+                           puckY: puckY.value(at: t), mode: mode, alongM: p.alongM)
         lastFrame = (t, f)
         return f
     }

@@ -94,6 +94,17 @@ final class DrivingCardsUITests: XCTestCase {
         XCTAssertFalse(card.exists, "the ring dismisses the card with no answer")
     }
 
+    /// docs/driving.md §6.3: after a while on the simulated drive, the road behind the arrow is light grey on white
+    /// and only the part ahead is blue (with a debug jam ahead in traffic colours).
+    func test_4_TravelledRoute() {
+        launch(["-GimanoFakeJam", "900"])
+        startDrive()
+        sleep(25)
+        shot("9-travelled-route")
+        sleep(15)
+        shot("10-travelled-route-later")
+    }
+
     func test_2_SoundSelector() {
         launch()
         startDrive()
