@@ -22,9 +22,7 @@ final class CarMapViewController: UIViewController {
         map.isUserInteractionEnabled = false
         map.accessibilityIdentifier = "carMap"
         // The guidance panel sits on the left of the car screen: keep the arrow in the visible part on the right.
-        coordinator.puckPadding = { size, y in
-            UIEdgeInsets(top: max(0, (2 * y - 1) * size.height), left: size.width * 0.36, bottom: 0, right: 0)
-        }
+        coordinator.puckPadding = { size, y in CarMapLayout.padding(size: size, puckY: y) }
         self.map = map
         view = map
 
@@ -51,9 +49,8 @@ final class CarMapViewController: UIViewController {
 
 extension MapState {
     /// Copies what the phone map draws (route, traffic, alerts, tolls, restricted areas, last metres, the arrow and
-    /// its motion) into a second map's state; the camera stays that map's own.
+    /// its motion) into a second map's state; the camera and the day/night style stay that map's own.
     func mirror(from m: MapState, restrictedRevision: inout Int) {
-        if styleURL != m.styleURL { styleURL = m.styleURL }
         if routes != m.routes { routes = m.routes }
         if destination != m.destination { destination = m.destination }
         if alerts != m.alerts { alerts = m.alerts }
@@ -72,9 +69,9 @@ extension MapState {
 }
 
 #if DEBUG
-/// `-GimanoCarPreview YES` (DEBUG only): the CarPlay map surface (CarMapViewController, 800 × 480, scaled) in a
-/// window at the top of the phone, mirroring the drive with the car's own camera. For screenshots where no CarPlay
-/// display is available; the CarPlay templates themselves need a real CarPlay connection.
+/// `-GimanoCarPreview YES` (DEBUG only): a **map preview** of the car's map surface (CarMapViewController,
+/// 800 × 480, scaled) on the phone, mirroring the drive with the car's own camera. Map-only debugging: it is not a
+/// CarPlay template session and nothing from it counts as CarPlay validation.
 @MainActor
 enum CarSurfacePreview {
     private static var window: UIWindow?
@@ -102,7 +99,7 @@ enum CarSurfacePreview {
         host.view.addSubview(car.view)
         car.didMove(toParent: host)
         let label = UILabel(frame: CGRect(x: 8, y: 2, width: width - 16, height: 18))
-        label.text = "CarPlay map surface 800×480 (DEBUG preview)"
+        label.text = "Map preview 800×480 (DEBUG) · not a CarPlay test"
         label.font = .systemFont(ofSize: 11, weight: .semibold)
         label.textColor = .white
         host.view.addSubview(label)
