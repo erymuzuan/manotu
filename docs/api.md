@@ -417,6 +417,9 @@ Route = {
   tolls: [{plazaId, name, highway?, lat, lng, fareMyr?: number, system: "open"|"closed_entry"|"closed_exit", source?,
            distanceAlongRouteM?}],   // metres from the route start to the plaza: drives the "toll ahead" alert
   arrival?: NavigationPoint,       // a place destination routed to its entrance (see "Arriving at the entrance")
+  reasons?: ("fastest"|"shortest"|"lower_toll"|"no_tolls"|"fewer_reports"|"other_main_road")[],  // see "Route options"
+  viaRoads?: string[],             // main roads only this route uses, e.g. ["FT2"]
+  hidden?: null|"same_road"|"slower"|"worse",   // not worth offering; listed after the shown routes
   polyline,                         // encoded, precision 6
   bbox: [minLng,minLat,maxLng,maxLat],
   legs: [{ durationS, distanceM, to: {lat, lng, name?}, maneuvers: Maneuver[] }],
@@ -552,6 +555,26 @@ sehingga 2026-11-01", "Waktu mungkin berubah"). While a `place_closed_temp` is o
 `place_closed_perm` is confirmed, `openNow` is `false` whatever the opening hours say. Confirmed `place_closed_perm` places are left out of `/search` and
 `/search/nearby`. `Place.navigationPoint?` = `NavigationPoint` (see "Arriving at the entrance"; the display pin is
 unchanged).
+
+### Route options
+
+Added 26 Oct 2026, additive (older apps ignore the new fields and keep showing every route as before). The server
+decides which alternatives are worth offering before a drive and says why, so both apps show the same list.
+
+- **Shown routes come first**, fastest (with live traffic) first, at most 3. The rest follow with `hidden` set:
+  `same_road` (over 80% of it within 30 m of a shown route), `slower` (over 40% slower than the fastest and saves under
+  RM 3 in tolls, or beyond the 3 shown), `worse` (at least 5 min slower, 2 km longer and RM 1 more toll than a shown
+  route; unknown fares never count). Apps show hidden routes only behind "Show anyway".
+- **`reasons`** (shown routes, empty when only one is shown): `fastest`; `shortest` (at least 1 km and 5% shorter
+  than the next); `no_tolls` (the fastest has tolls); `lower_toll` (at least RM 1 less, known fares only);
+  `fewer_reports` (fewer reports than the fastest); `other_main_road` when nothing else applies and `viaRoads` is set.
+- **`viaRoads`**: up to 2 roads (display ref, else name) with at least 2 km on this route and under 500 m on every other
+  shown route. Apps use the other routes' `viaRoads` for "avoids E5 and FT2".
+- **More tries on long trips:** when a car/motorcycle trip of 10 km or more without stops has fewer than 2 shown routes,
+  the server also asks Valhalla for an avoid-tolls route (if the fastest has tolls) and for a route with the fastest
+  route's main road blocked in two places. Near-copies are then hidden as `same_road`.
+- **Apps:** trips of 10 km or more with 2+ shown routes open the preview with the list expanded and no auto-start
+  countdown; shorter trips keep the countdown, with a compact "N other routes" row. The chosen route is never sent.
 
 ### Arriving at the entrance
 

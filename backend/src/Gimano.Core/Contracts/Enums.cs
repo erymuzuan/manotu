@@ -12,6 +12,12 @@ public enum ReportType { Traffic, Police, Accident, Hazard, Closure, BlockedLane
 
 public enum RouteLabel { Best, Alternative }
 
+/// <summary>Why a route is offered next to the fastest one (docs/api.md, "Route options").</summary>
+public enum RouteReason { Fastest, Shortest, LowerToll, NoTolls, FewerReports, OtherMainRoad }
+
+/// <summary>Why an alternative is not worth offering: almost the same road as a shown route, far slower, or clearly worse.</summary>
+public enum RouteHidden { SameRoad, Slower, Worse }
+
 public enum PlaceCategory
 {
     Fuel, EvCharging, RestArea, TollBooth, Parking, Restaurant, Cafe, FastFood, Mall, Supermarket,

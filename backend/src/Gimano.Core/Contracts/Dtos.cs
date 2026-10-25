@@ -175,13 +175,17 @@ public sealed record RerouteRequest(double Lat, double Lng, double? Heading, int
 
 public sealed record RoutesResponse(IReadOnlyList<RouteDto> Routes);
 
+/// <param name="Reasons">Why this route is offered (empty when it is the only one shown).</param>
+/// <param name="ViaRoads">Main roads (≥ 2 km) that only this route of the shown ones uses, longest first, at most 2.</param>
+/// <param name="Hidden">Set on alternatives not worth offering; they come after the shown ones (a "Show anyway" list).</param>
 public sealed record RouteDto(
     string Id, RouteLabel Label, double DurationS, double DistanceM, double TrafficDurationS,
     string Summary, string TrafficDescription, Vehicle Vehicle,
     bool HasTolls, decimal? TollEstimateMyr, bool TollFareComplete, IReadOnlyList<TollOnRoute> Tolls,
     string Polyline, double[] Bbox, IReadOnlyList<RouteLeg> Legs,
     IReadOnlyList<TrafficSegment> TrafficSegments, IReadOnlyList<AlertOnRoute> Alerts, IReadOnlyList<RouteIssue>? Issues = null,
-    NavigationPoint? Arrival = null);
+    NavigationPoint? Arrival = null, IReadOnlyList<RouteReason>? Reasons = null, IReadOnlyList<string>? ViaRoads = null,
+    RouteHidden? Hidden = null);
 
 /// <summary>
 /// An issue relevant to a route. avoided = true: a confirmed closure/no-road the route goes around ("Mengelak Jln X");

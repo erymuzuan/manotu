@@ -35,6 +35,23 @@ public sealed class RouteService(
         var candidates = await CandidatesAsync(routed, originHeading, excluded, ct);
         if (candidates.Count == 0) throw new NoRouteException("No route found.");
 
+        var routes = await DecorateAsync(candidates, vehicle, req.Stored, ct);
+        if (RouteChoices.WantsMore(routes) && (routed.Waypoints?.Count ?? 0) == 0 && (req.Alternatives ?? 2) > 0)
+        {
+            var more = await MoreCandidatesAsync(routed, originHeading, excluded, routes[0], ct);
+            if (more.Count > 0) routes = await DecorateAsync([.. candidates, .. more], vehicle, req.Stored, ct);
+        }
+        routes = routes.Select(r => r with { Issues = IssuesFor(r, excluded, snapshot, req.IgnoreIssues, lang), Arrival = arrival }).ToList();
+        Remember(routes, cacheAs ?? req);
+
+        // Privacy rule: destinations/recents are never recorded server-side (they live on the device). userId is not
+        // used for anything persistent here; "store": false routes are not even kept in the in-memory reroute cache.
+        return routes;
+    }
+
+    /// <summary>Alerts, live traffic and tolls on each candidate, ranked, then which ones to offer (<see cref="RouteChoices"/>).</summary>
+    private async Task<IReadOnlyList<RouteDto>> DecorateAsync(IReadOnlyList<RouteCandidate> candidates, Vehicle vehicle, bool stored, CancellationToken ct)
+    {
         var bbox = candidates.Select(c => BBox.Of(c.Points)).Aggregate((a, b) =>
             new BBox(Math.Min(a.MinLng, b.MinLng), Math.Min(a.MinLat, b.MinLat), Math.Max(a.MaxLng, b.MaxLng), Math.Max(a.MaxLat, b.MaxLat)))
             .Expand(200);
@@ -57,13 +74,34 @@ public sealed class RouteService(
             tariffs = plazas.Count > 0 ? await TariffsAsync(ct) : [];
         }
 
-        var routes = RouteDecorator.Decorate(candidates, activeReports, jams, NewRouteId(req.Stored), vehicle, plazas, tariffs)
-            .Select(r => r with { Issues = IssuesFor(r, excluded, snapshot, req.IgnoreIssues, lang), Arrival = arrival }).ToList();
-        Remember(routes, cacheAs ?? req);
+        return RouteChoices.Annotate(RouteDecorator.Decorate(candidates, activeReports, jams, NewRouteId(stored), vehicle, plazas, tariffs));
+    }
 
-        // Privacy rule: destinations/recents are never recorded server-side (they live on the device). userId is not
-        // used for anything persistent here; "store": false routes are not even kept in the in-memory reroute cache.
-        return routes;
+    /// <summary>
+    /// A long trip with fewer than two routes worth offering: also try without tolls (when the fastest has tolls) and with
+    /// the fastest route's main road blocked in two places. Failures are ignored; near-copies get hidden later.
+    /// </summary>
+    private async Task<IReadOnlyList<RouteCandidate>> MoreCandidatesAsync(RouteRequest routed, double? originHeading,
+        IReadOnlyList<IssueDirectory.RoadIssue> excluded, RouteDto best, CancellationToken ct)
+    {
+        var stops = new List<LatLng> { routed.Destination };
+        var tries = new List<JsonObject>();
+        JsonArray Exclude(IEnumerable<IReadOnlyList<(double Lng, double Lat)>> extra) =>
+            Gimano.Core.Issues.IssueGeometry.ToValhalla(extra.Concat(excluded.Select(e => e.Ring)).Take(Gimano.Core.Issues.IssueGeometry.MaxPolygons));
+        var single = routed with { Alternatives = 0 };
+        if (best.HasTolls && !(routed.Avoid?.Tolls ?? false))
+            tries.Add(ValhallaMapper.BuildRouteRequest(single with { Avoid = (routed.Avoid ?? new AvoidOptions()) with { Tolls = true } },
+                originHeading, excludePolygons: Exclude([])));
+        if (RouteChoices.MainRoadDetourRings(best) is { Count: > 0 } rings)
+            tries.Add(ValhallaMapper.BuildRouteRequest(single, originHeading, excludePolygons: Exclude(rings)));
+
+        var found = new List<RouteCandidate>();
+        foreach (var body in tries)
+        {
+            try { found.AddRange(ValhallaMapper.MapResponse(await valhalla.RouteAsync(body, ct), stops)); }
+            catch (NoRouteException) { }
+        }
+        return found;
     }
 
     /// <summary>Stateless (<c>"store": false</c>) route ids start with <c>x-</c>: reroute answers 404 without a cache lookup.</summary>
