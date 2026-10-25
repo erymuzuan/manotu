@@ -477,6 +477,13 @@ struct InboxView: View {
     }
 
     private func open(_ item: InboxItem) {
+        // C2: a held or not-accepted place is only visible to its owner: open "My contributions", where it can be
+        // edited, discarded or sent for a review.
+        if item.kind.opensContributions {
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { model.menuSheet = .contributions }
+            return
+        }
         switch item.refType {
         case "place":
             if let id = item.refId {
@@ -498,7 +505,8 @@ extension InboxKind {
     /// Board tints: published = teal, thanks = coral, helpful = amber, everything else cobalt.
     var tint: Color {
         switch self {
-        case .placePublished, .editAccepted, .issueConfirmed, .issueResolved: .tealMist
+        case .placePublished, .placeLive, .editAccepted, .issueConfirmed, .issueResolved: .tealMist
+        case .placeNotAccepted: Color(light: 0xFFE2E2, dark: 0x4A1418)
         case .reportThanked: .coralMist
         case .reviewHelpful: .amberMist
         default: .brandMist
@@ -507,8 +515,9 @@ extension InboxKind {
 
     var icon: GIcon {
         switch self {
-        case .placePublished: .map
-        case .placeRejected: .close
+        case .placePublished, .placeLive: .map
+        case .placeHeld: .recent
+        case .placeRejected, .placeNotAccepted, .placeExpired: .close
         case .reportThanked: .heart
         case .reviewHelpful: .star
         case .editAccepted: .addStop
@@ -517,6 +526,9 @@ extension InboxKind {
         case .announcement, .unknown: .logo
         }
     }
+
+    /// Held / not accepted places are the owner's only: they open "My contributions" (not the public place card).
+    var opensContributions: Bool { self == .placeHeld || self == .placeNotAccepted || self == .placeRejected }
 }
 
 enum AppInfo {

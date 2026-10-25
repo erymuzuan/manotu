@@ -848,6 +848,8 @@ struct SuggestEditSheet: View {
     let placeId: String
     let current: Place?
     let fallback: PlaceSummary
+    /// Called after the suggestion was sent (e.g. B1 "Yes, that's it" closes the add-place flow).
+    var onSent: (() -> Void)? = nil
     @State private var name = ""
     @State private var category: PlaceCategory = .other
     @State private var phone = ""
@@ -917,6 +919,7 @@ struct SuggestEditSheet: View {
             _ = try await model.repo.suggestEdit(placeId: placeId, s)
             model.showToast(String(localized: "Thanks! Your suggestion was sent."))
             dismiss()
+            onSent?()
         } catch let e as APIError where e.isServerSideGap {
             error = String(localized: "Edit suggestions aren't available on the server yet.")
         } catch {

@@ -290,7 +290,8 @@ enum PlaceSource: String, Codable, Sendable {
 }
 
 enum PlaceStatus: String, Codable, Sendable {
-    case pending, published, closed, hidden
+    /// `rejected`: the AI check didn't accept it (owner only; may be edited or appealed once). `expired`: never confirmed.
+    case pending, published, closed, hidden, rejected, expired
 
     init(from decoder: any Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
@@ -319,6 +320,8 @@ struct PlaceSummary: Codable, Sendable, Identifiable, Hashable {
     var required: Double?
     /// Held for a moderator (restricted area nearby or sensitive words): "Being checked" in My contributions.
     var heldForReview: Bool?
+    /// The AI check, for the owner only (`GET /me/places/contributed`); absent for everyone else.
+    var screening: PlaceScreening?
 
     init(id: String, name: String, category: PlaceCategory, address: String, lat: Double, lng: Double, distanceM: Double? = nil,
          brand: String? = nil, source: PlaceSource? = nil, status: PlaceStatus? = nil, rating: Double? = nil,
@@ -409,11 +412,16 @@ struct Place: Codable, Sendable, Identifiable, Hashable {
     var heldForReview: Bool?
     /// Where routes to this place end (its entrance); the display pin stays `lat`/`lng`.
     var navigationPoint: NavigationPoint?
+    /// The AI check, in the owner's view only (POST/PATCH/appeal responses).
+    var screening: PlaceScreening?
 
     var summary: PlaceSummary {
         var s = PlaceSummary(id: id, name: name, category: category, address: address, lat: lat, lng: lng, distanceM: distanceM, brand: brand,
                              source: source, status: status, rating: rating, reviewCount: reviewCount, thumbnailUrl: thumbnailUrl)
         s.heldForReview = heldForReview
+        s.screening = screening
+        s.confirmationsWeighted = confirmationsWeighted
+        s.required = required
         return s
     }
 }
@@ -464,6 +472,47 @@ struct NewPlace: Codable, Sendable, Hashable {
     var website: String?
     var openingHours: String?
     var amenities: [String]?
+    /// The `existing.id` of a 409 the user answered "No, mine is a different place" (B1). Only on `POST /places`.
+    var notDuplicateOf: String?
+}
+
+/// The AI check on a community place (docs/api.md "AI check"), in the owner's view only.
+/// `reasons` are fixed codes; the app shows its own copy for each and never the model's text.
+struct PlaceScreening: Codable, Sendable, Hashable {
+    var state: ScreeningState
+    var reasons: [String]
+    var canAppeal: Bool
+    var appealed: Bool
+
+    init(state: ScreeningState, reasons: [String] = [], canAppeal: Bool = false, appealed: Bool = false) {
+        self.state = state; self.reasons = reasons; self.canAppeal = canAppeal; self.appealed = appealed
+    }
+
+    private enum CodingKeys: String, CodingKey { case state, reasons, canAppeal, appealed }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decodeIfPresent(ScreeningState.self, forKey: .state) ?? .none
+        reasons = try c.decodeIfPresent([String].self, forKey: .reasons) ?? []
+        canAppeal = try c.decodeIfPresent(Bool.self, forKey: .canAppeal) ?? false
+        appealed = try c.decodeIfPresent(Bool.self, forKey: .appealed) ?? false
+    }
+}
+
+enum ScreeningState: String, Codable, Sendable {
+    /// none: not checked (older places, restricted-area holds); skipped: the check is off or over its weekly budget.
+    case none, checking, passed, held, rejected, skipped
+
+    init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ScreeningState(rawValue: raw.lowercased()) ?? .none
+    }
+}
+
+/// `POST /places/{id}/appeal` (signed): ask a person to review a place the check didn't accept (once per place).
+struct AppealPlaceRequest: Codable, Sendable, Hashable {
+    static let maxNote = 200
+    var note: String?
 }
 
 /// `POST /places/{id}/suggest-edit`.
@@ -1109,6 +1158,12 @@ enum InboxKind: String, Codable, Sendable {
     case issueConfirmed = "issue_confirmed"
     case issueRefuted = "issue_refuted"
     case issueResolved = "issue_resolved"
+    case placeExpired = "place_expired"
+    /// The AI check held the user's place for a person / didn't accept it / it went live after the app stopped waiting
+    /// (or a maintainer accepted a held or appealed place). All three: refType "place", refId = the community place id.
+    case placeHeld = "place_held"
+    case placeNotAccepted = "place_not_accepted"
+    case placeLive = "place_live"
     case announcement
     case unknown
 

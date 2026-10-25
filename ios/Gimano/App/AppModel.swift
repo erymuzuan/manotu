@@ -114,7 +114,11 @@ final class AppModel {
     var showShareSheet = false
     private(set) var startingShare = false
     /// Add-a-place flow (nil when closed); the coordinate is where the pin starts.
-    var addPlaceStart: LatLng?
+    var addPlaceStart: LatLng? {
+        didSet { if addPlaceStart == nil { addPlaceSeed = nil } }
+    }
+    /// Pre-fills the add-place flow (an edit of the user's own place, or a phone draft).
+    private(set) var addPlaceSeed: AddPlaceSeed?
     /// Long-press menu: "Navigate here" / "Add a place here".
     var longPressPoint: LatLng?
     /// "Choose on map" in progress, and the actions for a chosen point.
@@ -202,6 +206,8 @@ final class AppModel {
     @ObservationIgnored private var skipSafetyForTests = false
     let backup: BackupManager
     let feedbackOutbox: FeedbackOutbox
+    /// Public places kept on the phone: drafts (limit reached, B5) and the offline queue (B6). Device-local outbox.
+    let placeOutbox: PlaceOutbox
     /// Server-side "My feedback" (merged with the local outbox in the UI).
     private(set) var serverFeedback: [FeedbackSummary] = []
     /// DEBUG/UI tests: fixed position instead of GPS (`-GimanoFakeLocation lat,lng`).
@@ -230,6 +236,7 @@ final class AppModel {
         Self.applyTestLaunchArguments(store: store)
         #endif
         self.feedbackOutbox = FeedbackOutbox(storage: LocalStoreOutboxStorage(store: store))
+        self.placeOutbox = PlaceOutbox(storage: LocalStorePlaceDraftStorage(store: store))
         #if DEBUG
         // `-GimanoResetCommunityRules YES` (UI tests): ask the community rules again.
         if UserDefaults.standard.bool(forKey: "GimanoResetCommunityRules") {
@@ -285,11 +292,15 @@ final class AppModel {
             for base in [AppConfig().apiBaseURL] { TokenStore.save(nil, for: base) }
             try? store.wipePersonalData()
             try? store.replaceOutbox(kind: "feedback", items: [])
+            try? store.replaceOutbox(kind: LocalStorePlaceDraftStorage.kind, items: [])
             try? store.setSetting(LegacyDataMigration.doneKey, nil)
             try? store.setSetting("theme", nil)
             try? store.clearIdentitySettings()
         }
-        if d.bool(forKey: "GimanoSkipOnboarding") { d.set(true, forKey: "onboarding.done") }
+        if d.bool(forKey: "GimanoSkipOnboarding") {
+            d.set(true, forKey: "onboarding.done")
+            d.set(true, forKey: AddPlaceIntro.seenKey)
+        }
         if d.bool(forKey: "GimanoFreshDevice") {
             UserDefaults.standard.removeObject(forKey: "vetting.lastPromptAt")
             UserDefaults.standard.removeObject(forKey: "recovery.roundTrip")
@@ -558,6 +569,7 @@ final class AppModel {
         await migrateLegacyDataIfNeeded()
         reloadLocal()
         await flushFeedback()
+        await flushPlaces()
         await rescheduleAllPlannedDrives()
         await refreshInbox()
         await checkCrashReports()
@@ -586,6 +598,38 @@ final class AppModel {
     var ownPlaceIds: Set<String> {
         let raw = (try? store.setting("ownPlaces")) ?? nil
         return Set((raw.flatMap { try? JSONDecoder().decode([String].self, from: Data($0.utf8)) }) ?? [])
+    }
+
+    /// "New" contributor (docs/api.md "AI check": < 3 accepted places): B2 explains why holds are more frequent.
+    var isNewContributor: Bool { (user?.placesAccepted ?? 0) < 3 && user?.tier != .emas }
+
+    /// Opens the add-place flow pre-filled (closing whatever menu sheet is up first).
+    func openAddPlace(_ seed: AddPlaceSeed) {
+        let open = { [weak self] in
+            guard let self else { return }
+            self.addPlaceSeed = seed
+            self.addPlaceStart = LatLng(lat: seed.place.lat, lng: seed.place.lng)
+        }
+        if menuSheet != nil {
+            menuSheet = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { open() }
+        } else {
+            open()
+        }
+    }
+
+    /// Sends places queued while offline (B6). The check's answer for each also arrives in the Inbox.
+    func flushPlaces() async {
+        guard placeOutbox.items.contains(where: { $0.state == .queued }) else { return }
+        let repo = self.repo
+        let sent = await placeOutbox.flush { try await repo.createPlace($0) }
+        for p in sent { rememberOwnPlace(p.id) }
+        if !sent.isEmpty {
+            reloadLocal()
+            showToast(sent.count == 1 ? String(localized: "\(sent[0].name) was sent and checked")
+                                      : String(localized: "\(sent.count) saved places were sent"), seconds: 3)
+            await refreshInbox()
+        }
     }
 
     func rememberOwnPlace(_ id: String) {
@@ -721,7 +765,8 @@ final class AppModel {
         recents = (try? store.recents()) ?? []
         privatePlaces = (try? store.privatePlaces()) ?? []
         plannedDrives = (try? store.plannedDrives()) ?? []
-        map.privatePins = privatePlaces.map { $0.location }
+        // Drafts and queued places show on the map for this user only, like "Just for me" places (B6).
+        map.privatePins = privatePlaces.map { $0.location } + placeOutbox.items.map(\.location)
         events.reloadPersonalRoutes()
         safety = SafetySettings(store: store)
     }
@@ -1750,6 +1795,7 @@ final class AppModel {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
                 await self?.flushFeedback()
+                await self?.flushPlaces()
             }
         }
     }
@@ -1978,6 +2024,7 @@ final class AppModel {
         try? store.deleteIdentity()
         if clearLocal {
             try? store.wipePersonalData()
+            placeOutbox.reset()
             for key in [CommunityRules.versionKey, CommunityRules.acceptedAtKey, BlockList.settingsKey] { try? store.setSetting(key, nil) }
             blockedAuthors = []
         }

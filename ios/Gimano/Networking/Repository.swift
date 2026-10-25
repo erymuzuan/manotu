@@ -50,6 +50,8 @@ protocol GimanoRepository: PlaceCardDataSource, DepartureTimesSource {
     func createPlace(_ place: NewPlace) async throws -> Place
     func updateCommunityPlace(id: String, _ place: NewPlace) async throws -> Place
     func deleteCommunityPlace(id: String) async throws
+    /// `POST /places/{id}/appeal` (signed): a person reviews a place the AI check didn't accept (once per place).
+    func appealPlace(id: String, note: String?) async throws -> Place
     func suggestEdit(placeId: String, _ s: PlaceEditSuggestion) async throws -> SuggestionAccepted
     func verifyPlace(id: String, _ v: VerifyPlaceRequest) async throws -> VerifyResult
     /// Pending community places in this geohash-6 cell and its neighbours (never the caller's own).
@@ -373,6 +375,10 @@ final class LiveRepository: GimanoRepository {
         try await authed { try await self.client.sendNoContent("DELETE", "places/\(id)", body: Optional<Empty>.none) }
     }
 
+    func appealPlace(id: String, note: String?) async throws -> Place {
+        try await authed { try await self.client.send("POST", "places/\(id)/appeal", body: AppealPlaceRequest(note: note)) }
+    }
+
     func suggestEdit(placeId: String, _ s: PlaceEditSuggestion) async throws -> SuggestionAccepted {
         try await authed { try await self.client.send("POST", "places/\(placeId)/suggest-edit", body: s) }
     }
@@ -591,14 +597,19 @@ final class FallbackRepository: GimanoRepository {
     func sendCrashReport(_ report: CrashReport) async throws -> CrashCreated { try await live.sendCrashReport(report) }
 
     // Community contributions are public writes: no silent demo fallback while the backend is online.
+    /// Never into the demo store, even when the backend can't be reached: offline, the app keeps the place on the phone
+    /// and sends it when back online (design B6), instead of a demo "It's on the map" nobody else can see.
     func createPlace(_ place: NewPlace) async throws -> Place {
-        try await run(gapFallback: false, { try await $0.createPlace(place) }, demoOp: { try await $0.createPlace(place) })
+        try await live.createPlace(place)
     }
     func updateCommunityPlace(id: String, _ place: NewPlace) async throws -> Place {
         try await run(gapFallback: false, { try await $0.updateCommunityPlace(id: id, place) }, demoOp: { try await $0.updateCommunityPlace(id: id, place) })
     }
     func deleteCommunityPlace(id: String) async throws {
         try await run(gapFallback: false, { try await $0.deleteCommunityPlace(id: id) }, demoOp: { try await $0.deleteCommunityPlace(id: id) })
+    }
+    func appealPlace(id: String, note: String?) async throws -> Place {
+        try await run(gapFallback: false, { try await $0.appealPlace(id: id, note: note) }, demoOp: { try await $0.appealPlace(id: id, note: note) })
     }
     func suggestEdit(placeId: String, _ s: PlaceEditSuggestion) async throws -> SuggestionAccepted {
         try await run(gapFallback: false, { try await $0.suggestEdit(placeId: placeId, s) }, demoOp: { try await $0.suggestEdit(placeId: placeId, s) })

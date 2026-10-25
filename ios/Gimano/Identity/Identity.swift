@@ -75,7 +75,7 @@ enum SignedEndpoints {
         case ("PATCH", 2): return s[0] == "places" || s[0] == "reviews"
         case ("DELETE", 2): return s[0] == "reviews" || s[0] == "reports"
         case ("POST", 3):
-            return (s[0] == "places" && ["verify", "suggest-edit", "reviews"].contains(s[2])) || (s[0] == "reports" && s[2] == "votes")
+            return (s[0] == "places" && ["verify", "suggest-edit", "reviews", "appeal"].contains(s[2])) || (s[0] == "reports" && s[2] == "votes")
                 || (s[0] == "issues" && s[2] == "votes")
         default: return false
         }

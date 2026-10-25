@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "\"Different place\" sends it on with that answer. If the check still thinks it's the same, a person decides. Nothing is lost either way." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "\"Tempat lain\" menghantarnya bersama jawapan itu. Jika semakan masih menganggapnya sama, seorang manusia akan memutuskan. Tiada apa yang hilang."
+          }
+        }
+      }
+    },
     "%@ ahead" : {
       "localizations" : {
         "ms" : {
@@ -27,6 +37,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ dari anda"
+          }
+        }
+      }
+    },
+    "%@ is on the map" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kini di peta"
+          }
+        }
+      }
+    },
+    "%@ is safely with us. It will go on the map as soon as the check finishes, usually within a few minutes. You'll get a message in your Inbox." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ selamat bersama kami. Ia akan dipaparkan di peta sebaik semakan selesai, biasanya dalam beberapa minit. Anda akan dapat mesej dalam Peti masuk."
           }
         }
       }
@@ -127,6 +157,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tol %@"
+          }
+        }
+      }
+    },
+    "%@ was not accepted" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ tidak diterima"
+          }
+        }
+      }
+    },
+    "%@ was sent and checked" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ telah dihantar dan disemak"
           }
         }
       }
@@ -233,6 +283,16 @@
         }
       }
     },
+    "%lld m away" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld m dari sini"
+          }
+        }
+      }
+    },
     "%lld metres" : {
       "localizations" : {
         "ms" : {
@@ -249,6 +309,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld min"
+          }
+        }
+      }
+    },
+    "%lld of %lld" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld daripada %2$lld"
+          }
+        }
+      }
+    },
+    "%lld of 3 accepted places to leave \"new\"" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld daripada 3 tempat diterima untuk keluar daripada \"baharu\""
           }
         }
       }
@@ -327,6 +407,16 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "%lld saved places were sent" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld tempat yang disimpan telah dihantar"
           }
         }
       }
@@ -481,12 +571,32 @@
         }
       }
     },
+    "< 24 h" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "< 24 jam"
+          }
+        }
+      }
+    },
     "A GPX file isn't encrypted. Anyone who gets it can read the route." : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fail GPX tidak disulitkan. Sesiapa yang mendapatnya boleh membaca laluan ini."
+          }
+        }
+      }
+    },
+    "A Manotu maintainer, a person, answers within 24 hours. One review per place. Don't include phone numbers or names of people here." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Penyelenggara Manotu, seorang manusia, menjawab dalam 24 jam. Satu semakan bagi setiap tempat. Jangan masukkan nombor telefon atau nama orang di sini."
           }
         }
       }
@@ -517,6 +627,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beberapa hari"
+          }
+        }
+      }
+    },
+    "A few minutes" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beberapa minit"
           }
         }
       }
@@ -561,6 +681,26 @@
         }
       }
     },
+    "A person will check %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seorang manusia akan menyemak %@"
+          }
+        }
+      }
+    },
+    "A person will check this one" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seorang manusia akan menyemak tempat ini"
+          }
+        }
+      }
+    },
     "A place called %@ is already here." : {
       "localizations" : {
         "ms" : {
@@ -577,6 +717,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nota tempat terlalu panjang (maksimum 500 aksara)."
+          }
+        }
+      }
+    },
+    "A quick automatic check" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semakan automatik yang pantas"
+          }
+        }
+      }
+    },
+    "A review was already asked for this place." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semakan sudah diminta untuk tempat ini."
           }
         }
       }
@@ -607,6 +767,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Satu perjalanan boleh ada hingga 5 hentian"
+          }
+        }
+      }
+    },
+    "A very similar place is already on the map here. It was not published, and nobody else saw it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat yang sangat serupa sudah ada di peta di sini. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya."
           }
         }
       }
@@ -939,6 +1109,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ditambah oleh pengguna Manotu"
+          }
+        }
+      }
+    },
+    "Added by an Emas contributor" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ditambah oleh penyumbang Emas"
+          }
+        }
+      }
+    },
+    "Adding is paused for now" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Penambahan dihentikan buat sementara"
+          }
+        }
+      }
+    },
+    "Adding is paused until %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Penambahan dihentikan sehingga %@"
+          }
+        }
+      }
+    },
+    "Adding places is paused for now. It lifts by itself." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Penambahan tempat dihentikan buat sementara. Ia akan dibuka semula dengan sendiri."
           }
         }
       }
@@ -1393,6 +1603,16 @@
         }
       }
     },
+    "Ask for a review" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minta semakan"
+          }
+        }
+      }
+    },
     "Attribution" : {
       "localizations" : {
         "ms" : {
@@ -1739,6 +1959,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sedang disemak"
+          }
+        }
+      }
+    },
+    "Being checked by a person" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sedang disemak oleh manusia"
+          }
+        }
+      }
+    },
+    "Being checked · usually within 24 h" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sedang disemak · biasanya dalam 24 jam"
           }
         }
       }
@@ -2209,12 +2449,42 @@
         }
       }
     },
+    "Check took longer than 4 s" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semakan mengambil masa lebih 4 saat"
+          }
+        }
+      }
+    },
     "Checked within 24 hours. You'll get a note in your Inbox." : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Disemak dalam 24 jam. Anda dapat notis dalam Peti masuk."
+          }
+        }
+      }
+    },
+    "Checking" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menyemak"
+          }
+        }
+      }
+    },
+    "Checking before it goes on the map…" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menyemak sebelum dipaparkan di peta…"
           }
         }
       }
@@ -2425,6 +2695,16 @@
         }
       }
     },
+    "Community verified" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disahkan komuniti"
+          }
+        }
+      }
+    },
     "Company event" : {
       "localizations" : {
         "ms" : {
@@ -2521,6 +2801,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Butiran hubungan dipadam"
+          }
+        }
+      }
+    },
+    "Content check" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semakan kandungan"
           }
         }
       }
@@ -3365,6 +3655,16 @@
         }
       }
     },
+    "Discarded" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dibuang"
+          }
+        }
+      }
+    },
     "Disconnected" : {
       "localizations" : {
         "ms" : {
@@ -3485,6 +3785,16 @@
         }
       }
     },
+    "Draft on this phone" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Draf dalam telefon ini"
+          }
+        }
+      }
+    },
     "Draft saved on this phone" : {
       "localizations" : {
         "ms" : {
@@ -3501,6 +3811,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Draf · belum dikongsi"
+          }
+        }
+      }
+    },
+    "Drafts stay on this phone until you share them. Queued places are sent when you're back online." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Draf kekal dalam telefon ini sehingga anda berkongsinya. Tempat dalam giliran dihantar apabila anda kembali dalam talian."
           }
         }
       }
@@ -3611,6 +3931,16 @@
         }
       }
     },
+    "Drivers can find it in search now. The next person who stops nearby will be asked \"Is this place here?\". When they say yes, it becomes Community verified and you get +20 points." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pemandu boleh mencarinya sekarang. Orang seterusnya yang berhenti berdekatan akan ditanya \"Adakah tempat ini di sini?\". Apabila mereka menjawab ya, ia menjadi Disahkan komuniti dan anda dapat +20 mata."
+          }
+        }
+      }
+    },
     "Drivers nearby will be asked to confirm before anything changes." : {
       "localizations" : {
         "ms" : {
@@ -3691,6 +4021,26 @@
         }
       }
     },
+    "Edit and try again" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sunting dan cuba lagi"
+          }
+        }
+      }
+    },
+    "Edit description" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sunting keterangan"
+          }
+        }
+      }
+    },
     "Edit event" : {
       "localizations" : {
         "ms" : {
@@ -3707,6 +4057,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sunting kegemaran"
+          }
+        }
+      }
+    },
+    "Edit place" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sunting tempat"
           }
         }
       }
@@ -4059,6 +4419,16 @@
         }
       }
     },
+    "Everyone can see it" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semua orang boleh melihatnya"
+          }
+        }
+      }
+    },
     "Excellent!" : {
       "localizations" : {
         "ms" : {
@@ -4085,6 +4455,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keluar bulatan ke %@"
+          }
+        }
+      }
+    },
+    "Expired" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tamat tempoh"
           }
         }
       }
@@ -4580,6 +4960,16 @@
         }
       }
     },
+    "Goes live" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dipaparkan"
+          }
+        }
+      }
+    },
     "Gone" : {
       "localizations" : {
         "ms" : {
@@ -4910,6 +5300,16 @@
         }
       }
     },
+    "Hidden: reported \"not here\"" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disembunyikan: dilaporkan \"tiada di sini\""
+          }
+        }
+      }
+    },
     "Hide" : {
       "localizations" : {
         "ms" : {
@@ -4966,6 +5366,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rumah"
+          }
+        }
+      }
+    },
+    "Home businesses (kuih, tailors, homestays) are welcome. Name the business, not the person, and add opening hours." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perniagaan dari rumah (kuih, tukang jahit, inap desa) dialu-alukan. Namakan perniagaannya, bukan orangnya, dan tambah waktu operasi."
           }
         }
       }
@@ -5036,12 +5446,32 @@
         }
       }
     },
+    "How adding a place works" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cara menambah tempat"
+          }
+        }
+      }
+    },
     "I agree" : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Setuju"
+          }
+        }
+      }
+    },
+    "I think this is wrong: ask for a review" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saya rasa ini salah: minta semakan"
           }
         }
       }
@@ -5098,6 +5528,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Idea"
+          }
+        }
+      }
+    },
+    "If the automatic check is unsure about an Emas place, a person decides. It is never refused automatically." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jika semakan automatik tidak pasti tentang tempat Emas, seorang manusia akan memutuskan. Ia tidak sekali-kali ditolak secara automatik."
+          }
+        }
+      }
+    },
+    "If the check service is down for more than an hour, a person reviews the place instead. Nothing is lost." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jika perkhidmatan semakan terhenti lebih sejam, seorang manusia akan menyemak tempat itu. Tiada apa yang hilang."
           }
         }
       }
@@ -5252,6 +5702,16 @@
         }
       }
     },
+    "Inside Malaysia, not in a restricted area" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Di dalam Malaysia, bukan di kawasan larangan"
+          }
+        }
+      }
+    },
     "Invitation" : {
       "localizations" : {
         "ms" : {
@@ -5312,6 +5772,16 @@
         }
       }
     },
+    "Is it already on the map?" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sudah ada di peta?"
+          }
+        }
+      }
+    },
     "Is it this one?" : {
       "localizations" : {
         "ms" : {
@@ -5322,12 +5792,32 @@
         }
       }
     },
+    "Is there a real shop or office here? Edit the name to what's on the signboard and describe the place, not the offer." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adakah kedai atau pejabat sebenar di sini? Tukar nama kepada yang tertulis pada papan tanda dan terangkan tempatnya, bukan tawarannya."
+          }
+        }
+      }
+    },
     "Is this %@ (%lld m)?" : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Adakah ini %1$@ (%2$lld m)?"
+          }
+        }
+      }
+    },
+    "Is this a real place drivers can visit?" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adakah ini tempat sebenar yang boleh dikunjungi pemandu?"
           }
         }
       }
@@ -5352,6 +5842,26 @@
         }
       }
     },
+    "It may be someone's home or about a person. A maintainer will check before anyone else sees it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ia mungkin rumah seseorang atau tentang seseorang. Penyelenggara akan menyemak sebelum orang lain melihatnya."
+          }
+        }
+      }
+    },
+    "It may be the same as a place already on the map. A maintainer will compare them." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ia mungkin sama dengan tempat yang sudah ada di peta. Penyelenggara akan membandingkannya."
+          }
+        }
+      }
+    },
     "It replaces the version on this phone." : {
       "localizations" : {
         "ms" : {
@@ -5362,12 +5872,42 @@
         }
       }
     },
+    "It will be sent and checked when you're back online. It stays on your map meanwhile, shown only to you." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ia akan dihantar dan disemak apabila anda kembali dalam talian. Sementara itu ia kekal di peta anda, hanya untuk anda."
+          }
+        }
+      }
+    },
+    "It's a business: ask for a review" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini perniagaan: minta semakan"
+          }
+        }
+      }
+    },
     "It's here, but the pin is in the wrong spot" : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pin di lokasi salah"
+          }
+        }
+      }
+    },
+    "It's on the map" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sudah di peta"
           }
         }
       }
@@ -5478,6 +6018,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kekalkan demo"
+          }
+        }
+      }
+    },
+    "Keep it just for me" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Simpan untuk saya sahaja"
+          }
+        }
+      }
+    },
+    "Keep it just for me instead" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Simpan untuk saya sahaja"
           }
         }
       }
@@ -5838,6 +6398,16 @@
         }
       }
     },
+    "Live and verified" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dipaparkan dan disahkan"
+          }
+        }
+      }
+    },
     "Live backend only" : {
       "localizations" : {
         "ms" : {
@@ -5858,6 +6428,16 @@
         }
       }
     },
+    "Live · not verified yet" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dipaparkan · belum disahkan"
+          }
+        }
+      }
+    },
     "Location" : {
       "localizations" : {
         "ms" : {
@@ -5874,6 +6454,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Butiran lokasi dan kamera dibuang dalam telefon anda sebelum dimuat naik."
+          }
+        }
+      }
+    },
+    "Location is fine" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lokasi baik"
           }
         }
       }
@@ -6070,6 +6660,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Manotu tidak pernah tahu siapa anda. Sumbangan awam anda dikreditkan kepada nama samaran rawak ini, yang hanya telefon dan sandaran anda boleh tandatangani."
+          }
+        }
+      }
+    },
+    "Manotu places are locations drivers can visit. We don't accept adverts, investment offers, job offers or promotions. It was not published, and nobody else saw it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat Manotu ialah lokasi yang boleh dikunjungi pemandu. Kami tidak menerima iklan, tawaran pelaburan, tawaran kerja atau promosi. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya."
           }
         }
       }
@@ -6280,6 +6880,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sederhana"
+          }
+        }
+      }
+    },
+    "Moderator" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moderator"
           }
         }
       }
@@ -6714,6 +7324,26 @@
         }
       }
     },
+    "New contributors can share a few places an hour and a day. The limit grows as your places get confirmed." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Penyumbang baharu boleh berkongsi beberapa tempat sejam dan sehari. Had ini bertambah apabila tempat anda disahkan."
+          }
+        }
+      }
+    },
+    "New contributors see this more often: until you have 3 accepted places, anything the check isn't sure about goes to a person." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Penyumbang baharu lebih kerap melihat ini: sehingga anda ada 3 tempat diterima, apa-apa yang semakan tidak pasti akan disemak oleh manusia."
+          }
+        }
+      }
+    },
     "New event" : {
       "localizations" : {
         "ms" : {
@@ -6870,6 +7500,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tiada kod untuk dihantar. Sesiapa yang ada fail boleh buka; kongsi dalam kumpulan yang dipercayai."
+          }
+        }
+      }
+    },
+    "No connection" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiada sambungan"
           }
         }
       }
@@ -7054,6 +7694,16 @@
         }
       }
     },
+    "No similar place within 100 m" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiada tempat serupa dalam 100 m"
+          }
+        }
+      }
+    },
     "No sound" : {
       "localizations" : {
         "ms" : {
@@ -7090,6 +7740,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tidak, kembali"
+          }
+        }
+      }
+    },
+    "No, mine is a different place" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak, tempat saya lain"
+          }
+        }
+      }
+    },
+    "Not accepted" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak diterima"
+          }
+        }
+      }
+    },
+    "Not accepted: %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak diterima: %@"
           }
         }
       }
@@ -7150,6 +7830,16 @@
         }
       }
     },
+    "Not on the map yet" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada di peta"
+          }
+        }
+      }
+    },
     "Not sent" : {
       "localizations" : {
         "ms" : {
@@ -7186,6 +7876,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tiada lagi"
+          }
+        }
+      }
+    },
+    "Not verified yet" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum disahkan"
+          }
+        }
+      }
+    },
+    "Not verified yet · %lld of %lld" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum disahkan · %1$lld daripada %2$lld"
           }
         }
       }
@@ -7376,6 +8086,26 @@
         }
       }
     },
+    "On this phone only" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dalam telefon ini sahaja"
+          }
+        }
+      }
+    },
+    "On this phone, not shared yet" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dalam telefon ini, belum dikongsi"
+          }
+        }
+      }
+    },
     "One place" : {
       "localizations" : {
         "ms" : {
@@ -7532,6 +8262,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Buka Manotu di telefon untuk bermula"
+          }
+        }
+      }
+    },
+    "Open My contributions to edit it or ask for a review." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buka Sumbangan saya untuk menyuntingnya atau minta semakan."
           }
         }
       }
@@ -7886,6 +8626,16 @@
         }
       }
     },
+    "People nearby confirm it" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orang berdekatan mengesahkannya"
+          }
+        }
+      }
+    },
     "Perak" : {
       "localizations" : {
         "ms" : {
@@ -7976,12 +8726,32 @@
         }
       }
     },
+    "Photos aren't kept with a saved place: add them on the place card once it's shared." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto tidak disimpan bersama tempat ini: tambahkannya pada kad tempat selepas ia dikongsi."
+          }
+        }
+      }
+    },
     "Pick one. The form follows it." : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pilih satu. Borang ikut jenis ini."
+          }
+        }
+      }
+    },
+    "Pick the type that matches what drivers will find, then try again." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pilih jenis yang sepadan dengan apa yang akan ditemui pemandu, kemudian cuba lagi."
           }
         }
       }
@@ -8460,6 +9230,16 @@
         }
       }
     },
+    "Queued" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dalam giliran"
+          }
+        }
+      }
+    },
     "Queued, will retry" : {
       "localizations" : {
         "ms" : {
@@ -8706,6 +9486,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Buang gambar"
+          }
+        }
+      }
+    },
+    "Remove the sentence about guards, cameras or entrances, then try again." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buang ayat tentang pengawal, kamera atau pintu masuk, kemudian cuba lagi."
           }
         }
       }
@@ -9126,6 +9916,16 @@
         }
       }
     },
+    "Review closed" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semakan ditutup"
+          }
+        }
+      }
+    },
     "Reviews" : {
       "localizations" : {
         "ms" : {
@@ -9142,6 +9942,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ulasan belum tersedia di pelayan."
+          }
+        }
+      }
+    },
+    "Reviews of not-accepted places aren't available on the server yet." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semakan tempat yang tidak diterima belum tersedia pada pelayan."
           }
         }
       }
@@ -9416,6 +10226,16 @@
         }
       }
     },
+    "Save draft" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Simpan draf"
+          }
+        }
+      }
+    },
     "Save just for me" : {
       "localizations" : {
         "ms" : {
@@ -9492,6 +10312,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Disimpan"
+          }
+        }
+      }
+    },
+    "Saved as a draft on this phone" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disimpan sebagai draf dalam telefon ini"
+          }
+        }
+      }
+    },
+    "Saved on this phone" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disimpan dalam telefon ini"
           }
         }
       }
@@ -9912,12 +10752,32 @@
         }
       }
     },
+    "Sent for review. A person answers within 24 hours." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dihantar untuk semakan. Seorang manusia menjawab dalam 24 jam."
+          }
+        }
+      }
+    },
     "Sent with your contact details, so it isn't linked to your account and gets no status updates here. We reply by the email or WhatsApp you gave. Swipe to delete your contact details." : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dihantar dengan butiran hubungan anda, jadi ia tidak dikaitkan dengan akaun anda dan tiada kemas kini status di sini. Kami membalas melalui e-mel atau WhatsApp yang anda berikan. Leret untuk memadam butiran hubungan anda."
+          }
+        }
+      }
+    },
+    "Sent. We're still checking" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dihantar. Kami masih menyemak"
           }
         }
       }
@@ -10082,6 +10942,16 @@
         }
       }
     },
+    "Share in %lld min" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kongsi dalam %lld min"
+          }
+        }
+      }
+    },
     "Share invitation" : {
       "localizations" : {
         "ms" : {
@@ -10102,6 +10972,26 @@
         }
       }
     },
+    "Share now" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kongsi sekarang"
+          }
+        }
+      }
+    },
+    "Share place" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kongsi tempat"
+          }
+        }
+      }
+    },
     "Share the event again from its page" : {
       "localizations" : {
         "ms" : {
@@ -10118,6 +11008,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kongsi dengan semua"
+          }
+        }
+      }
+    },
+    "Shared places appear on the map for all drivers, under your pseudonym." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat yang dikongsi dipaparkan di peta untuk semua pemandu, di bawah nama samaran anda."
+          }
+        }
+      }
+    },
+    "Shared places get a quick automatic check, then people nearby confirm them." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat yang dikongsi melalui semakan automatik yang pantas, kemudian disahkan oleh orang berdekatan."
           }
         }
       }
@@ -10238,6 +11148,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kedai"
+          }
+        }
+      }
+    },
+    "Shops, stalls, surau, workshops, parking and places to stop. No homes, adverts or job offers. Want it only for yourself? Choose \"Just for me\": it never leaves your phone." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kedai, gerai, surau, bengkel, tempat letak kereta dan tempat berhenti. Bukan rumah, iklan atau tawaran kerja. Mahu untuk diri sendiri sahaja? Pilih \"Untuk saya sahaja\": ia tidak pernah keluar dari telefon anda."
           }
         }
       }
@@ -10992,6 +11912,16 @@
         }
       }
     },
+    "Takes about 2 seconds. It looks only at what you write, never at who you are." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mengambil masa kira-kira 2 saat. Ia hanya melihat apa yang anda tulis, bukan siapa anda."
+          }
+        }
+      }
+    },
     "Tap a star" : {
       "localizations" : {
         "ms" : {
@@ -11302,6 +12232,16 @@
         }
       }
     },
+    "The automatic check wasn't sure about this one, so a person decides." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semakan automatik tidak pasti tentang tempat ini, jadi seorang manusia akan memutuskan."
+          }
+        }
+      }
+    },
     "The backup file is damaged." : {
       "localizations" : {
         "ms" : {
@@ -11312,12 +12252,42 @@
         }
       }
     },
+    "The check couldn't tell what drivers would find here. It was not published, and nobody else saw it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semakan tidak dapat menentukan apa yang akan ditemui pemandu di sini. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya."
+          }
+        }
+      }
+    },
+    "The check finished. People nearby will be asked to confirm it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semakan selesai. Orang berdekatan akan diminta mengesahkannya."
+          }
+        }
+      }
+    },
     "The description is too long (2000 characters at most)." : {
       "localizations" : {
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keterangan terlalu panjang (maksimum 2000 aksara)."
+          }
+        }
+      }
+    },
+    "The description mentions security details (cameras, guard times). We never publish those, but the place itself may be fine. A maintainer may remove that sentence and publish the rest." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keterangan menyebut butiran keselamatan (kamera, waktu pengawal). Kami tidak pernah menerbitkannya, tetapi tempat itu sendiri mungkin tiada masalah. Penyelenggara mungkin membuang ayat itu dan menerbitkan selebihnya."
           }
         }
       }
@@ -11388,6 +12358,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nama terlalu panjang (maksimum 120 aksara)."
+          }
+        }
+      }
+    },
+    "The name or description doesn't read like a real place. It was not published, and nobody else saw it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nama atau keterangan tidak kelihatan seperti tempat sebenar. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya."
           }
         }
       }
@@ -11512,6 +12492,16 @@
         }
       }
     },
+    "The same reasons, in plain words, for scams, illegal goods and adult services. We never show the automatic check's own wording." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sebab yang sama, dalam bahasa mudah, untuk penipuan, barangan haram dan perkhidmatan dewasa. Kami tidak pernah memaparkan kata-kata semakan automatik itu sendiri."
+          }
+        }
+      }
+    },
     "The secret code is not valid. Check it and try again." : {
       "localizations" : {
         "ms" : {
@@ -11542,6 +12532,36 @@
         }
       }
     },
+    "The type doesn't match the place" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jenis tidak sepadan dengan tempat"
+          }
+        }
+      }
+    },
+    "The type may not match the place. A maintainer may correct it and publish it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jenis mungkin tidak sepadan dengan tempat. Penyelenggara mungkin membetulkan dan menerbitkannya."
+          }
+        }
+      }
+    },
+    "The type you chose doesn't fit the name and description. It was not published, and nobody else saw it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jenis yang anda pilih tidak sepadan dengan nama dan keterangan. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya."
+          }
+        }
+      }
+    },
     "Their reviews and photos will be hidden on this phone. You can unblock them in Settings." : {
       "localizations" : {
         "ms" : {
@@ -11558,6 +12578,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tema"
+          }
+        }
+      }
+    },
+    "Then people nearby confirm it" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kemudian orang berdekatan mengesahkannya"
           }
         }
       }
@@ -11714,6 +12744,86 @@
         }
       }
     },
+    "This looks like a place already on the map" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini seperti tempat yang sudah ada di peta"
+          }
+        }
+      }
+    },
+    "This looks like a sale of illegal goods" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini seperti jualan barangan haram"
+          }
+        }
+      }
+    },
+    "This looks like a scam, not a place" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini seperti penipuan, bukan tempat"
+          }
+        }
+      }
+    },
+    "This looks like an adult service" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini seperti perkhidmatan dewasa"
+          }
+        }
+      }
+    },
+    "This looks like an advert, not a place" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini seperti iklan, bukan tempat"
+          }
+        }
+      }
+    },
+    "This looks like it's about a person" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini seperti tentang seseorang"
+          }
+        }
+      }
+    },
+    "This looks like someone's home" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini seperti rumah seseorang"
+          }
+        }
+      }
+    },
+    "This mentions security details" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini menyebut butiran keselamatan"
+          }
+        }
+      }
+    },
     "This phone couldn't unlock the file right now. Close other apps and try again." : {
       "localizations" : {
         "ms" : {
@@ -11834,6 +12944,16 @@
         }
       }
     },
+    "Three of your places were not accepted in the last 24 hours. It lifts by itself." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiga tempat anda tidak diterima dalam 24 jam yang lalu. Ia akan dibuka semula dengan sendiri."
+          }
+        }
+      }
+    },
     "Tick the box to agree we may contact you about this report." : {
       "localizations" : {
         "ms" : {
@@ -11860,6 +12980,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Masa berubah"
+          }
+        }
+      }
+    },
+    "Tip: naming the business instead of the person, and adding opening hours, often passes the check straight away." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petua: menamakan perniagaan dan bukan orangnya, serta menambah waktu operasi, selalunya terus lulus semakan."
           }
         }
       }
@@ -11900,6 +13030,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Perlu dikira"
+          }
+        }
+      }
+    },
+    "To protect people's privacy, we don't publish private homes for everyone. You can still keep it on the map for yourself. A \"Just for me\" place stays on this phone and in your own backup, and never reaches Manotu." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untuk melindungi privasi orang, kami tidak menerbitkan rumah persendirian untuk semua. Anda masih boleh menyimpannya di peta untuk diri sendiri. Tempat \"Untuk saya sahaja\" kekal dalam telefon ini dan dalam sandaran anda sendiri, dan tidak pernah sampai ke Manotu."
           }
         }
       }
@@ -12374,6 +13514,26 @@
         }
       }
     },
+    "Until then it shows \"Not verified yet\". Accurate places raise your level." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sehingga itu ia menunjukkan \"Belum disahkan\". Tempat yang tepat menaikkan tahap anda."
+          }
+        }
+      }
+    },
+    "Until then only you can see it. You'll get the answer in your Inbox." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sehingga itu hanya anda yang boleh melihatnya. Anda akan dapat jawapannya dalam Peti masuk."
+          }
+        }
+      }
+    },
     "Until you arrive · ends %@ at the latest" : {
       "localizations" : {
         "ms" : {
@@ -12526,6 +13686,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Perjanjian pengguna"
+          }
+        }
+      }
+    },
+    "Usually about 2 seconds. You can close this: the result also arrives in your Inbox." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biasanya kira-kira 2 saat. Anda boleh menutup ini: keputusannya juga sampai ke Peti masuk."
+          }
+        }
+      }
+    },
+    "Usually within 24 hours. Only you can see it until then." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biasanya dalam 24 jam. Hanya anda yang boleh melihatnya sehingga itu."
           }
         }
       }
@@ -12730,6 +13910,16 @@
         }
       }
     },
+    "Waiting for verification" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menunggu pengesahan"
+          }
+        }
+      }
+    },
     "Waiting for your location. Try again in a moment." : {
       "localizations" : {
         "ms" : {
@@ -12786,6 +13976,96 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Air"
+          }
+        }
+      }
+    },
+    "We couldn't read this as a place" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kami tidak dapat membaca ini sebagai tempat"
+          }
+        }
+      }
+    },
+    "We couldn't tell what this place is" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kami tidak pasti tempat apakah ini"
+          }
+        }
+      }
+    },
+    "We don't accept adult services. It was not published, and nobody else saw it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kami tidak menerima perkhidmatan dewasa. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya."
+          }
+        }
+      }
+    },
+    "We don't accept get-rich offers, investment schemes or requests for money. It was not published, and nobody else saw it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kami tidak menerima tawaran cepat kaya, skim pelaburan atau permintaan wang. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya."
+          }
+        }
+      }
+    },
+    "We don't accept places that sell illegal goods or services. It was not published, and nobody else saw it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kami tidak menerima tempat yang menjual barangan atau perkhidmatan haram. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya."
+          }
+        }
+      }
+    },
+    "We don't publish places that name or point at a private person. You can still keep it on the map for yourself. A \"Just for me\" place stays on this phone and in your own backup, and never reaches Manotu." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kami tidak menerbitkan tempat yang menamakan atau menunjuk kepada individu persendirian. Anda masih boleh menyimpannya di peta untuk diri sendiri. Tempat \"Untuk saya sahaja\" kekal dalam telefon ini dan dalam sandaran anda sendiri, dan tidak pernah sampai ke Manotu."
+          }
+        }
+      }
+    },
+    "We found a similar place %lld m from your pin. You wrote \"%@\"." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kami menemui tempat serupa %1$lld m dari pin anda. Anda menulis \"%2$@\"."
+          }
+        }
+      }
+    },
+    "We found a similar place near your pin. You wrote \"%@\"." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kami menemui tempat serupa berhampiran pin anda. Anda menulis \"%@\"."
+          }
+        }
+      }
+    },
+    "We never publish security details such as guards, cameras or back entrances. It was not published, and nobody else saw it." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kami tidak pernah menerbitkan butiran keselamatan seperti pengawal, kamera atau pintu belakang. Ia tidak diterbitkan, dan tiada orang lain yang melihatnya."
           }
         }
       }
@@ -12896,6 +14176,26 @@
         }
       }
     },
+    "What should drivers know? (optional)" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apa yang patut pemandu tahu? (pilihan)"
+          }
+        }
+      }
+    },
+    "What should the reviewer know?" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apa yang patut penyemak tahu?"
+          }
+        }
+      }
+    },
     "What was it like? (optional)" : {
       "localizations" : {
         "ms" : {
@@ -12976,6 +14276,16 @@
         }
       }
     },
+    "When online" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apabila dalam talian"
+          }
+        }
+      }
+    },
     "When?" : {
       "localizations" : {
         "ms" : {
@@ -13022,6 +14332,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kenapa tak ikut laluan?"
+          }
+        }
+      }
+    },
+    "Why: %@" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sebab: %@"
           }
         }
       }
@@ -13146,6 +14466,16 @@
         }
       }
     },
+    "Yes, that's it: suggest an edit" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya, itulah: cadangkan suntingan"
+          }
+        }
+      }
+    },
     "You already have version %lld. The newer version is kept." : {
       "localizations" : {
         "ms" : {
@@ -13166,6 +14496,36 @@
         }
       }
     },
+    "You can add more in %lld minutes" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anda boleh tambah lagi dalam %lld minit"
+          }
+        }
+      }
+    },
+    "You can add more in 1 minute" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anda boleh tambah lagi dalam 1 minit"
+          }
+        }
+      }
+    },
+    "You can add more later" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anda boleh tambah lagi nanti"
+          }
+        }
+      }
+    },
     "You can block any contributor: their reviews and photos disappear from your phone." : {
       "localizations" : {
         "ms" : {
@@ -13182,6 +14542,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Anda boleh menyekat mana-mana pengguna: ulasan dan gambar mereka disembunyikan dalam telefon anda."
+          }
+        }
+      }
+    },
+    "You can edit it while it's not verified yet. An edit is checked again." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anda boleh menyuntingnya selagi belum disahkan. Suntingan akan disemak semula."
           }
         }
       }
@@ -13276,6 +14646,16 @@
         }
       }
     },
+    "You're offline. Try again when you're back online." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anda di luar talian. Cuba lagi apabila anda kembali dalam talian."
+          }
+        }
+      }
+    },
     "You're on your way to the old location of “%@”. Your destination won't change unless you agree." : {
       "localizations" : {
         "ms" : {
@@ -13306,6 +14686,16 @@
         }
       }
     },
+    "Your Emas level means it skips the wait. It still passed the same automatic check. Now and then we ask a driver nearby to confirm an Emas place, to keep everyone's level fair." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tahap Emas anda bermakna ia tidak perlu menunggu. Ia tetap melalui semakan automatik yang sama. Sesekali kami meminta pemandu berdekatan mengesahkan tempat Emas, supaya tahap semua orang kekal adil."
+          }
+        }
+      }
+    },
     "Your Manotu account was deleted" : {
       "localizations" : {
         "ms" : {
@@ -13322,6 +14712,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Akaun anda tidak boleh menghantar sekarang: ia digantung kerana melanggar peraturan komuniti."
+          }
+        }
+      }
+    },
+    "Your first shared place" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat pertama yang anda kongsi"
           }
         }
       }
@@ -13352,6 +14752,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Akaun iCloud anda sendiri"
+          }
+        }
+      }
+    },
+    "Your place is saved as a draft on this phone. Share it from My contributions when adding opens again." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat anda disimpan sebagai draf dalam telefon ini. Kongsikannya dari Sumbangan saya apabila penambahan dibuka semula."
           }
         }
       }
@@ -13588,6 +14998,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "cth. sudah pindah ke lot kedai sebelah"
+          }
+        }
+      }
+    },
+    "e.g. she sells kuih from her house every morning, with a signboard outside" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "cth. dia menjual kuih dari rumahnya setiap pagi, ada papan tanda di luar"
           }
         }
       }

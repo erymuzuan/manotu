@@ -113,6 +113,8 @@ final class SearchQueriesUITests: XCTestCase {
         app.buttons["detailsNext"].tap()
         XCTAssertTrue(app.buttons["visibilityPublic"].waitForExistence(timeout: 10))
         app.buttons["visibilityPublic"].tap()
+        // A4 "It's on the map" (the AI check passed): Done opens the place card.
+        if app.buttons["resultDone"].waitForExistence(timeout: 15) { app.buttons["resultDone"].tap() }
         XCTAssertTrue(app.descendants(matching: .any)["badgeCommunity"].waitForExistence(timeout: 30), "place created")
         attach("pending-created", name)
         // 2. Another pseudonym, parked nearby, is asked about it.

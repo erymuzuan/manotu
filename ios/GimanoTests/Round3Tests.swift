@@ -176,7 +176,8 @@ struct CommunityDemoTests {
             _ = try await repo.createPlace(NewPlace(name: "kedai runcit pak mat", category: .convenience, lat: 3.1601, lng: 101.7001))
             Issue.record("expected a duplicate")
         } catch APIError.conflict(let body) {
-            let existing = try JSON.makeDecoder().decode(Place.self, from: body)
+            // The API's problem body: `{…, existing: PlaceSummary}`.
+            let existing = try #require(DuplicatePlace.existing(in: body))
             #expect(existing.id == p.id)
         }
         let claim = ProximityClaim(cell: Geohash.encode(lat: p.lat, lng: p.lng), withinM: 1000)

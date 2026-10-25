@@ -412,6 +412,10 @@ struct MyContributionsView: View {
     @State private var places: [PlaceSummary] = []
     @State private var loading = true
     @State private var error: String?
+    /// C1 from a not-accepted row.
+    @State private var appealFor: PlaceSummary?
+    /// A not-accepted row: what wasn't accepted and why, with its actions.
+    @State private var notAccepted: PlaceSummary?
 
     var body: some View {
         NavigationStack {
@@ -421,6 +425,12 @@ struct MyContributionsView: View {
                         TierRing(tier: model.user?.tier ?? .baharu, progress: model.tierProgress)
                         VStack(alignment: .leading, spacing: 4) {
                             TierBadge(tier: model.user?.tier ?? .baharu)
+                            if model.isNewContributor {
+                                // C3: "2 of 3 accepted places to leave "new"".
+                                Text("\(model.user?.placesAccepted ?? 0) of 3 accepted places to leave \"new\"")
+                                    .font(Tokens.Font.caption).foregroundStyle(Color.textMuted)
+                                    .accessibilityIdentifier("contributionsNewProgress")
+                            }
                             if let next = model.user?.nextTier {
                                 Text("Next: \(Text(next.name.title))").font(Tokens.Font.bodyBold)
                                 if let first = next.missing.first {
@@ -436,14 +446,34 @@ struct MyContributionsView: View {
                     if let error { Text(error).foregroundStyle(Color.textMuted).font(Tokens.Font.caption) }
                     if !loading && places.isEmpty && error == nil { Text("Nothing shared yet").foregroundStyle(Color.textMuted) }
                     ForEach(places) { p in
-                        Button { dismiss(); model.openPlace(p) } label: { row(p.name, p.category, status: p.status, held: p.heldForReview == true) }
+                        let status = MyPlaceStatus.of(p)
+                        Button {
+                            if status.opensOutcome { notAccepted = p } else { dismiss(); model.openPlace(p) }
+                        } label: { row(p.name, p.category, status: status) }
                             .accessibilityIdentifier("contribution.\(p.name)")
+                    }
+                }
+                if !model.placeOutbox.items.isEmpty {
+                    Section {
+                        ForEach(model.placeOutbox.items) { d in
+                            Button {
+                                model.openAddPlace(AddPlaceSeed(place: d.place, editingId: nil, draftId: d.id))
+                            } label: { row(d.place.name, d.place.category, status: d.status) }
+                                .accessibilityIdentifier("draft.\(d.place.name)")
+                                .swipeActions {
+                                    Button("Delete", role: .destructive) { model.placeOutbox.remove(d.id); model.reloadLocal() }
+                                }
+                        }
+                    } header: {
+                        Text("On this phone, not shared yet")
+                    } footer: {
+                        Text("Drafts stay on this phone until you share them. Queued places are sent when you're back online.")
                     }
                 }
                 Section {
                     if model.privatePlaces.isEmpty { Text("No private places").foregroundStyle(Color.textMuted) }
                     ForEach(model.privatePlaces) { p in
-                        Button { dismiss(); model.openPlace(p.summary) } label: { row(p.name, p.category, status: nil) }
+                        Button { dismiss(); model.openPlace(p.summary) } label: { row(p.name, p.category, status: .justForMe) }
                             .accessibilityIdentifier("privatePlace.\(p.name)")
                     }
                 } header: {
@@ -455,29 +485,64 @@ struct MyContributionsView: View {
             .navigationTitle("My contributions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-            .task {
-                do { places = try await model.repo.myContributions() } catch {
-                    self.error = (error as? APIError)?.isServerSideGap == true
-                        ? String(localized: "Contributions aren't available on the server yet.") : error.localizedDescription
+            .task { await load() }
+            .refreshable { await model.flushPlaces(); await load() }
+            .confirmationDialog(notAccepted.map { String(localized: ScreeningCopy.notAcceptedTitle(ScreeningReason.primary($0.screening?.reasons ?? []))) } ?? "",
+                                isPresented: Binding(get: { notAccepted != nil }, set: { if !$0 { notAccepted = nil } }),
+                                titleVisibility: .visible, presenting: notAccepted) { p in
+                if p.screening?.canAppeal == true {
+                    Button("Ask for a review") { appealFor = p }
                 }
-                loading = false
+                Button("Edit and try again") { Task { await edit(p) } }
+                Button("Discard", role: .destructive) { Task { await discard(p) } }
+                Button("Cancel", role: .cancel) {}
+            } message: { p in
+                Text(String(localized: ScreeningCopy.notAcceptedBody(ScreeningReason.primary(p.screening?.reasons ?? []))))
+            }
+            .sheet(item: $appealFor) { p in
+                AppealSheet(placeId: p.id, name: p.name, reason: ScreeningReason.primary(p.screening?.reasons ?? [])) { updated in
+                    if let updated, let i = places.firstIndex(where: { $0.id == updated.id }) { places[i] = updated.summary }
+                }
             }
         }
     }
 
-    private func row(_ name: String, _ cat: PlaceCategory, status: PlaceStatus?, held: Bool = false) -> some View {
+    private func load() async {
+        do { places = try await model.repo.myContributions() } catch {
+            self.error = (error as? APIError)?.isServerSideGap == true
+                ? String(localized: "Contributions aren't available on the server yet.") : error.localizedDescription
+        }
+        loading = false
+    }
+
+    /// "Edit and try again": the owner's PATCH (the edit is checked again).
+    private func edit(_ p: PlaceSummary) async {
+        let full = (try? await model.repo.place(id: p.id, near: nil))
+        let seed = NewPlace(name: full?.name ?? p.name, category: full?.category ?? p.category, lat: full?.lat ?? p.lat, lng: full?.lng ?? p.lng,
+                            address: full?.address ?? p.address, description: full?.description, phone: full?.phone, website: full?.website,
+                            openingHours: full?.openingHours, amenities: full?.amenities)
+        model.openAddPlace(AddPlaceSeed(place: seed, editingId: p.id, draftId: nil))
+    }
+
+    private func discard(_ p: PlaceSummary) async {
+        do {
+            try await model.repo.deleteCommunityPlace(id: p.id)
+            places.removeAll { $0.id == p.id }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func row(_ name: String, _ cat: PlaceCategory, status: MyPlaceStatus) -> some View {
         HStack(spacing: 12) {
             CategoryIcon(category: cat)
-            Text(name).font(Tokens.Font.bodyBold).foregroundStyle(Color.textPrimary)
+            Text(verbatim: name).font(Tokens.Font.bodyBold).foregroundStyle(Color.textPrimary)
             Spacer()
-            if held {
-                // Held for a moderator (restricted area nearby or sensitive words): docs/safety.md part 4.
+            if status == .beingCheckedByPerson {
+                // Held for a moderator (restricted area nearby, sensitive words, or the AI check): docs/safety.md part 4.
                 BeingCheckedBadge()
-            } else if let status {
-                Text(status.badgeTitle)
-                    .font(Tokens.Font.small).foregroundStyle(.white)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(status == .published ? Color.brand : Color(uiColor: Tokens.Palette.traffic2), in: Capsule())
+            } else {
+                MyPlaceStatusBadge(status: status)
             }
         }
     }
@@ -505,6 +570,8 @@ extension PlaceStatus {
         case .published: "Published"
         case .closed: "Closed"
         case .hidden: "Hidden"
+        case .rejected: "Not accepted"
+        case .expired: "Expired"
         }
     }
 }

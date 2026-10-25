@@ -5,8 +5,24 @@ struct ProblemDetails: Codable, Sendable {
     var title: String?
     var status: Int?
     var detail: String?
-    /// Machine-readable reason, e.g. `restricted_area` (docs/api.md "Restricted areas").
+    /// Machine-readable reason, e.g. `restricted_area` (docs/api.md "Restricted areas") or `adding_paused`.
     var code: String?
+    /// 429: seconds until the limit lifts (body `retryAfterSeconds`, else the `Retry-After` header).
+    var retryAfterSeconds: Int?
+    /// 403 `adding_paused`: when adding places is allowed again (ISO-8601; kept as text so a bad date never hides the problem).
+    var pausedUntil: String?
+
+    init(type: String? = nil, title: String? = nil, status: Int? = nil, detail: String? = nil, code: String? = nil,
+         retryAfterSeconds: Int? = nil, pausedUntil: String? = nil) {
+        self.type = type; self.title = title; self.status = status; self.detail = detail; self.code = code
+        self.retryAfterSeconds = retryAfterSeconds; self.pausedUntil = pausedUntil
+    }
+
+    /// Reads `Retry-After` as delta-seconds (the API never sends an HTTP date).
+    static func retryAfter(header: String?) -> Int? {
+        guard let h = header?.trimmingCharacters(in: .whitespaces), let s = Int(h), s >= 0 else { return nil }
+        return s
+    }
 }
 
 enum APIError: Error, LocalizedError, Sendable {
@@ -20,6 +36,8 @@ enum APIError: Error, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .transport(let e): e.localizedDescription
+        case .http(403, let p) where p?.code == "adding_paused":
+            String(localized: "Adding places is paused for now. It lifts by itself.")
         // 403 on a contribution: a moderator suspended this account (docs/api.md "Reporting and moderation").
         case .http(403, _): String(localized: "Your account can't post right now: it was suspended for breaking the community rules.")
         case .http(let status, let p): p?.detail ?? p?.title ?? String(localized: "Something went wrong on the server (\(status)).")
@@ -60,6 +78,9 @@ enum JSON {
         }
         return d
     }
+
+    /// ISO-8601 UTC text, as the API sends dates.
+    static func makeISO(_ d: Date) -> String { d.formatted(Date.ISO8601FormatStyle()) }
 
     static func makeEncoder() -> JSONEncoder {
         let e = JSONEncoder()
@@ -238,7 +259,12 @@ actor APIClient {
         guard let http = response as? HTTPURLResponse else { throw APIError.transport(URLError(.badServerResponse)) }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 409, !data.isEmpty { throw APIError.conflict(data) }
-            let problem = try? decoder.decode(ProblemDetails.self, from: data)
+            var problem = try? decoder.decode(ProblemDetails.self, from: data)
+            if http.statusCode == 429, problem?.retryAfterSeconds == nil,
+               let s = ProblemDetails.retryAfter(header: http.value(forHTTPHeaderField: "Retry-After")) {
+                if problem == nil { problem = ProblemDetails(status: 429) }
+                problem?.retryAfterSeconds = s
+            }
             throw APIError.http(status: http.statusCode, problem: problem)
         }
         return data
