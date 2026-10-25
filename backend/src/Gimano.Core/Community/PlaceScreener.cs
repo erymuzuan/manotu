@@ -74,6 +74,16 @@ public sealed class HaikuPlaceScreener(GimanoDbContext db, IOptions<ScreeningOpt
             return ScreeningResult.Off;
         }
 
+        var (result, inputTokens, outputTokens) = await AskAsync(Client(o.ApiKey!), input, ct);
+        if (inputTokens + outputTokens > 0) await RecordAsync(week, inputTokens, outputTokens, CancellationToken.None);
+        if (result.Verdict is null) logger.LogWarning("Place screening returned no usable answer");
+        return result;
+    }
+
+    /// <summary>One call to Haiku 5.5: the answer and the tokens it cost (0 when the call itself failed). No logging of content.</summary>
+    internal static async Task<(ScreeningResult Result, long InputTokens, long OutputTokens)> AskAsync(AnthropicClient client, ScreeningInput input,
+        CancellationToken ct)
+    {
         var user = JsonSerializer.Serialize(new
         {
             submission = new
@@ -93,18 +103,12 @@ public sealed class HaikuPlaceScreener(GimanoDbContext db, IOptions<ScreeningOpt
         };
 
         Message reply;
-        try { reply = await Client(o.ApiKey!).Messages.Create(parameters, ct); }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning("Place screening call failed: {Type}", ex.GetType().Name);
-            return ScreeningResult.Failed;
-        }
+        try { reply = await client.Messages.Create(parameters, ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return (ScreeningResult.Failed, 0, 0); }
 
-        var input_ = reply.Usage.InputTokens + (reply.Usage.CacheReadInputTokens ?? 0) + (reply.Usage.CacheCreationInputTokens ?? 0);
-        await RecordAsync(week, input_, reply.Usage.OutputTokens, CancellationToken.None);
-
-        var stop = reply.StopReason?.Raw();
-        if (stop is not "end_turn") { logger.LogWarning("Place screening stopped early: {Stop}", stop); return ScreeningResult.Failed; }
+        var inputTokens = reply.Usage.InputTokens + (reply.Usage.CacheReadInputTokens ?? 0) + (reply.Usage.CacheCreationInputTokens ?? 0);
+        var outputTokens = reply.Usage.OutputTokens;
+        if (reply.StopReason?.Raw() is not "end_turn") return (ScreeningResult.Failed, inputTokens, outputTokens);
         var text = string.Concat(reply.Content.Select(b => b.TryPickText(out var t) ? t.Text : ""));
         try
         {
@@ -112,13 +116,12 @@ public sealed class HaikuPlaceScreener(GimanoDbContext db, IOptions<ScreeningOpt
             var root = doc.RootElement;
             var reasons = root.TryGetProperty("reasons", out var r) && r.ValueKind == JsonValueKind.Array
                 ? r.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToList() : [];
-            return new ScreeningResult(PlaceScreening.Normalize(root.GetProperty("decision").GetString(),
-                root.TryGetProperty("confidence", out var c) ? c.GetString() : null, reasons), false);
+            return (new ScreeningResult(PlaceScreening.Normalize(root.GetProperty("decision").GetString(),
+                root.TryGetProperty("confidence", out var c) ? c.GetString() : null, reasons), false), inputTokens, outputTokens);
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
         {
-            logger.LogWarning("Place screening reply was not the expected JSON");
-            return ScreeningResult.Failed;
+            return (ScreeningResult.Failed, inputTokens, outputTokens);
         }
     }
 
@@ -137,7 +140,7 @@ public sealed class HaikuPlaceScreener(GimanoDbContext db, IOptions<ScreeningOpt
             """, ct);
     }
 
-    private static AnthropicClient Client(string key)
+    internal static AnthropicClient Client(string key)
     {
         lock (s_lock) return s_client ??= new AnthropicClient { ApiKey = key, Timeout = TimeSpan.FromSeconds(30) };
     }
