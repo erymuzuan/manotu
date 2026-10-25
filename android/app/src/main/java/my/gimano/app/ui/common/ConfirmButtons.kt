@@ -123,7 +123,7 @@ private fun FitLabel(label: String, color: Color) {
  * (no answer). Tapping it dismisses early (also no answer).
  */
 @Composable
-fun CountdownRing(key: Any, totalMs: Long = Countdown.CONFIRM_MS, onTimeout: () -> Unit, modifier: Modifier = Modifier, size: Dp = 48.dp, onDark: Boolean = false) {
+fun CountdownRing(key: Any, totalMs: Long = Countdown.CONFIRM_MS, onTimeout: () -> Unit, modifier: Modifier = Modifier, size: Dp = 48.dp, onDark: Boolean = false, tappable: Boolean = true) {
     val c = Gimano.colors
     val countdown = remember(key) { Countdown(totalMs, SystemClock.uptimeMillis()) }
     var now by remember(key) { mutableLongStateOf(SystemClock.uptimeMillis()) }
@@ -137,7 +137,8 @@ fun CountdownRing(key: Any, totalMs: Long = Countdown.CONFIRM_MS, onTimeout: () 
     val track = if (onDark) Color.White.copy(alpha = 0.35f) else c.brandMist
     val arcColor = if (onDark) Color.White else c.brand
     Box(
-        modifier.size(size).clip(CircleShape).clickable(role = Role.Button) { done() }.semantics { contentDescription = label },
+        modifier.size(size).clip(CircleShape)
+            .then(if (tappable) Modifier.clickable(role = Role.Button) { done() }.semantics { contentDescription = label } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(size * 0.84f)) {

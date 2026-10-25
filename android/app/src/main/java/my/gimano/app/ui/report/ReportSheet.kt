@@ -38,10 +38,12 @@ fun ReportSheet(
     onSubmit: (type: String, subtype: String?, comment: String?) -> Unit,
     /** Complaints v1 "Masalah jalan" group (during navigation, when the server has /issues). */
     onRoadProblem: ((type: String, durationHint: String?) -> Unit)? = null,
+    /** Opened straight at this type's subtypes ("Details" after a quick report, docs/driving.md §6.4); back closes. */
+    initialType: String? = null,
 ) {
     val c = Gimano.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var type by remember { mutableStateOf<String?>(null) }
+    var type by remember { mutableStateOf(initialType) }
     var comment by remember { mutableStateOf("") }
     var road by remember { mutableStateOf<String?>(null) }
     ModalBottomSheet(
@@ -77,7 +79,7 @@ fun ReportSheet(
                 if (onRoadProblem != null) my.gimano.app.ui.issues.RoadProblemGroup { road = it }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
-                    IconButton(onClick = { type = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = c.text) }
+                    IconButton(onClick = { if (initialType != null) onDismiss() else type = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = c.text) }
                     ReportTile(t, 48.dp)
                     Spacer(Modifier.width(12.dp))
                     Text(stringResource(Labels.reportType(t)), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = c.text)

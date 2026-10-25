@@ -37,6 +37,7 @@ object RequestSigning {
         setOf("POST") to Regex("/photos"),
         setOf("POST") to Regex("/reports"),
         setOf("POST") to Regex("/reports/[^/]+/votes"),
+        setOf("DELETE") to Regex("/reports/[^/]+"),
         // Complaints v1 (docs/api.md "Issues": auth, signed).
         setOf("POST") to Regex("/issues"),
         setOf("POST") to Regex("/issues/[^/]+/votes"),

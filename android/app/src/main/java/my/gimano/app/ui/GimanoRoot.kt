@@ -443,6 +443,8 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
         ReportSheet(onDismiss = { vm.openReport(false) }, onSubmit = vm::submitReport,
             onRoadProblem = if (ui.issuesAvailable && screen == Screen.Navigating) vm::submitRoadProblem else null)
     }
+    // "Details" after a quick report: that type's subtypes; picking one replaces the quick report.
+    ui.quickDetails?.let { t -> ReportSheet(onDismiss = vm::closeQuickDetails, onSubmit = vm::refineQuickReport, initialType = t) }
     ui.departureSlots?.let { slots -> DepartureDialog(slots, settings.use24h, vm) }
     // Safety (docs/safety.md): the map's restricted-area sheet, "agree first", and the agreement itself on top of all.
     if (ui.restrictedSheet) my.gimano.app.ui.safety.RestrictedAreaSheet(onClose = { vm.openRestrictedSheet(false) })

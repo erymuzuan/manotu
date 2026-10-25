@@ -165,6 +165,10 @@ data class UiState(
     val drivers: List<Driver> = emptyList(),
     val selectedAlertId: String? = null,
     val reportOpen: Boolean = false,
+    /** "Hazard reported · street · just now" with Details / Undo after a hold-to-report (docs/driving.md §6.4). */
+    val quickReport: QuickReportCard? = null,
+    /** Details for the last quick report: the report sheet opened at this type's subtypes. */
+    val quickDetails: String? = null,
     val camera: CameraCommand? = null,
     val following: Boolean = true,
     val departureSlots: List<DepartureSlot>? = null,
@@ -598,10 +602,112 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                     _ui.update { s -> s.copy(alerts = s.alerts.filterNot { it.id == r.id } + r) }
                     _events.tryEmit(UiEvent.Toast(R.string.report_sent))
                 }
+                .onFailure { e -> _events.tryEmit(reportError(e)) }
+        }
+    }
+
+    // --- Hold-to-report (docs/driving.md §6.4) ---------------------------------------------------------
+
+    private var quickSession: my.gimano.app.core.report.QuickReportSession? = null
+    private var quickAt: Pair<GeoPoint, Double?>? = null
+    private var quickKey = 0L
+
+    /** Released on a fan slot: sent at once at the current position with the default subtype. */
+    fun quickReport(type: String) {
+        if (!termsOk { quickReport(type) }) return
+        val fix = nav.value.fix ?: _ui.value.myLocation
+        val p = myFreshLocation() ?: run { _events.tryEmit(UiEvent.Toast(R.string.report_needs_location)); return }
+        if (reportRefusedHere(p)) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        val session = my.gimano.app.core.report.QuickReportSession(type, now)
+        quickSession = session
+        quickAt = p to fix?.bearing?.toDouble()
+        val key = ++quickKey
+        _ui.update { it.copy(quickReport = QuickReportCard(key, type, null, now)) }
+        viewModelScope.launch {
+            runCatching { repo.createReport(CreateReportRequest(type, null, p.lat, p.lng, fix?.bearing?.toDouble(), null)) }
+                .onSuccess { r ->
+                    runCatching { my.gimano.app.data.places.ContributionLog(c.db.outbox()).report(r.id, r.type) }
+                    when (val a = session.onSent(r.id)) {
+                        is my.gimano.app.core.report.QuickReportSession.Action.Delete -> retractQuick(a.reportId, toast = false)
+                        else -> _ui.update { s ->
+                            s.copy(alerts = s.alerts.filterNot { it.id == r.id } + r,
+                                quickReport = s.quickReport?.let { q -> if (q.key == key) q.copy(street = r.street, sent = true) else q })
+                        }
+                    }
+                }
                 .onFailure { e ->
-                    _events.tryEmit(if (e is my.gimano.app.data.repo.RestrictedAreaException) UiEvent.ToastText(e.detail) else UiEvent.Toast(R.string.report_failed))
+                    session.onFailed()
+                    _ui.update { s -> s.copy(quickReport = s.quickReport?.takeUnless { it.key == key }) }
+                    _events.tryEmit(reportError(e))
                 }
         }
+    }
+
+    /** Undo on the card: deletes the report on the server, or cancels it while it is still being sent. */
+    fun undoQuickReport() {
+        val s = quickSession ?: return
+        _ui.update { it.copy(quickReport = null) }
+        when (val a = s.undo(android.os.SystemClock.elapsedRealtime())) {
+            is my.gimano.app.core.report.QuickReportSession.Action.Delete -> retractQuick(a.reportId, toast = true)
+            my.gimano.app.core.report.QuickReportSession.Action.CancelPending -> _events.tryEmit(UiEvent.Toast(R.string.qr_undone))
+            my.gimano.app.core.report.QuickReportSession.Action.None -> Unit
+        }
+    }
+
+    private fun retractQuick(id: String, toast: Boolean) {
+        viewModelScope.launch {
+            runCatching { repo.deleteReport(id) }
+                .onSuccess {
+                    _ui.update { s -> s.copy(alerts = s.alerts.filterNot { it.id == id }) }
+                    if (toast) _events.tryEmit(UiEvent.Toast(R.string.qr_undone))
+                }
+                .onFailure { GLog.w("Report", "undo failed: ${it.javaClass.simpleName}"); _events.tryEmit(UiEvent.Toast(R.string.qr_undo_failed)) }
+        }
+    }
+
+    /** The card's 5 s ran out: the report stays. */
+    fun closeQuickReport(key: Long) = _ui.update { s -> s.copy(quickReport = s.quickReport?.takeUnless { it.key == key }) }
+
+    /** "Details": the subtype sheet for that report. */
+    fun quickReportDetails() {
+        val card = _ui.value.quickReport ?: return
+        _ui.update { it.copy(quickReport = null, quickDetails = card.type) }
+    }
+
+    fun closeQuickDetails() = _ui.update { it.copy(quickDetails = null) }
+
+    /**
+     * A subtype (or comment) picked in Details: the quick report is replaced by one with that detail, at the same
+     * place (there is no PATCH: it is undone within the server's 2 min window, then sent again).
+     */
+    fun refineQuickReport(type: String, subtype: String?, comment: String?) {
+        _ui.update { it.copy(quickDetails = null) }
+        val session = quickSession ?: return
+        val (p, heading) = quickAt ?: return
+        if (subtype == null && comment.isNullOrBlank()) return
+        val old = session.reportId
+        // Still being sent: the quick one is deleted as soon as the server answers (onSent), this one replaces it.
+        if (old == null) session.undo(android.os.SystemClock.elapsedRealtime())
+        viewModelScope.launch {
+            if (old != null && session.state != my.gimano.app.core.report.QuickReportSession.State.UNDONE) {
+                if (runCatching { repo.deleteReport(old) }.isFailure) { _events.tryEmit(UiEvent.Toast(R.string.report_failed)); return@launch }
+                _ui.update { s -> s.copy(alerts = s.alerts.filterNot { it.id == old }) }
+            }
+            runCatching { repo.createReport(CreateReportRequest(type, subtype, p.lat, p.lng, heading, comment?.takeIf { it.isNotBlank() })) }
+                .onSuccess { r ->
+                    _ui.update { s -> s.copy(alerts = s.alerts.filterNot { it.id == r.id } + r) }
+                    _events.tryEmit(UiEvent.Toast(R.string.report_sent))
+                }
+                .onFailure { e -> _events.tryEmit(reportError(e)) }
+        }
+    }
+
+    /** Restricted area (the server's own words), rate limit (429), or a plain failure. */
+    private fun reportError(e: Throwable): UiEvent = when {
+        e is my.gimano.app.data.repo.RestrictedAreaException -> UiEvent.ToastText(e.detail)
+        e is retrofit2.HttpException && e.code() == 429 -> UiEvent.Toast(R.string.report_rate_limited)
+        else -> UiEvent.Toast(R.string.report_failed)
     }
 
     /** True (and says so) when [p] is inside a restricted area or within its `blockM`: the report is not sent. */
@@ -2039,3 +2145,6 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         override fun <T : ViewModel> create(modelClass: Class<T>): T = MainViewModel(c) as T
     }
 }
+
+/** The card after a quick report (§6.4); [startedMs] is SystemClock.elapsedRealtime() at release (the 5 s Undo). */
+data class QuickReportCard(val key: Long, val type: String, val street: String?, val startedMs: Long, val sent: Boolean = false)
