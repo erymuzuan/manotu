@@ -3,12 +3,13 @@ using Gimano.Core.Contracts;
 using Gimano.Core.Data;
 using Gimano.Core.Domain;
 using Gimano.Core.Messaging;
+using Gimano.Core.Places;
 using Microsoft.EntityFrameworkCore;
 
 namespace Gimano.Api.Services;
 
 /// <summary>Reviews: one per user per place, helpful toggle, flags (3 distinct → hidden), rate limits, cursor pages.</summary>
-public sealed class ReviewService(GimanoDbContext db, IEventPublisher bus, TimeProvider clock, AuthorHandles handles)
+public sealed class ReviewService(GimanoDbContext db, IEventPublisher bus, TimeProvider clock, AuthorHandles handles, RestrictedAreaService restricted)
 {
     public const int PageSize = 20;
 
@@ -43,6 +44,7 @@ public sealed class ReviewService(GimanoDbContext db, IEventPublisher bus, TimeP
         var user = Moderation.EnsureMayContribute(await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct) ?? throw new UnauthorizedAccessException("This account was deleted."));
         await CheckPlaceAsync(placeId, userId, ct);
         var text = CheckText(req.Rating, req.Text);
+        if (await restricted.LevelForPlaceAsync(placeId, ct) == RestrictedLevel.Blocked) restricted.Refuse();
         if (await db.Reviews.AnyAsync(r => r.PlaceId == placeId && r.UserId == userId, ct))
             throw new ConflictException("You already reviewed this place; edit your review instead.");
         var now = clock.GetUtcNow();
@@ -50,6 +52,7 @@ public sealed class ReviewService(GimanoDbContext db, IEventPublisher bus, TimeP
             throw new RateLimitedException($"At most {CommunityRules.ReviewsPerDay} reviews per day.");
 
         var review = new Review { PlaceId = placeId, UserId = userId, User = user, Rating = req.Rating, Text = text, CreatedAt = now };
+        if (RestrictedAreaRules.HasSensitiveTerm(text)) { review.Status = ReviewStatus.Hidden; review.HeldForReview = true; }
         db.Reviews.Add(review);
         user.Points += CommunityRules.Points.Review;
         await db.SaveChangesAsync(ct);
@@ -64,6 +67,7 @@ public sealed class ReviewService(GimanoDbContext db, IEventPublisher bus, TimeP
         var text = CheckText(req.Rating ?? review.Rating, req.Text ?? review.Text);
         if (req.Rating is { } r) review.Rating = r;
         if (req.Text is not null) review.Text = text;
+        if (req.Text is not null && RestrictedAreaRules.HasSensitiveTerm(text)) { review.Status = ReviewStatus.Hidden; review.HeldForReview = true; }
         review.EditedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
         if (req.PhotoIds is not null) await AttachPhotosAsync(review, userId, req.PhotoIds, ct);
@@ -110,7 +114,7 @@ public sealed class ReviewService(GimanoDbContext db, IEventPublisher bus, TimeP
         if (await db.ReviewFlags.FindAsync([id, userId], ct) is not null) return;
         db.ReviewFlags.Add(new ReviewFlag { ReviewId = id, UserId = userId, Reason = reason, CreatedAt = clock.GetUtcNow() });
         review.FlagCount++;
-        if (review.FlagCount >= CommunityRules.FlagsToHide) review.Status = ReviewStatus.Hidden;
+        if (review.FlagCount >= RestrictedAreaRules.FlagsToHide(reason, CommunityRules.FlagsToHide)) review.Status = ReviewStatus.Hidden;
         await db.SaveChangesAsync(ct);
         if (review.Status == ReviewStatus.Hidden) await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(review.PlaceId), ct);
     }
@@ -168,6 +172,6 @@ public sealed class ReviewService(GimanoDbContext db, IEventPublisher bus, TimeP
             r.User is null
                 ? new ReviewAuthor("Pemandu Manotu", 1, 0)
                 : new ReviewAuthor(r.User.DisplayName, r.User.Level, counts.GetValueOrDefault(r.User.Id), handles.For(r.User.Id)),
-            r.HelpfulCount, r.CreatedAt, r.EditedAt, r.Status)).ToList();
+            r.HelpfulCount, r.CreatedAt, r.EditedAt, r.Status, r.HeldForReview)).ToList();
     }
 }

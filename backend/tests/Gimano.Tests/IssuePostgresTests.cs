@@ -285,7 +285,8 @@ public sealed class PostgresIntegrationIssueTests : IAsyncLifetime
         var handles = new Gimano.Core.Community.AuthorHandles(new byte[32].Select((_, i) => (byte)i).ToArray());
         Gimano.Api.Services.CommunityService Community(GimanoDbContext db) => new(db, new Bus(),
             new Gimano.Api.Identity.AttestationService(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(), null!, db, new Clock(T0),
-                NullLogger<Gimano.Api.Identity.AttestationService>.Instance), new Clock(T0));
+                NullLogger<Gimano.Api.Identity.AttestationService>.Instance), new Clock(T0),
+                new Gimano.Api.Services.RestrictedAreaService(db, new()));
 
         // Three different users report the place → hidden; a repeat report by the same user doesn't count.
         foreach (var u in users.Skip(1).Take(3).Append(users[1]))
@@ -336,7 +337,8 @@ public sealed class PostgresIntegrationIssueTests : IAsyncLifetime
         var legacy = new VerifyPlaceRequest(null, null, null, null, null, Exists: true, CorrectLocation: true);
         Gimano.Api.Services.CommunityService Svc(GimanoDbContext db) => new(db, new Bus(),
             new Gimano.Api.Identity.AttestationService(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(), null!, db, new Clock(T0),
-                NullLogger<Gimano.Api.Identity.AttestationService>.Instance), new Clock(T0));
+                NullLogger<Gimano.Api.Identity.AttestationService>.Instance), new Clock(T0),
+                new Gimano.Api.Services.RestrictedAreaService(db, new()));
 
         await using (var db = NewDb())
             await Assert.ThrowsAsync<ValidationException>(() => Svc(db).VerifyAsync(users[0].Id, "c" + new string('a', 32), legacy, null, default));
@@ -474,5 +476,63 @@ public sealed class PostgresIntegrationIssueTests : IAsyncLifetime
             Geom = GeoMath.ToLineString([new GeoPoint(1, 101), new GeoPoint(1.0001, 101)]) });
         await db.SaveChangesAsync();
         Assert.True(await Gimano.Worker.Issues.IssueMaintenance.MapNowMatchesAsync(db, i2, default));   // the gate's way was removed from OSM
+    }
+
+    // Restricted areas (docs/api.md "Restricted areas"): the server check is authoritative.
+    [Fact]
+    public async Task Restricted_areas_refuse_inside_and_hold_near_or_sensitive_places()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var users = await SeedAsync(5);
+        // A ~110 m square centred ~550 m north of the seeded road.
+        var (cLat, cLng, h) = (Lat + 0.005, Lng, 0.0005);
+        await using (var seed = NewDb())
+        {
+            seed.RestrictedAreas.Add(new RestrictedArea { OsmId = 1, Geom = GeoMath.Factory.CreatePolygon(new NetTopologySuite.Geometries.Coordinate[]
+            {
+                new(cLng - h, cLat - h), new(cLng + h, cLat - h), new(cLng + h, cLat + h), new(cLng - h, cLat + h), new(cLng - h, cLat - h),
+            }) });
+            await seed.SaveChangesAsync();
+        }
+        Gimano.Api.Services.CommunityService Community(GimanoDbContext db) => new(db, new Bus(),
+            new Gimano.Api.Identity.AttestationService(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(), null!, db, new Clock(T0),
+                NullLogger<Gimano.Api.Identity.AttestationService>.Instance), new Clock(T0),
+                new Gimano.Api.Services.RestrictedAreaService(db, new()));
+        CreatePlaceRequest At(string name, double lat, string? description = null) =>
+            new(name, PlaceCategory.Convenience, lat, Lng, null, description, null, null, null, null);
+
+        await using (var db = NewDb())
+        {
+            await Assert.ThrowsAsync<RestrictedAreaException>(() => Community(db).CreateAsync(users[0].Id, At("Gerai Dalam", cLat), default));
+            // 50 m outside the edge: still within BlockM.
+            await Assert.ThrowsAsync<RestrictedAreaException>(() => Community(db).CreateAsync(users[0].Id, At("Gerai Pagar", cLat - h - 0.00045), default));
+        }
+        PlaceDto near, sensitive, fine;
+        await using (var db = NewDb()) near = await Community(db).CreateAsync(users[1].Id, At("Gerai Teh Pak Mat", cLat - h - 0.0018), default);   // ~200 m
+        await using (var db = NewDb()) sensitive = await Community(db).CreateAsync(users[2].Id, At("Kedai Ah Seng", Lat, "Dekat pintu belakang, pengawal jarang ada."), default);
+        await using (var db = NewDb()) fine = await Community(db).CreateAsync(users[3].Id, At("Kedai Runcit Mek Na", Lat - 0.0005), default);
+        Assert.Equal((PlaceStatus.Hidden, true), (near.Status, near.HeldForReview));
+        Assert.Equal((PlaceStatus.Hidden, true), (sensitive.Status, sensitive.HeldForReview));
+        Assert.Equal((PlaceStatus.Pending, false), (fine.Status, fine.HeldForReview));
+
+        await using (var db = NewDb())
+        {
+            var handles = new Gimano.Core.Community.AuthorHandles(new byte[32].Select((_, i) => (byte)i).ToArray());
+            var moderation = new Moderation(db, new Bus(), handles, new Clock(T0));
+            var queue = await moderation.QueueAsync(ModerationKind.Place, hidden: true, default);
+            Assert.Equal(new[] { near.Id, sensitive.Id }.Order(), queue.Where(i => i.Held).Select(i => i.Id).Order());
+            await moderation.RestoreAsync(ModerationKind.Place, near.Id, default);
+        }
+        await using (var db = NewDb())
+        {
+            var p = await db.CommunityPlaces.FirstAsync(x => x.Id == near.Id);
+            Assert.Equal((PlaceStatus.Pending, false), (p.Status, p.HeldForReview));
+            // The owner can't move it into the area afterwards.
+            await Assert.ThrowsAsync<RestrictedAreaException>(() => Community(db).PatchAsync(users[1].Id, near.Id,
+                new PatchCommunityPlaceRequest(null, null, cLat, Lng, null, null, null, null, null, null), default));
+            // One "sensitive_location" report hides a place (other reasons need three).
+            await Community(db).FlagAsync(users[4].Id, fine.Id, FlagReason.SensitiveLocation, default);
+            Assert.Equal(PlaceStatus.Hidden, (await db.CommunityPlaces.FirstAsync(x => x.Id == fine.Id)).Status);
+        }
     }
 }

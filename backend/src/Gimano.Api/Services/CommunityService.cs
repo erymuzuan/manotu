@@ -21,7 +21,8 @@ public sealed class DuplicatePlaceException(PlaceSummary existing) : Exception($
 }
 
 /// <summary>Community places: add (always public), owner edit/delete, verification votes, suggested edits.</summary>
-public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gimano.Api.Identity.AttestationService attestation, TimeProvider clock)
+public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gimano.Api.Identity.AttestationService attestation, TimeProvider clock,
+    RestrictedAreaService restricted)
 {
     private static readonly TextFilter Filter = TextFilter.Default;
 
@@ -32,6 +33,8 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         CheckOptional(req.Description, req.Phone, req.Website, req.OpeningHours, req.Address);
         var at = new GeoPoint(req.Lat, req.Lng);
         await CheckLocationAsync(at, ct);
+        // Near a restricted area, or security details in the text: a maintainer decides before anyone sees it.
+        var held = await restricted.EnsureAllowedAsync(at, ct) == RestrictedLevel.Near || RestrictedAreaRules.HasSensitiveTerm(name, req.Description);
 
         var now = clock.GetUtcNow();
         if (user.SuspendedUntil > now)
@@ -54,8 +57,9 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
             RequiredConfirmations = Reputation.RequiredConfirmations(user.Tier),
             Rural = await IsRuralAsync(at, ct),
         };
+        if (held) { place.Status = PlaceStatus.Hidden; place.HeldForReview = true; }
         // Emas contributors publish immediately; 10 % are also sent for local audit.
-        if (user.Tier == Tier.Emas)
+        else if (user.Tier == Tier.Emas)
         {
             place.Status = PlaceStatus.Published;
             place.AuditOpen = Reputation.PickForAudit(Random.Shared.NextDouble);
@@ -74,11 +78,13 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         var place = await OwnedAsync(userId, id, ct);
         if (req.Name is not null) place.Name = CheckName(req.Name);
         CheckOptional(req.Description, req.Phone, req.Website, req.OpeningHours, req.Address);
+        var held = RestrictedAreaRules.HasSensitiveTerm(req.Name, req.Description);
         if (req.Category is { } c && c != PlaceCategory.Area) place.Category = c;
         if (req.Lat is not null || req.Lng is not null)
         {
             var at = new GeoPoint(req.Lat ?? place.Location.Y, req.Lng ?? place.Location.X);
             await CheckLocationAsync(at, ct);
+            held |= await restricted.EnsureAllowedAsync(at, ct) == RestrictedLevel.Near;
             if (await FindDuplicateAsync(place.Name, at, place.Id, ct) is { } dup) throw new DuplicatePlaceException(dup);
             place.Location = at.ToPoint();
             place.Country = CountryResolver.Resolve(at.Lat, at.Lng);
@@ -89,6 +95,7 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         if (req.Website is not null) place.Website = req.Website.Trim();
         if (req.OpeningHours is not null) place.OpeningHours = req.OpeningHours.Trim();
         if (req.Amenities is not null) place.Amenities = req.Amenities.Select(a => a.Trim()).Where(a => a.Length is > 0 and <= 40).Distinct().Take(30).ToList();
+        if (held && place.Status is PlaceStatus.Pending or PlaceStatus.Published) { place.Status = PlaceStatus.Hidden; place.HeldForReview = true; }
         place.UpdatedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
         await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(place.Id), ct);
@@ -198,7 +205,7 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         if (await db.PlaceFlags.FindAsync([id, userId], ct) is not null) return;
         db.PlaceFlags.Add(new PlaceFlag { PlaceId = id, UserId = userId, Reason = reason, CreatedAt = clock.GetUtcNow() });
         place.FlagCount++;
-        var hidden = place.FlagCount >= CommunityRules.FlagsToHide && place.Status is PlaceStatus.Pending or PlaceStatus.Published;
+        var hidden = place.FlagCount >= RestrictedAreaRules.FlagsToHide(reason, CommunityRules.FlagsToHide) && place.Status is PlaceStatus.Pending or PlaceStatus.Published;
         if (hidden) { place.Status = PlaceStatus.Hidden; place.UpdatedAt = clock.GetUtcNow(); }
         await db.SaveChangesAsync(ct);
         if (hidden) await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(id), ct);
@@ -252,6 +259,7 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         CheckOptional(req.Description, req.Phone, req.Website, req.OpeningHours, req.Address);
         if (Filter.Check(req.Comment, rejectLinks: false) != TextVerdict.Ok) throw new ValidationException("comment", "Please keep it friendly.");
         if (req.Lat is { } la && req.Lng is { } lo && !CommunityRules.InServiceArea(la, lo)) throw new ValidationException("lat", "Location must be in Malaysia, Singapore or Brunei.");
+        if (req.Lat is { } la2 && req.Lng is { } lo2) await restricted.EnsureAllowedAsync(new GeoPoint(la2, lo2), ct);
 
         var suggestion = new PlaceSuggestion { PlaceId = id, UserId = userId, Changes = req, CreatedAt = clock.GetUtcNow() };
         db.PlaceSuggestions.Add(suggestion);
@@ -274,6 +282,7 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         return rows.Select(p => PlaceService.ToSummary(p, null, null, agg.GetValueOrDefault(p.Id)) with
         {
             Status = p.Status,
+            HeldForReview = p.HeldForReview,
             ConfirmationsWeighted = p.Status == PlaceStatus.Pending || p.AuditOpen ? Math.Round(p.WeightedYes, 2) : null,
             Required = p.Status == PlaceStatus.Pending || p.AuditOpen ? RequiredFor(p) : null,
         }).ToList();

@@ -438,6 +438,10 @@ namespace Gimano.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("flag_count");
 
+                    b.Property<bool>("HeldForReview")
+                        .HasColumnType("boolean")
+                        .HasColumnName("held_for_review");
+
                     b.Property<Point>("Location")
                         .IsRequired()
                         .HasColumnType("geography (point, 4326)")
@@ -1897,6 +1901,43 @@ namespace Gimano.Core.Data.Migrations
                     b.ToTable("report_votes", (string)null);
                 });
 
+            modelBuilder.Entity("Gimano.Core.Domain.RestrictedArea", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Curated")
+                        .HasColumnType("boolean")
+                        .HasColumnName("curated");
+
+                    b.Property<Polygon>("Geom")
+                        .IsRequired()
+                        .HasColumnType("geography (polygon, 4326)")
+                        .HasColumnName("geom");
+
+                    b.Property<long?>("OsmId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("osm_id");
+
+                    b.Property<bool>("Public")
+                        .HasColumnType("boolean")
+                        .HasColumnName("public");
+
+                    b.HasKey("Id")
+                        .HasName("pk_restricted_areas");
+
+                    b.HasIndex("Geom")
+                        .HasDatabaseName("ix_restricted_areas_geom");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Geom"), "gist");
+
+                    b.ToTable("restricted_areas", (string)null);
+                });
+
             modelBuilder.Entity("Gimano.Core.Domain.Review", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1915,6 +1956,10 @@ namespace Gimano.Core.Data.Migrations
                     b.Property<int>("FlagCount")
                         .HasColumnType("integer")
                         .HasColumnName("flag_count");
+
+                    b.Property<bool>("HeldForReview")
+                        .HasColumnType("boolean")
+                        .HasColumnName("held_for_review");
 
                     b.Property<int>("HelpfulCount")
                         .HasColumnType("integer")

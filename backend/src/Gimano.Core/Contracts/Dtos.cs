@@ -33,7 +33,7 @@ public sealed record PlaceSummary(
     string Id, string Name, PlaceCategory Category, string Address, double Lat, double Lng, double? DistanceM, string? Brand,
     PlaceSource Source = PlaceSource.Osm, PlaceStatus? Status = null, double? Rating = null, int ReviewCount = 0, string? ThumbnailUrl = null,
     double? ConfirmationsWeighted = null, double? Required = null, ChainGroup? ChainGroup = null, bool? OpenNow = null,
-    double? AnchorDistanceM = null, PlaceBadge? Badge = null);
+    double? AnchorDistanceM = null, PlaceBadge? Badge = null, bool HeldForReview = false);
 
 /// <summary>
 /// A place's open complaint, for the card/list badge: "Dilaporkan tutup · sahkan?" (suspected place_closed_perm),
@@ -50,7 +50,7 @@ public sealed record PlaceDto(
     IReadOnlyList<string> Amenities, IReadOnlyDictionary<string, string> Tags, string? OsmType, long? OsmId,
     PlaceSource Source = PlaceSource.Osm, PlaceStatus? Status = null, double? Rating = null, int ReviewCount = 0, string? ThumbnailUrl = null,
     string? Description = null, AddedBy? AddedBy = null, int VerifiedCount = 0, IReadOnlyList<PhotoDto>? Photos = null,
-    PlaceBadge? Badge = null, NavigationPoint? NavigationPoint = null);
+    PlaceBadge? Badge = null, NavigationPoint? NavigationPoint = null, bool HeldForReview = false);
 
 /// <summary>A confirmed place_entrance_wrong: route here instead of the display pin.</summary>
 public sealed record NavigationPoint(double Lat, double Lng, Guid IssueId);
@@ -89,7 +89,7 @@ public sealed record ReviewAuthor(string DisplayName, int Level, int ReviewCount
 
 public sealed record ReviewDto(
     Guid Id, string PlaceId, int Rating, string? Text, IReadOnlyList<PhotoDto> Photos, ReviewAuthor Author,
-    int HelpfulCount, DateTimeOffset CreatedAt, DateTimeOffset? EditedAt, ReviewStatus Status);
+    int HelpfulCount, DateTimeOffset CreatedAt, DateTimeOffset? EditedAt, ReviewStatus Status, bool HeldForReview = false);
 
 public sealed record ReviewsPage(IReadOnlyList<ReviewDto> Reviews, string? Next);
 

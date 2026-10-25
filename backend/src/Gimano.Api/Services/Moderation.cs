@@ -17,7 +17,7 @@ public sealed record ModerationFlag(FlagReason Reason, DateTimeOffset? At);
 /// </summary>
 public sealed record ModerationItem(ModerationKind Kind, string Id, string? PlaceId, string Status, int FlagCount,
     IReadOnlyList<ModerationFlag> Flags, string? Text, string? MediaUrl, string? AuthorName, string? AuthorRef,
-    bool AuthorBanned, DateTimeOffset CreatedAt);
+    bool AuthorBanned, DateTimeOffset CreatedAt, bool Held = false);
 
 /// <summary>
 /// Moderation of user content (Apple 1.2 / Play UGC; docs/back-office.md "Moderation"): flagged reviews, photos and
@@ -44,7 +44,7 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
             {
                 var flags = await db.ReviewFlags.AsNoTracking().Where(f => f.ReviewId == r.Id).Select(f => new ModerationFlag(f.Reason, f.CreatedAt)).ToListAsync(ct);
                 items.Add(new ModerationItem(ModerationKind.Review, r.Id.ToString(), r.PlaceId, GimanoJson.ToWire(r.Status), r.FlagCount, flags, r.Text, null,
-                    r.User?.DisplayName, handles.For(r.UserId), r.User?.BannedAt is not null, r.CreatedAt));
+                    r.User?.DisplayName, handles.For(r.UserId), r.User?.BannedAt is not null, r.CreatedAt, r.HeldForReview));
             }
         }
         if (kind is null or ModerationKind.Photo)
@@ -59,28 +59,30 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
         }
         if (kind is null or ModerationKind.Place)
         {
-            var q = db.CommunityPlaces.AsNoTracking().Include(p => p.Owner).Where(p => p.FlagCount > 0
-                && (hidden ? p.Status == PlaceStatus.Hidden : p.Status == PlaceStatus.Pending || p.Status == PlaceStatus.Published));
+            // Held places (near a restricted area, sensitive words) wait in the hidden queue without any flag.
+            var q = db.CommunityPlaces.AsNoTracking().Include(p => p.Owner).Where(p => hidden
+                ? p.Status == PlaceStatus.Hidden && (p.FlagCount > 0 || p.HeldForReview)
+                : p.FlagCount > 0 && (p.Status == PlaceStatus.Pending || p.Status == PlaceStatus.Published));
             foreach (var p in await q.OrderByDescending(p => p.FlagCount).ThenByDescending(p => p.CreatedAt).Take(200).ToListAsync(ct))
             {
                 var flags = await db.PlaceFlags.AsNoTracking().Where(f => f.PlaceId == p.Id).Select(f => new ModerationFlag(f.Reason, f.CreatedAt)).ToListAsync(ct);
                 items.Add(new ModerationItem(ModerationKind.Place, p.Id, p.Id, GimanoJson.ToWire(p.Status), p.FlagCount, flags,
                     string.Join(" · ", new[] { p.Name, p.Description, p.Website }.Where(x => !string.IsNullOrWhiteSpace(x))), null,
-                    p.Owner?.DisplayName, handles.For(p.OwnerId), p.Owner?.BannedAt is not null, p.CreatedAt));
+                    p.Owner?.DisplayName, handles.For(p.OwnerId), p.Owner?.BannedAt is not null, p.CreatedAt, p.HeldForReview));
             }
         }
-        return items.OrderByDescending(i => i.FlagCount).ThenByDescending(i => i.CreatedAt).ToList();
+        return items.OrderByDescending(i => i.Held).ThenByDescending(i => i.FlagCount).ThenByDescending(i => i.CreatedAt).ToList();
     }
 
     /// <summary>Hides an item (review hidden, photo rejected, place hidden).</summary>
     public async Task HideAsync(ModerationKind kind, string id, CancellationToken ct)
     {
-        string? placeId = null;
+        string? placeId = null, rejectedHeld = null;
         switch (kind)
         {
             case ModerationKind.Review:
                 var r = await db.Reviews.FirstOrDefaultAsync(x => x.Id == ParseGuid(id), ct) ?? throw new NotFoundException("Review not found.");
-                r.Status = ReviewStatus.Hidden; placeId = r.PlaceId;
+                r.Status = ReviewStatus.Hidden; r.HeldForReview = false; placeId = r.PlaceId;
                 break;
             case ModerationKind.Photo:
                 var p = await db.Photos.FirstOrDefaultAsync(x => x.Id == ParseGuid(id), ct) ?? throw new NotFoundException("Photo not found.");
@@ -88,11 +90,14 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
                 break;
             case ModerationKind.Place:
                 var c = await db.CommunityPlaces.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException("Place not found.");
-                c.Status = PlaceStatus.Hidden; c.UpdatedAt = clock.GetUtcNow(); placeId = c.Id;
+                // A held place the maintainer refuses: the owner gets the usual "not published" Inbox note.
+                if (c.HeldForReview) rejectedHeld = c.Id;
+                c.Status = PlaceStatus.Hidden; c.HeldForReview = false; c.UpdatedAt = clock.GetUtcNow(); placeId = c.Id;
                 break;
         }
         await db.SaveChangesAsync(ct);
         if (placeId is not null) await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(placeId), ct);
+        if (rejectedHeld is not null) await bus.PublishAsync(RoutingKeys.PlaceVerified, new PlaceVerifiedEvent(rejectedHeld, PlaceStatus.Hidden), ct);
     }
 
     /// <summary>Restores an item a moderator found fine (also "dismiss": its flags are cleared, so it leaves the queue).</summary>
@@ -105,7 +110,7 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
             {
                 var gid = ParseGuid(id);
                 var r = await db.Reviews.FirstOrDefaultAsync(x => x.Id == gid, ct) ?? throw new NotFoundException("Review not found.");
-                r.Status = ReviewStatus.Published; r.FlagCount = 0; placeId = r.PlaceId;
+                r.Status = ReviewStatus.Published; r.FlagCount = 0; r.HeldForReview = false; placeId = r.PlaceId;
                 await db.ReviewFlags.Where(f => f.ReviewId == gid).ExecuteDeleteAsync(ct);
                 break;
             }
@@ -123,7 +128,7 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
                 var c = await db.CommunityPlaces.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException("Place not found.");
                 // Back to what it was before the flags: published once verified, otherwise still waiting for verification.
                 if (c.Status == PlaceStatus.Hidden) c.Status = c.ResolvedAt is null ? PlaceStatus.Pending : PlaceStatus.Published;
-                c.FlagCount = 0; c.UpdatedAt = clock.GetUtcNow(); placeId = c.Id;
+                c.FlagCount = 0; c.HeldForReview = false; c.UpdatedAt = clock.GetUtcNow(); placeId = c.Id;
                 await db.PlaceFlags.Where(f => f.PlaceId == id).ExecuteDeleteAsync(ct);
                 break;
             }
