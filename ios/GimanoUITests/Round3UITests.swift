@@ -99,6 +99,11 @@ final class Round3UITests: XCTestCase {
         // (trigram similarity >= 0.6 within 100 m), so use an unrelated random name.
         let name = "Warung " + String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(10))
         addPlace(name: name, category: "convenience", visibility: "visibilityPublic")
+        // A4 "It's on the map" (the AI check passed): Done opens the place card.
+        if app.buttons["resultDone"].waitForExistence(timeout: 15) {
+            shot("m-result-live")
+            app.buttons["resultDone"].tap()
+        }
         wait(app.descendants(matching: .any)["badgeCommunity"], 30)
         XCTAssertTrue(app.descendants(matching: .any)["badgeUnverified"].exists)
         sleep(1)

@@ -207,7 +207,7 @@ struct RootView: View {
             Text("For safety, drivers can send feedback only when stopped.")
         }
         .fullScreenCover(item: Binding(get: { model.addPlaceStart.map(IdentifiedPoint.init) }, set: { model.addPlaceStart = $0?.point })) { p in
-            AddPlaceFlow(start: p.point)
+            AddPlaceFlow(start: p.point, seed: model.addPlaceSeed)
         }
         // Long-press on the home map → the pin's actions directly.
         .onChange(of: model.longPressPoint) { _, p in

@@ -132,6 +132,7 @@ actor DemoRepository: GimanoRepository {
     }
 
     func place(id: String, near: LatLng?) async throws -> Place {
+        settleChecks()
         if var c = community.first(where: { $0.id == id }) {
             c.distanceM = near.map { Geo.distance($0, LatLng(lat: c.lat, lng: c.lng)) }
             c.photos = publishedPhotos(id)
@@ -169,30 +170,124 @@ actor DemoRepository: GimanoRepository {
         }
     }
 
+    // Server rules mirrored for the demo (docs/api.md "AI check"): pause → limit → duplicate → the check.
+    private var publicCreates: [Date] = []
+    private var rejections: [Date] = []
+    private var pausedUntil: Date?
+    /// `checking` places and when the demo check "finishes" (B6 → Inbox place_live).
+    private var checkingUntil: [String: Date] = [:]
+    private var screeningInbox: [InboxItem] = []
+    /// How long a `#slow` demo check takes.
+    static let demoSlowCheck: TimeInterval = 20
+
     func createPlace(_ new: NewPlace) async throws -> Place {
         await pause()
+        let now = Date()
         let name = new.name.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, name.count <= 80, !name.lowercased().contains("http") else {
             throw APIError.http(status: 400, problem: ProblemDetails(title: "Invalid name"))
         }
+        let text = (name + " " + (new.description ?? "")).lowercased()
+        // 403 adding_paused (3 not accepted in 24 h, or `#paused`).
+        if text.contains("#paused") { pausedUntil = now.addingTimeInterval(86400) }
+        if let until = pausedUntil, until > now {
+            throw APIError.http(status: 403, problem: ProblemDetails(title: "Adding paused", status: 403, detail: "Adding places is paused.",
+                                                                     code: "adding_paused", pausedUntil: JSON.makeISO(until)))
+        }
+        // 429: 3 public places an hour (or `#limit`).
+        publicCreates.removeAll { now.timeIntervalSince($0) > 3600 }
+        if text.contains("#limit") {
+            throw APIError.http(status: 429, problem: ProblemDetails(title: "Too many requests", status: 429, retryAfterSeconds: 2400))
+        }
+        if publicCreates.count >= 3, let oldest = publicCreates.min() {
+            let wait = Int(max(1, 3600 - now.timeIntervalSince(oldest)).rounded(.up))
+            throw APIError.http(status: 429, problem: ProblemDetails(title: "Too many requests", status: 429, retryAfterSeconds: wait))
+        }
         let here = LatLng(lat: new.lat, lng: new.lng)
-        // Duplicate: similar name within 100 m → 409 with the existing place.
+        // Duplicate: similar name within 100 m → 409 with the existing place (as the API: `{…, existing: PlaceSummary}`),
+        // unless the user said it's different (B1 → notDuplicateOf).
         let existing = (community.map(\.summary) + DemoData.places).first {
-            Geo.distance($0.location, here) <= 100 && Self.similar($0.name, name)
+            $0.id != new.notDuplicateOf && Geo.distance($0.location, here) <= 100 && Self.similar($0.name, name)
         }
-        if let existing {
-            let full: Place = (try? await place(id: existing.id, near: nil)) ?? Place(id: existing.id, name: existing.name, category: existing.category,
-                                                                                   address: existing.address, lat: existing.lat, lng: existing.lng)
-            throw APIError.conflict(try JSON.makeEncoder().encode(full))
+        if var existing {
+            existing.distanceM = Geo.distance(existing.location, here)
+            struct Conflict: Encodable { var status = 409; var title = "Similar place nearby"; var existing: PlaceSummary }
+            throw APIError.conflict(try JSON.makeEncoder().encode(Conflict(existing: existing)))
         }
-        let p = Place(id: "demo-community-\(UUID().uuidString.prefix(8).lowercased())", name: name, category: new.category,
+        var p = Place(id: "demo-community-\(UUID().uuidString.prefix(8).lowercased())", name: name, category: new.category,
                       address: new.address ?? "", lat: new.lat, lng: new.lng, phone: new.phone, website: new.website,
                       openingHours: new.openingHours, amenities: new.amenities ?? [], tags: [:], source: .community, status: .pending,
                       reviewCount: 0, description: new.description, addedBy: PersonRef(displayName: user.displayName), verifiedCount: 0, photos: [])
+        p.confirmationsWeighted = 0
+        p.required = 3
+        apply(DemoScreening.verdict(name: name, description: new.description, emas: user.tier == .emas), to: &p, now: now)
+        publicCreates.append(now)
         community.append(p)
         myPlaceIds.insert(p.id)
         user.points = (user.points ?? 0) + 5
         return p
+    }
+
+    /// The demo check's answer applied as the server does (docs/api.md "AI check" table).
+    private func apply(_ v: DemoScreening.Verdict, to p: inout Place, now: Date) {
+        p.heldForReview = nil
+        switch v.state {
+        case .passed:
+            p.status = v.emas ? .published : .pending
+            p.screening = PlaceScreening(state: .passed, reasons: ["ok"])
+        case .held:
+            p.status = .hidden
+            p.heldForReview = true
+            p.screening = PlaceScreening(state: .held, reasons: v.reasons)
+            screeningInbox.append(InboxItem(id: "demo-held-\(p.id)-\(screeningInbox.count)", kind: .placeHeld,
+                                            title: String(localized: "A person will check \(p.name)"),
+                                            body: String(localized: "Usually within 24 hours. Only you can see it until then."),
+                                            refType: "place", refId: p.id, createdAt: now, read: nil, count: nil))
+        case .rejected:
+            p.status = .rejected
+            p.screening = PlaceScreening(state: .rejected, reasons: v.reasons, canAppeal: true)
+            rejections.removeAll { now.timeIntervalSince($0) > 86400 }
+            rejections.append(now)
+            if rejections.count >= 3 { pausedUntil = now.addingTimeInterval(86400) }
+            screeningInbox.append(InboxItem(id: "demo-rej-\(p.id)-\(screeningInbox.count)", kind: .placeNotAccepted,
+                                            title: String(localized: "\(p.name) was not accepted"),
+                                            body: String(localized: "Open My contributions to edit it or ask for a review."),
+                                            refType: "place", refId: p.id, createdAt: now, read: nil, count: nil))
+        case .checking:
+            p.status = .pending
+            p.screening = PlaceScreening(state: .checking)
+            checkingUntil[p.id] = now.addingTimeInterval(Self.demoSlowCheck)
+        case .none, .skipped:
+            p.status = .pending
+            p.screening = PlaceScreening(state: .skipped)
+        }
+    }
+
+    /// Finishes demo checks that ran past the wait (B6): live, with a place_live Inbox note.
+    private func settleChecks(now: Date = .now) {
+        for (id, until) in checkingUntil where until <= now {
+            checkingUntil[id] = nil
+            guard let i = community.firstIndex(where: { $0.id == id }), community[i].screening?.state == .checking else { continue }
+            community[i].screening = PlaceScreening(state: .passed, reasons: ["ok"])
+            screeningInbox.append(InboxItem(id: "demo-live-\(id)", kind: .placeLive, title: String(localized: "\(community[i].name) is on the map"),
+                                            body: String(localized: "The check finished. People nearby will be asked to confirm it."),
+                                            refType: "place", refId: id, createdAt: now, read: nil, count: nil))
+        }
+    }
+
+    /// Demo only: finish every `checking` place now (tests).
+    func finishChecksNow() { settleChecks(now: .distantFuture) }
+
+    func appealPlace(id: String, note: String?) async throws -> Place {
+        await pause()
+        guard myPlaceIds.contains(id), let i = community.firstIndex(where: { $0.id == id }) else { throw APIError.http(status: 403, problem: nil) }
+        guard community[i].status == .rejected, community[i].screening?.appealed != true else {
+            throw APIError.conflict(Data(#"{"status":409,"title":"Conflict","detail":"This place can't be appealed."}"#.utf8))
+        }
+        community[i].status = .hidden
+        community[i].heldForReview = true
+        community[i].screening = PlaceScreening(state: .held, reasons: community[i].screening?.reasons ?? [], canAppeal: false, appealed: true)
+        return community[i]
     }
 
     static func similar(_ a: String, _ b: String) -> Bool {
@@ -211,6 +306,10 @@ actor DemoRepository: GimanoRepository {
         community[i].openingHours = new.openingHours
         community[i].description = new.description
         community[i].amenities = new.amenities
+        // A changed place is checked again ("Edit and try again" on a rejected one).
+        if community[i].status != .published {
+            apply(DemoScreening.verdict(name: new.name, description: new.description, emas: user.tier == .emas), to: &community[i], now: .now)
+        }
         return community[i]
     }
 
@@ -244,7 +343,8 @@ actor DemoRepository: GimanoRepository {
     }
 
     func pendingNearby(cell: String) async throws -> [PlaceSummary] {
-        community.filter { $0.status == .pending && !myPlaceIds.contains($0.id) && !demoVotes.contains($0.id)
+        settleChecks()
+        return community.filter { $0.status == .pending && $0.screening?.state != .checking && !myPlaceIds.contains($0.id) && !demoVotes.contains($0.id)
             && Geohash.encode(lat: $0.lat, lng: $0.lng).prefix(5) == cell.prefix(5) }.map(\.summary)
     }
 
@@ -314,7 +414,8 @@ actor DemoRepository: GimanoRepository {
     }
 
     func myContributions() async throws -> [PlaceSummary] {
-        community.filter { myPlaceIds.contains($0.id) }.map(\.summary)
+        settleChecks()
+        return community.filter { myPlaceIds.contains($0.id) }.map(\.summary)
     }
 
     // MARK: reviews & photos (demo)
@@ -417,6 +518,7 @@ actor DemoRepository: GimanoRepository {
     private var inboxReadUpTo: Date = .distantPast
 
     func inbox(cursor: String?) async throws -> InboxPage {
+        settleChecks()
         var items: [InboxItem] = [InboxItem(id: "demo-ann-1", kind: .announcement, title: "Selamat datang ke Gimano!",
                                             body: "Laporkan trafik dan tambah tempat untuk membantu pemandu lain.",
                                             refType: "url", refId: "https://www.bukitbunga.com/gimano", createdAt: Date(timeIntervalSince1970: 1_792_000_000),
@@ -426,6 +528,7 @@ actor DemoRepository: GimanoRepository {
                                    body: "\(p.verifiedCount ?? 3) drivers confirmed it.", refType: "place", refId: p.id,
                                    createdAt: .now.addingTimeInterval(-60), read: nil, count: nil))
         }
+        items += screeningInbox
         let helpfulMine = reviewsByPlace.values.flatMap { $0 }.filter { $0.author.displayName == user.displayName }.map(\.helpfulCount).reduce(0, +)
         if helpfulMine > 0 {
             items.append(InboxItem(id: "demo-helpful", kind: .reviewHelpful, title: "\(helpfulMine) drivers found your review helpful",
@@ -904,5 +1007,40 @@ struct CannedRoutes: Sendable {
         let best = file.destinations.min { Geo.distance(destination, LatLng(lat: $0.lat, lng: $0.lng)) < Geo.distance(destination, LatLng(lat: $1.lat, lng: $1.lng)) }
         guard let best, Geo.distance(destination, LatLng(lat: best.lat, lng: best.lng)) <= destinationToleranceM else { return nil }
         return best.routes
+    }
+}
+
+/// The demo stand-in for the server's AI check. It never calls a model: a few keywords produce the outcomes the design
+/// shows, so every screen can be seen offline (Developer settings → Data: Demo).
+/// - adverts/scams/illegal/adult/gibberish → rejected (B3); "Rumah …" / "house of" → rejected private_home (B4);
+///   CCTV / guards → held security (B2); `#slow` → checking (B6, live after 20 s); `#emas` or an Emas user → published (A5);
+///   `#limit` → 429 (B5); `#paused` → 403 adding_paused (B5); a similar name within 100 m → 409 (B1); otherwise passed (A4).
+enum DemoScreening {
+    struct Verdict: Equatable {
+        var state: ScreeningState
+        var reasons: [String] = []
+        var emas = false
+    }
+
+    static func verdict(name: String, description: String?, emas: Bool) -> Verdict {
+        let text = (name + " " + (description ?? "")).lowercased()
+        let n = name.lowercased().trimmingCharacters(in: .whitespaces)
+        func has(_ words: [String]) -> Bool { words.contains { text.contains($0) } }
+        if has(["#slow"]) { return Verdict(state: .checking) }
+        if has(["pil kurus", "ubat kuat", "dadah", "ganja", "vape haram"]) { return Verdict(state: .rejected, reasons: ["illegal"]) }
+        if has(["urut batin", "escort", "adult only"]) { return Verdict(state: .rejected, reasons: ["adult"]) }
+        if has(["pelaburan", "investment", "skim cepat kaya", "double your money", "gandakan wang"]) { return Verdict(state: .rejected, reasons: ["scam"]) }
+        if has(["forex", "untung rm", "whatsapp", "join group", "promo", "iklan", "kerja kosong", "job offer"]) {
+            return Verdict(state: .rejected, reasons: ["spam"])
+        }
+        let letters = n.filter(\.isLetter)
+        if letters.count < 2 || has(["asdf", "qwerty", "zxcv"]) || (letters.count >= 4 && !letters.contains(where: { "aeiou".contains($0) })) {
+            return Verdict(state: .rejected, reasons: ["gibberish"])
+        }
+        if n.hasPrefix("rumah ") || has(["house of", "'s house", "my house", "rumah saya"]) {
+            return Verdict(state: .rejected, reasons: ["private_home"])
+        }
+        if has(["cctv", "guard", "pengawal", "pintu belakang", "back entrance"]) { return Verdict(state: .held, reasons: ["security"]) }
+        return Verdict(state: .passed, reasons: ["ok"], emas: emas || has(["#emas"]))
     }
 }

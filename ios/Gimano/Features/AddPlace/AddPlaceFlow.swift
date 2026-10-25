@@ -202,14 +202,31 @@ struct CameraPicker: UIViewControllerRepresentable {
     }
 }
 
-/// "Can't find it? Add a place": pin → details → visibility → save.
+/// Opens the flow pre-filled: an edit of the user's own place ("Edit and try again") or a draft saved on the phone.
+struct AddPlaceSeed: Hashable, Sendable {
+    var place: NewPlace
+    /// The user's community place to PATCH instead of creating a new one.
+    var editingId: String?
+    /// The phone draft this came from (removed once shared).
+    var draftId: UUID?
+}
+
+/// "Can't find it? Add a place": pin → details → visibility → save → the AI check's answer (boards A1–B6).
 struct AddPlaceFlow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let start: LatLng
 
     enum Step { case pin, details, visibility }
+    /// After "Share with everyone": the check is running, or what it answered.
+    enum Phase {
+        case checking
+        case result(Place, AddPlaceOutcome)
+        case offline
+        case limit(AddPlaceFailure)
+    }
     @State private var step: Step = .pin
+    @State private var phase: Phase?
     @State private var pinMap: MapState?
     @State private var center: LatLng
     @State private var address = ""
@@ -224,16 +241,51 @@ struct AddPlaceFlow: View {
     @State private var photos: [PickedPhoto] = []
     @State private var saving = false
     @State private var uploadProgress: Double?
+    /// B1: the 409's similar place.
     @State private var duplicate: PlaceSummary?
+    /// B1 "Yes, that's it": the existing place's suggest-edit.
+    @State private var suggestFor: PlaceSummary?
+    /// B1 "No, mine is a different place": sent with the next POST.
+    @State private var notDuplicateOf: String?
+    /// The user's own place this flow edits (seeded, or created here and then "Edit and try again").
+    @State private var editingId: String?
+    @State private var draftId: UUID?
+    /// The form is editing an existing place (seeded edit, or "Edit and try again"): titled "Edit place".
+    @State private var isEditing = false
+    /// C1 from B3/B4.
+    @State private var appealFor: Place?
+    /// A1 before the first shared place.
+    @State private var showIntro = false
     @State private var error: String?
     /// A · the pin is in a restricted area: the sheet instead of the form.
     @State private var showBlocked = false
     /// "Save just for me" from A: only the private choice is offered (it never leaves the phone).
     @State private var privateOnly = false
 
-    init(start: LatLng) {
+    init(start: LatLng, seed: AddPlaceSeed? = nil) {
         self.start = start
         _center = State(initialValue: start)
+        if let seed {
+            let p = seed.place
+            _center = State(initialValue: LatLng(lat: p.lat, lng: p.lng))
+            _name = State(initialValue: p.name)
+            _category = State(initialValue: p.category)
+            _address = State(initialValue: p.address ?? "")
+            _details = State(initialValue: p.description ?? "")
+            _phone = State(initialValue: p.phone ?? "")
+            _website = State(initialValue: p.website ?? "")
+            _amenities = State(initialValue: Set(p.amenities ?? []))
+            if let h = p.openingHours, let parsed = OpeningHours.parse(h) {
+                _hours = State(initialValue: parsed)
+                _hoursEnabled = State(initialValue: true)
+            }
+            _notDuplicateOf = State(initialValue: p.notDuplicateOf)
+            _editingId = State(initialValue: seed.editingId)
+            _isEditing = State(initialValue: seed.editingId != nil)
+            _draftId = State(initialValue: seed.draftId)
+            // A draft goes straight to "share"; an edit opens the form.
+            _step = State(initialValue: seed.draftId != nil ? .visibility : .details)
+        }
         #if DEBUG
         // `-GimanoAddPlaceStep details` (device screenshots): open at the form.
         if UserDefaults.standard.string(forKey: "GimanoAddPlaceStep") == "details" { _step = State(initialValue: .details) }
@@ -258,41 +310,77 @@ struct AddPlaceFlow: View {
     var body: some View {
         NavigationStack {
             Group {
-                switch step {
-                case .pin: pinStep
-                case .details: detailsStep
-                case .visibility: visibilityStep
+                if let phase {
+                    phaseView(phase)
+                } else {
+                    switch step {
+                    case .pin: pinStep
+                    case .details: detailsStep
+                    case .visibility: visibilityStep
+                    }
                 }
             }
-            .navigationTitle("Add a place")
+            .navigationTitle(isEditing && phase == nil ? "Edit place" : "Add a place")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(step == .pin ? "Cancel" : "Back") {
-                        switch step {
-                        case .pin: dismiss()
-                        case .details: step = .pin
-                        case .visibility: step = .details
+                    if phase == nil {
+                        Button(step == .pin ? "Cancel" : "Back") {
+                            switch step {
+                            case .pin: dismiss()
+                            case .details: step = .pin
+                            case .visibility: step = .details
+                            }
                         }
+                        .accessibilityIdentifier("addPlaceBack")
+                    } else if case .checking? = phase {
+                        // The answer also arrives in the Inbox (A3).
+                        Button("Close") { dismiss() }.accessibilityIdentifier("addPlaceClose")
                     }
-                    .accessibilityIdentifier("addPlaceBack")
                 }
             }
         }
-        .alert("Is it this one?", isPresented: Binding(get: { duplicate != nil }, set: { if !$0 { duplicate = nil } })) {
-            Button("Yes, open it") {
-                if let d = duplicate { dismiss(); model.openPlace(d) }
+        .sheet(item: $duplicate) { d in
+            DuplicatePlaceSheet(existing: d, typedName: trimmedName, distanceM: d.distanceM ?? Geo.distance(d.location, center),
+                                onSuggestEdit: {
+                                    duplicate = nil
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { suggestFor = d }
+                                }, onDifferent: {
+                                    duplicate = nil
+                                    notDuplicateOf = d.id
+                                    Task { await savePublic() }
+                                })
+                .presentationDetents([.medium, .large])
+                .presentationCornerRadius(Tokens.Radius.sheetTop)
+        }
+        .sheet(item: $suggestFor) { d in
+            SuggestEditSheet(placeId: d.id, current: nil, fallback: d) {
+                // The suggestion went to the place that's already there: nothing new to add.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { dismiss() }
             }
-            Button("No, go back", role: .cancel) { step = .details }
-        } message: {
-            Text("A place called \(duplicate?.name ?? "") is already here.")
+        }
+        .sheet(item: $appealFor) { p in
+            AppealSheet(placeId: p.id, name: p.name, reason: ScreeningReason.primary(p.screening?.reasons ?? [])) { _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { dismiss() }
+            }
+        }
+        .sheet(isPresented: $showIntro) {
+            AddPlaceIntroSheet {
+                UserDefaults.standard.set(true, forKey: AddPlaceIntro.seenKey)
+                showIntro = false
+                Task { await savePublic() }
+            }
+            .presentationDetents([.large])
+            .presentationCornerRadius(Tokens.Radius.sheetTop)
         }
         .sheet(isPresented: $showBlocked) {
             RestrictedBlockedSheet(onMove: {
                 showBlocked = false
+                phase = nil
                 step = .pin
             }, onSavePrivate: {
                 showBlocked = false
+                phase = nil
                 privateOnly = true
                 step = .details
             }, onCancel: {
@@ -351,12 +439,12 @@ struct AddPlaceFlow: View {
             if pinMap == nil {
                 let m = MapState(styleURL: model.config.styleURL)
                 m.puck = model.position
-                m.camera = .center(start, zoom: 17)
+                m.camera = .center(center, zoom: 17)
                 m.cameraRevision = 1
                 m.restrictedAreas = model.restricted.rings
                 pinMap = m
                 // Long-press "Add a place" inside an area goes straight to A.
-                if model.restricted.proximity(of: start) == .blocked { showBlocked = true }
+                if model.restricted.proximity(of: center) == .blocked { showBlocked = true }
             }
         }
         .task(id: pinMap?.visibleBBox) {
@@ -416,7 +504,8 @@ struct AddPlaceFlow: View {
                 Group {
                     TextField("Phone (optional)", text: $phone).keyboardType(.phonePad)
                     TextField("Website (optional)", text: $website).keyboardType(.URL).textInputAutocapitalization(.never)
-                    TextField("Description (optional)", text: $details, axis: .vertical).lineLimit(2...5)
+                    TextField("What should drivers know? (optional)", text: $details, axis: .vertical).lineLimit(2...5)
+                        .accessibilityIdentifier("placeDescription")
                 }
                 .padding(14)
                 .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: Tokens.Radius.md, style: .continuous))
@@ -447,19 +536,19 @@ struct AddPlaceFlow: View {
             if !privateOnly {
                 if willBeReviewed {
                     visibilityCard(icon: .map, title: "Send for review", subtitle: "A moderator will check this place before others can see it.",
-                                   id: "visibilityPublic") { Task { await savePublic() } }
+                                   id: "visibilityPublic") { sharePublic() }
                 } else {
                     visibilityCard(icon: .map, title: "Share with everyone", subtitle: "Other drivers will help verify it.",
-                                   id: "visibilityPublic") { Task { await savePublic() } }
+                                   id: "visibilityPublic") { sharePublic() }
+                    // A2 hint line.
+                    Text("Shared places get a quick automatic check, then people nearby confirm them.")
+                        .font(Tokens.Font.caption).foregroundStyle(Color.textMuted)
+                        .accessibilityIdentifier("addPlaceCheckHint")
                 }
             }
-            if saving {
-                if let uploadProgress {
-                    ProgressView(value: uploadProgress) { Text("Uploading photos…").font(Tokens.Font.caption) }
-                        .accessibilityIdentifier("uploadProgress")
-                } else {
-                    ProgressView()
-                }
+            if saving, let uploadProgress {
+                ProgressView(value: uploadProgress) { Text("Uploading photos…").font(Tokens.Font.caption) }
+                    .accessibilityIdentifier("uploadProgress")
             }
             if let error { Text(error).foregroundStyle(Color.speeding).font(Tokens.Font.caption).accessibilityIdentifier("addPlaceError") }
             Spacer()
@@ -489,10 +578,63 @@ struct AddPlaceFlow: View {
         .accessibilityIdentifier(id)
     }
 
+    // MARK: 4. after "Share with everyone"
+
+    @ViewBuilder private func phaseView(_ phase: Phase) -> some View {
+        switch phase {
+        case .checking:
+            AddPlaceCheckingView(name: trimmedName)
+        case .result(let place, let outcome):
+            AddPlaceResultView(place: place, outcome: outcome, actions: resultActions(place, outcome),
+                               isNewContributor: model.isNewContributor)
+        case .offline:
+            AddPlaceOfflineView { dismiss() }
+        case .limit(let failure):
+            AddPlaceLimitView(failure: failure, onSaveDraft: {
+                model.placeOutbox.save(newPlace(), state: .draft, shareAfter: failure.shareAfter(), replacing: draftId)
+                model.reloadLocal()
+                dismiss()
+                model.showToast(String(localized: "Saved as a draft on this phone"))
+            }, onKeepPrivate: { Task { await savePrivate() } })
+        }
+    }
+
+    private func resultActions(_ place: Place, _ outcome: AddPlaceOutcome) -> AddPlaceResultActions {
+        AddPlaceResultActions(
+            done: {
+                dismiss()
+                switch outcome {
+                case .live, .published: model.openPlace(place.summary)
+                default: break
+                }
+            },
+            edit: {
+                editingId = place.id
+                isEditing = true
+                notDuplicateOf = nil
+                phase = nil
+                step = .details
+            },
+            appeal: { appealFor = place },
+            discard: {
+                let repo = model.repo
+                Task { try? await repo.deleteCommunityPlace(id: place.id) }
+                dismiss()
+                model.showToast(String(localized: "Discarded"))
+            },
+            keepPrivate: { Task { await savePrivate() } })
+    }
+
     // MARK: save
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
     private func opt(_ s: String) -> String? { s.trimmingCharacters(in: .whitespaces).isEmpty ? nil : s.trimmingCharacters(in: .whitespaces) }
+
+    private func newPlace(notDuplicateOf: String? = nil) -> NewPlace {
+        NewPlace(name: trimmedName, category: category, lat: center.lat, lng: center.lng, address: opt(address),
+                 description: opt(details), phone: opt(phone), website: opt(website),
+                 openingHours: hoursEnabled ? opt(hours.osm) : nil, amenities: amenities.sorted(), notDuplicateOf: notDuplicateOf)
+    }
 
     private func savePrivate() async {
         saving = true
@@ -503,6 +645,12 @@ struct AddPlaceFlow: View {
                              openingHours: hoursEnabled ? opt(hours.osm) : nil, amenities: amenities.sorted())
         do {
             let saved = try model.store.addPrivatePlace(p, webpPhotos: webps)
+            // B4 "Keep it just for me": the not-accepted copy on the server (owner-only) is removed; a draft is done.
+            if let editingId {
+                let repo = model.repo
+                Task { try? await repo.deleteCommunityPlace(id: editingId) }
+            }
+            if let draftId { model.placeOutbox.remove(draftId) }
             model.reloadLocal()
             dismiss()
             model.showToast(String(localized: "Saved on this phone only"))
@@ -512,49 +660,100 @@ struct AddPlaceFlow: View {
         }
     }
 
+    /// "Share with everyone": A1 once, then the check.
+    private func sharePublic() {
+        if editingId == nil,
+           AddPlaceIntro.shouldShow(seen: UserDefaults.standard.bool(forKey: AddPlaceIntro.seenKey),
+                                    sharedBefore: !model.ownPlaceIds.isEmpty, privateOnly: privateOnly) {
+            showIntro = true
+        } else {
+            Task { await savePublic() }
+        }
+    }
+
     private func savePublic() async {
         // The pin may have moved since: check again before anything is sent.
         if proximity == .blocked { showBlocked = true; return }
         guard await model.ensureRulesAccepted() else { return }
+        guard !saving else { return }
         saving = true
+        error = nil
         defer { saving = false }
-        let new = NewPlace(name: trimmedName, category: category, lat: center.lat, lng: center.lng, address: opt(address),
-                           description: opt(details), phone: opt(phone), website: opt(website),
-                           openingHours: hoursEnabled ? opt(hours.osm) : nil, amenities: amenities.sorted())
+        let held = willBeReviewed
+        let editing = editingId
+        let new = newPlace(notDuplicateOf: editing == nil ? notDuplicateOf : nil)
+        phase = .checking
+        let started = Date()
         do {
-            let held = willBeReviewed
-            let place = try await model.repo.createPlace(new)
+            let place: Place
+            if let editing { place = try await model.repo.updateCommunityPlace(id: editing, new) } else { place = try await model.repo.createPlace(new) }
             model.rememberOwnPlace(place.id)
-            if !photos.isEmpty, !isNear {
-                uploadProgress = 0
-                for (i, p) in photos.enumerated() {
-                    let base = Double(i) / Double(photos.count), share = 1 / Double(photos.count)
-                    do {
-                        _ = try await model.repo.uploadPhoto(p.jpeg, placeId: place.id, caption: nil) { frac in
-                            Task { @MainActor in uploadProgress = base + frac * share }
-                        }
-                    } catch let e as APIError where e.isRestrictedArea {
-                        continue   // photos refused near a restricted area: the place itself was saved
-                    }
-                }
-            }
-            if place.heldForReview == true || held {
-                // Hidden until a moderator checks it: nothing to open yet.
+            if let draftId { model.placeOutbox.remove(draftId); self.draftId = nil; model.reloadLocal() }
+            editingId = place.id
+            notDuplicateOf = nil
+            let outcome = AddPlaceOutcome.of(place)
+            if !outcome.isNotAccepted { await uploadPhotos(to: place) }
+            // A3 stays up long enough to read (the answer usually takes about 2 s).
+            let shown = Date().timeIntervalSince(started)
+            if shown < 0.8 { try? await Task.sleep(for: .seconds(0.8 - shown)) }
+            if case .unscreened(let wasHeld) = outcome {
+                // The check didn't run (off, over budget, older server): as before.
                 dismiss()
-                model.showToast(String(localized: "Checked within 24 hours. You'll get a note in your Inbox."), seconds: 4)
+                if wasHeld || held {
+                    model.showToast(String(localized: "Checked within 24 hours. You'll get a note in your Inbox."), seconds: 4)
+                } else {
+                    model.showToast(String(localized: "Thanks! Other drivers will help verify it."))
+                    model.openPlace(place.summary)
+                }
                 return
             }
-            dismiss()
-            model.showToast(String(localized: "Thanks! Other drivers will help verify it."))
-            model.openPlace(place.summary)
-        } catch APIError.conflict(let body) {
-            duplicate = DuplicatePlace.existing(in: body)
-            if duplicate == nil { error = String(localized: "This place may already exist.") }
-        } catch let e as APIError where e.isServerSideGap {
-            error = String(localized: "Sharing places isn't available on the server yet. Save it just for you for now.")
+            phase = .result(place, outcome)
         } catch {
-            self.error = error.localizedDescription
+            phase = nil
+            handle(AddPlaceFailure.classify(error), new: new)
         }
+    }
+
+    private func handle(_ failure: AddPlaceFailure, new: NewPlace) {
+        switch failure {
+        case .duplicate(let existing):
+            duplicate = existing
+        case .conflict:
+            error = String(localized: "This place may already exist.")
+        case .limit, .paused:
+            phase = .limit(failure)
+        case .offline:
+            if editingId != nil {
+                error = String(localized: "You're offline. Try again when you're back online.")
+            } else {
+                // B6: queued on the phone (device-local outbox), sent and checked when back online.
+                model.placeOutbox.save(new, state: .queued, replacing: draftId)
+                model.reloadLocal()
+                phase = .offline
+            }
+        case .suspended:
+            error = APIError.http(status: 403, problem: nil).localizedDescription
+        case .restricted:
+            showBlocked = true
+        case .unavailable:
+            error = String(localized: "Sharing places isn't available on the server yet. Save it just for you for now.")
+        case .other(let message):
+            error = message
+        }
+    }
+
+    /// Photos never block the place: one that's refused (restricted area nearby, network) is skipped.
+    private func uploadPhotos(to place: Place) async {
+        guard !photos.isEmpty, !isNear else { return }
+        uploadProgress = 0
+        defer { uploadProgress = nil }
+        for (i, p) in photos.enumerated() {
+            let base = Double(i) / Double(photos.count), share = 1 / Double(photos.count)
+            _ = try? await model.repo.uploadPhoto(p.jpeg, placeId: place.id, caption: nil) { frac in
+                Task { @MainActor in uploadProgress = base + frac * share }
+            }
+        }
+        photos = []
     }
 }
 
