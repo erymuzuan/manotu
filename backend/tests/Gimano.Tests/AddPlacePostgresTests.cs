@@ -187,9 +187,11 @@ public sealed class PostgresIntegrationAddPlaceTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
         await using var db = NewDb();
         var screener = Answer("publish");
-        var dup = await Assert.ThrowsAsync<DuplicatePlaceException>(() => Svc(db, screener).CreateAsync(_regular, Req("99 Speed Mart Seksyen 9"), ct));
+        // Close enough for the 100 m trigram rule (a looser spelling like "99 Speed Mart Seksyen 9" is left to the AI check).
+        const string name = "99 Speedmart Bandar Baru Bangi Sek 9";
+        var dup = await Assert.ThrowsAsync<DuplicatePlaceException>(() => Svc(db, screener).CreateAsync(_regular, Req(name), ct));
         Assert.Equal("n77", dup.Existing.Id);
-        var dto = await Svc(db, screener).CreateAsync(_regular, Req("99 Speed Mart Seksyen 9", notDuplicateOf: "n77"), ct);
+        var dto = await Svc(db, screener).CreateAsync(_regular, Req(name, notDuplicateOf: "n77"), ct);
         Assert.Equal(ScreeningState.Passed, dto.Screening!.State);
         Assert.Equal("99 Speedmart Bandar Baru Bangi Seksyen 9", screener.Inputs.Last().SaidDifferentFrom);
         Assert.Contains("99 Speedmart Bandar Baru Bangi Seksyen 9", screener.Inputs.Last().NearbyNames);
