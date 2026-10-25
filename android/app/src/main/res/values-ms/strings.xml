@@ -49,7 +49,8 @@
     <string name="continue_drive">Teruskan</string>
     <string name="overview">Gambaran laluan</string>
     <string name="rerouting">Mengira semula…</string>
-    <string name="arrived">Anda telah tiba</string>
+    <string name="arrived">Anda sudah tiba</string>
+    <string name="wrong_entrance">Pintu masuk salah?</string>
     <string name="done">Selesai</string>
     <string name="what_do_you_see">Apa yang anda nampak?</string>
     <string name="send">Hantar</string>
@@ -1269,4 +1270,20 @@
     <string name="flag_sensitive">Lokasi sensitif atau keselamatan</string>
     <string name="flag_sensitive_desc">Kawasan tentera atau strategik, rumah perlindungan, rumah persendirian, atau butiran seperti pengawal dan CCTV. Disembunyikan serta-merta sementara disemak.</string>
     <string name="safety_debug_reset">Set semula keselamatan (debug)</string>
+    <!-- Android Auto (docs/driving.md §5) -->
+    <string name="car_open_phone">Buka Manotu di telefon untuk bermula</string>
+    <string name="car_got_it">Faham</string>
+    <string name="car_where_to">Ke mana?</string>
+    <string name="car_search">Cari</string>
+    <string name="car_home">Rumah</string>
+    <string name="car_work">Kerja</string>
+    <string name="car_nothing_saved">Belum ada tempat disimpan atau perjalanan terkini di telefon ini</string>
+    <string name="car_go">Mula</string>
+    <string name="car_no_location">Lokasi anda belum diketahui</string>
+    <string name="car_no_route">Tiada laluan ditemui</string>
+    <string name="car_report">Lapor</string>
+    <string name="car_end">Tamat</string>
+    <string name="car_still_there">Masih ada?</string>
+    <string name="car_yes">Ya</string>
+    <string name="car_gone">Tiada</string>
 </resources>

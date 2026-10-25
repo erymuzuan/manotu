@@ -97,6 +97,8 @@ object DriveSimulator {
     fun drive(
         geometry: RouteGeometry, speedKmh: Double, startAlongM: Double = 0.0, tickMs: Long = 1_000,
         holdAtM: List<Double> = emptyList(), awaitResume: suspend (Int) -> Unit = {},
+        /** Debug replay: speed (km/h) at an along-route distance, instead of the constant [speedKmh]. */
+        speedAt: ((Double) -> Double)? = null,
     ): Flow<Fix> = flow {
         var along = startAlongM
         val mps = speedKmh / 3.6
@@ -113,7 +115,8 @@ object DriveSimulator {
             val (p, brg) = geometry.pointAt(along)
             // Slow down near the end for a natural arrival.
             val left = geometry.lengthM - along
-            val v = if (left < 150) maxOf(4.0, mps * left / 150) else mps
+            val base = speedAt?.invoke(along)?.div(3.6) ?: mps
+            val v = if (left < 150) maxOf(4.0, base * left / 150) else base
             emit(Fix(p, v.toFloat(), brg.toFloat(), 5f, System.currentTimeMillis(), simulated = true))
             delay(tickMs)
             along += v * tickMs / 1000.0

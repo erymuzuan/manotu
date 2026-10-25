@@ -176,9 +176,26 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     val builderUi by container.routeBuilder.ui.collectAsStateWithLifecycle()
     val builderTouch = my.gimano.app.ui.routes.rememberBuilderTouch(container.routeBuilder, handle)
     val building = screen is Screen.RouteBuilder && builderUi != null
+    // Steady arrow + camera modes (docs/driving.md §2–3): fed every navigation state, drawn every frame by the map.
+    val driveRenderer = remember { my.gimano.app.nav.DriveRenderer() }
+    LaunchedEffect(nav) { driveRenderer.onState(nav, android.os.SystemClock.elapsedRealtime()) }
     val navPoints = remember(nav.route?.id) { nav.route?.let { runCatching { Polyline.decode(it.polyline) }.getOrNull() }.orEmpty() }
     val navigating = screen == Screen.Navigating || (screen is Screen.Search && nav.active)
     val renderState = MapRenderState(
+        lastMetres = when {
+            navigating && nav.route != null -> my.gimano.app.core.nav.LastMetres.lines(navPoints.lastOrNull(),
+                nav.route?.arrival?.let { my.gimano.app.core.geo.GeoPoint(it.lat, it.lng) }, nav.destination?.point)
+            screen == Screen.RoutePreview -> ui.plan?.selected?.let { r ->
+                my.gimano.app.core.nav.LastMetres.lines(ui.plan?.decoded?.get(r.id)?.lastOrNull(),
+                    r.arrival?.let { my.gimano.app.core.geo.GeoPoint(it.lat, it.lng) }, ui.plan?.destination?.point)
+            }.orEmpty()
+            else -> emptyList()
+        },
+        tolls = when {
+            navigating -> nav.route?.tolls.orEmpty().map { my.gimano.app.core.geo.GeoPoint(it.lat, it.lng) }
+            screen == Screen.RoutePreview -> ui.plan?.selected?.tolls.orEmpty().map { my.gimano.app.core.geo.GeoPoint(it.lat, it.lng) }
+            else -> emptyList()
+        },
         routes = when {
             navigating && nav.route != null -> listOf(RouteDraw(nav.route!!.id, navPoints, true, nav.route!!.trafficSegments))
             screen == Screen.RoutePreview -> ui.plan?.routes.orEmpty().map { r ->
@@ -191,7 +208,8 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
         alerts = if (building) emptyList() else ui.alerts + if (screen == Screen.RoutePreview) ui.plan?.selected?.alerts.orEmpty().map { it.toReport() }.filter { a -> ui.alerts.none { it.id == a.id } } else emptyList(),
         jams = ui.jams,
         drivers = ui.drivers,
-        puck = if (navigating) nav.puck ?: nav.fix?.point else ui.myLocation?.point,
+        // While driving, the steady arrow is drawn by the map's per-frame renderer (drive = …), not from here.
+        puck = if (navigating && nav.active) null else if (navigating) nav.puck ?: nav.fix?.point else ui.myLocation?.point,
         puckBearing = if (navigating) nav.puckBearing.toFloat() else ui.myLocation?.bearing ?: 0f,
         puckAccuracyM = if (navigating) nav.accuracyM ?: nav.fix?.accuracyM?.toDouble() else ui.myLocation?.accuracyM?.toDouble(),
         pin = when (screen) {
@@ -270,6 +288,9 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
                 onRouteClick = { id -> if (screen == Screen.RoutePreview) vm.selectRoute(id) },
                 onPrivateClick = { id -> if (screen == Screen.Home || screen == Screen.PlaceCard) vm.showPrivate(id) },
                 restricted = restrictedAreas,
+                drive = if (navigating && nav.active) driveRenderer else null,
+                driveFollow = ui.following,
+                driveTopDp = 190, driveBottomDp = 150,
                 // docs/safety.md §4 D: tapping inside a restricted area explains it (no names, no details).
                 onRestrictedClick = {
                     if (screen == Screen.Home || screen == Screen.PlaceCard || screen == Screen.PinActions) { vm.openRestrictedSheet(true); true } else false

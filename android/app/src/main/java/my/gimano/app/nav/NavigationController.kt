@@ -72,6 +72,18 @@ data class NavState(
     val deviation: my.gimano.app.core.issues.Deviation? = null,
     /** One trip (kept when a stop is added mid-drive); "Share my drive" belongs to it and ends with it. */
     val tripId: String? = null,
+    /** Camera mode for this fix (docs/driving.md §2): the same for the phone and the car screen. */
+    val camera: my.gimano.app.core.nav.CameraTarget? = null,
+    /** Along-route distance of the puck when it is snapped (the renderer animates along the line), else null. */
+    val puckAlongM: Double? = null,
+    /** Along-route distance of the next maneuver: the animated puck never runs past it. */
+    val nextManeuverAlongM: Double? = null,
+    /** "Toll ahead" banner (docs/driving.md §1), null when no plaza is near. */
+    val toll: my.gimano.app.core.nav.TollBanner? = null,
+    /** Fares of the plazas already passed on this trip (kept across reroutes and added stops). */
+    val tollsPaidMyr: Double = 0.0,
+    /** Paid on earlier routes of this trip (before a reroute): added to the current route's estimate. */
+    val tollsCarriedMyr: Double = 0.0,
 )
 
 /**
@@ -101,6 +113,11 @@ class NavigationController(
 
     fun recentTrace(): List<GeoPoint> = trace.points()
     private var planner = VoicePromptPlanner()
+    private var tolls: my.gimano.app.core.nav.TollTracker? = null
+    private val snap = my.gimano.app.core.nav.SnapHysteresis()
+    private val cameraModes = my.gimano.app.core.nav.CameraModeController()
+    /** Tolls paid on earlier routes of this trip (a reroute or an added stop starts a new route). */
+    private var tollsCarried = 0.0
     private val batcher = LocationBatcher()
     private val announcedAlerts = HashSet<String>()
     private val dismissedAlerts = HashSet<String>()
@@ -115,10 +132,17 @@ class NavigationController(
     /** Debug: the simulated drive leaves the route at the first turn and the off-route / deviation checks run on it. */
     private var simDetour = false
 
+    /** DEBUG builds only (adb replay, see MainActivity): speed profile and start offset for the next simulated drive. */
+    data class DebugSim(val cruiseKmh: Double, val startAlongM: Double = 0.0)
+    var debugSim: DebugSim? = null
+
     fun start(
         route: Route, destination: NavDestination, request: RouteRequest?, simulate: Boolean, stops: List<NavDestination> = emptyList(), detour: Boolean = false,
         tripId: String = java.util.UUID.randomUUID().toString(),
     ) {
+        // Same trip re-planned (stop added): the tolls already paid stay on the trip bar.
+        val prev = _state.value
+        tollsCarried = if (prev.active && prev.tripId == tripId) prev.tollsPaidMyr else 0.0
         // No idle state in between: watchers (share, notification) must not see a drive "end" when it is re-planned.
         stopInternal(flush = false, publishIdle = false)
         simDetour = detour && simulate && BuildConfig.DEBUG
@@ -126,11 +150,14 @@ class NavigationController(
         stopsVisited = 0
         stopGate.value = -1
         val mode = TravelMode.from(route.vehicle ?: request?.vehicle)
-        tracker = NavigationTracker(route)
+        tracker = NavigationTracker(route, destination.point)
+        tolls = my.gimano.app.core.nav.TollTracker(route, tracker!!.geometry)
+        snap.reset(); cameraModes.reset(); cameraModes.setRoute(route, tracker!!.geometry)
         planner = VoicePromptPlanner(mode.wire)
         offRoute.reset(); announcedAlerts.clear(); dismissedAlerts.clear()
         deviation.reset(); lastOnRoute = null; trace.clear()
-        _state.value = NavState(active = true, route = route, destination = destination, stops = stops, simulated = simulate, startedAt = Instant.now(), mode = mode, tripId = tripId)
+        _state.value = NavState(active = true, route = route, destination = destination, stops = stops, simulated = simulate, startedAt = Instant.now(), mode = mode, tripId = tripId,
+            tollsPaidMyr = tollsCarried, tollsCarriedMyr = tollsCarried)
         gpsQuality.reset()
         val lang = langProvider()
         val first = tracker!!.maneuvers.firstOrNull()
@@ -145,6 +172,11 @@ class NavigationController(
         val t = tracker!!
         return if (simulate && simDetour) {
             DriveSimulator.drive(my.gimano.app.core.issues.SimDetour.geometry(t.geometry, t.maneuvers.map { t.geometry.distanceAtIndex(it.beginShapeIndex) }), 40.0)
+        } else if (simulate && BuildConfig.DEBUG && debugSim != null) {
+            val d = debugSim!!
+            debugSim = null
+            DriveSimulator.drive(t.geometry, d.cruiseKmh, startAlongM = d.startAlongM,
+                speedAt = my.gimano.app.core.nav.SimSpeedProfile(route, t).let { prof -> { along -> prof.speedAt(along, d.cruiseKmh) } })
         } else if (simulate) {
             val avg = if (route.effectiveDurationS > 0) route.distanceM / route.effectiveDurationS * 3.6 else mode.simSpeedKmh
             val speed = if (mode.isMotorised) (avg.coerceIn(25.0, 70.0) * 1.6) else mode.simSpeedKmh * 2.5
@@ -214,6 +246,13 @@ class NavigationController(
             voice.speak(alertPhrase(ahead.first.type, lang), lang)
         }
 
+        // Toll ahead (docs/driving.md §1): banner at 1 km (500 m below 60 km/h), spoken once per plaza in Full and
+        // Alerts only, running total of the plazas passed.
+        val toll = tolls?.update(p.distanceAlongM, speed.toDouble(), fix.timeMs)
+        if (toll?.speak != null && sound != SoundMode.OFF && _state.value.mode.isMotorised) {
+            voice.speak(my.gimano.app.core.nav.TollText.spoken(toll.speak, lang), lang)
+        }
+
         // Traffic probes are real drivers only: a simulated drive (demo, debug) or a walk/ride would feed fake or
         // pedestrian speeds into the road-speed aggregation (docs/traffic.md) once the live server is reachable.
         if (!fix.simulated && _state.value.mode.isMotorised) batcher.offer(
@@ -221,13 +260,29 @@ class NavigationController(
             fix.timeMs,
         )?.let { send(it) }
 
-        val placement = PuckPlacement.place(fix.point, fix.bearing?.toDouble(), speed.toDouble(), p)
+        // Steady arrow (docs/driving.md §3): snap hysteresis; heading = the route 20 m ahead when snapped, the GPS
+        // course only off-route above 10 km/h. The per-frame renderer animates and filters both.
+        val snapped = snap.update(p.distanceFromRouteM, fix.bearing?.toDouble(), p.bearing, speed.toDouble(), fix.timeMs)
+        val bearing = when {
+            snapped -> t.geometry.bearingAhead(p.distanceAlongM, 20.0)
+            fix.bearing != null && speed > 10 -> fix.bearing.toDouble()
+            else -> _state.value.puckBearing
+        }
+        val prev = t.maneuvers.getOrNull(p.nextManeuverIndex - 1)
+        // Camera modes are for driving; walking and cycling keep the renderer's close-up.
+        val camera = if (!_state.value.mode.isMotorised) null else cameraModes.update(
+            speed.toDouble(), p.distanceAlongM, next?.type, p.distanceToNextM.takeIf { next != null },
+            prev?.type, prev?.let { p.distanceAlongM - t.geometry.distanceAtIndex(it.beginShapeIndex) }, fix.timeMs,
+        )
         _state.update {
             it.copy(
-                puck = placement.point, puckBearing = placement.bearing, puckSnapped = placement.snapped,
+                puck = if (snapped) p.snapped else fix.point, puckBearing = bearing, puckSnapped = snapped,
+                puckAlongM = if (snapped) p.distanceAlongM else null, nextManeuverAlongM = p.distanceAlongM + p.distanceToNextM,
+                camera = camera,
                 accuracyM = acc, weakGpsM = weak,
                 progress = p, fix = fix, speedKmh = speed, arrived = p.arrived,
                 upcomingAlert = ahead?.first, alertDistanceM = ahead?.second,
+                toll = toll?.banner, tollsPaidMyr = tollsCarried + (toll?.paidMyr ?: 0.0),
             )
         }
 
@@ -293,10 +348,15 @@ class NavigationController(
         // Along-route distances restart at the driver's position on the new route: a stop card still showing must
         // close after 100 m of driving on it (not after the old route's distance), or voice prompts stay muted.
         stopCardAlongM = 0.0
-        tracker = NavigationTracker(route)
+        tracker = NavigationTracker(route, _state.value.destination?.point)
+        // Plazas passed on the old route stay paid; the new route's plazas start from here.
+        tollsCarried += tolls?.paidMyr ?: 0.0
+        tolls = my.gimano.app.core.nav.TollTracker(route, tracker!!.geometry)
+        // Speed mode and jams already shown carry over; the puck re-snaps to the new line.
+        cameraModes.setRoute(route, tracker!!.geometry)
         planner = VoicePromptPlanner(_state.value.mode.wire)
         offRoute.reset()
-        _state.update { it.copy(route = route) }
+        _state.update { it.copy(route = route, toll = null, tollsPaidMyr = tollsCarried, tollsCarriedMyr = tollsCarried) }
     }
 
     /** Add a stop while driving: it becomes the NEXT stop, then the trip is re-planned from here. */

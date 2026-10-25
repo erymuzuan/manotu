@@ -104,6 +104,14 @@ private object Ids {
     const val DRIVERS = "g-drivers"
     const val ALERTS = "g-alerts"
     const val PUCK = "g-puck"
+    const val TOLLS = "g-tolls"
+    const val LAST_METRES = "g-last-metres"
+    const val L_LAST_METRES = "g-l-last-metres"
+    const val L_LAST_ENTRANCE = "g-l-last-entrance"
+    const val DRIVE_PUCK = "g-drive-puck"
+    const val L_DRIVE_PUCK = "g-l-drive-puck"
+    const val L_DRIVE_PUCK_ACC = "g-l-drive-puck-acc"
+    const val L_TOLLS = "g-l-tolls"
     const val PINS = "g-pins"
     const val L_ALT_CASE = "g-l-alt-case"
     const val L_ALT = "g-l-alt"
@@ -164,6 +172,15 @@ fun GimanoMap(
     restricted: my.gimano.app.core.safety.RestrictedAreas? = null,
     /** Tap inside a drawn restricted area; return true to consume the tap. */
     onRestrictedClick: (GeoPoint) -> Boolean = { false },
+    /**
+     * Navigation (docs/driving.md §2–3): the steady arrow is drawn and the camera follows it on every frame. While
+     * [driveFollow] is false (the driver panned), only the arrow moves.
+     */
+    drive: my.gimano.app.nav.DriveRenderer? = null,
+    driveFollow: Boolean = true,
+    /** Map covered by the turn banner (top) and the trip bar (bottom) while driving: the arrow is placed between them. */
+    driveTopDp: Int = 0,
+    driveBottomDp: Int = 0,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -273,10 +290,28 @@ fun GimanoMap(
         }
     }
 
-    // Push data into sources whenever it changes.
+    // Push data into sources whenever it changes: only the sources whose data changed (a new puck position must
+    // not re-upload the whole route line).
+    val pushed = remember { SourceCache() }
     LaunchedEffect(style, state) {
         val s = style ?: return@LaunchedEffect
-        updateSources(s, state)
+        if (pushed.style !== s) { pushed.clear(); pushed.style = s }
+        updateSources(s, state, pushed)
+    }
+
+    // The steady arrow and the camera that follows it, on every display frame while navigating.
+    val followCb by rememberUpdatedState(driveFollow)
+    LaunchedEffect(style, drive) {
+        val s = style ?: return@LaunchedEffect
+        val src = s.getSourceAs<GeoJsonSource>(Ids.DRIVE_PUCK) ?: return@LaunchedEffect
+        val d = drive ?: run { src.setGeoJson(FeatureCollection.fromFeatures(emptyList())); return@LaunchedEffect }
+        val map = handle.map ?: return@LaunchedEffect
+        try {
+            runDriveFrames(map, src, d, { followCb }, { mapView.height.toDouble() }, density.density.toDouble(),
+                { driveTopDp * density.density.toDouble() }, { driveBottomDp * density.density.toDouble() })
+        } finally {
+            src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        }
     }
 
     // Restricted areas change rarely (daily at most): pushed on their own, never with every puck update.
@@ -297,7 +332,7 @@ fun GimanoMap(
     // (or the focus point) stays in the middle of the visible map.
     LaunchedEffect(bottomInsetDp, topInsetDp, focus, handle.ready) {
         val map = handle.map ?: return@LaunchedEffect
-        if (camera is CameraCommand.Follow) return@LaunchedEffect
+        if (camera is CameraCommand.Follow || drive != null) return@LaunchedEffect
         val top = (topInsetDp * density.density).toDouble()
         val bottom = (bottomInsetDp * density.density).toDouble()
         if (focus != null) {
@@ -330,7 +365,7 @@ private fun applyCamera(map: MapLibreMap, cmd: CameraCommand, density: Density, 
             val bounds = LatLngBounds.Builder().includes(cmd.points.map { LatLng(it.lat, it.lng) }).build()
             val side = px(cmd.sideDp).toInt()
             map.animateCamera(
-                CameraUpdateFactory.newLatLngBounds(bounds, 0.0, 0.0, side, px(cmd.topDp).toInt(), side, px(cmd.bottomDp).toInt()),
+                CameraUpdateFactory.newLatLngBounds(bounds, 0.0, 0.0, cmd.startDp?.let { px(it).toInt() } ?: side, px(cmd.topDp).toInt(), side, px(cmd.bottomDp).toInt()),
                 800,
             )
         }
@@ -359,7 +394,7 @@ private fun Style.addBelowLabels(layer: Layer, below: String?) {
 private fun installLayers(style: Style, c: GimanoColors, icons: Map<String, Bitmap>) {
     icons.forEach { (k, v) -> style.addImage(k, v) }
     val empty = FeatureCollection.fromFeatures(emptyList())
-    listOf(Ids.ROUTES, Ids.ROUTE_TRAFFIC, Ids.JAMS, Ids.DRIVERS, Ids.ALERTS, Ids.PUCK, Ids.PINS, Ids.BUILD_LINES, Ids.BUILD_PTS).forEach {
+    listOf(Ids.ROUTES, Ids.ROUTE_TRAFFIC, Ids.JAMS, Ids.DRIVERS, Ids.ALERTS, Ids.PUCK, Ids.PINS, Ids.BUILD_LINES, Ids.BUILD_PTS, Ids.TOLLS, Ids.DRIVE_PUCK, Ids.LAST_METRES).forEach {
         style.addSource(GeoJsonSource(it, empty))
     }
     val below = firstSymbolLayerId(style)
@@ -430,13 +465,33 @@ private fun installLayers(style: Style, c: GimanoColors, icons: Map<String, Bitm
     style.addLayer(SymbolLayer(Ids.L_PINS, Ids.PINS).withProperties(
         PF.iconImage(Expression.get("icon")), PF.iconAnchor(Property.ICON_ANCHOR_BOTTOM), PF.iconAllowOverlap(true), PF.iconIgnorePlacement(true),
     ))
+    // Last metres: round dots (a zero-length dash with round caps), blue to the entrance, grey on to the pin.
+    val lastKind = { k: String -> Expression.eq(Expression.get("kind"), k) }
+    style.addLayer(LineLayer(Ids.L_LAST_METRES, Ids.LAST_METRES).withFilter(Expression.any(lastKind("entrance"), lastKind("pin"))).withProperties(
+        PF.lineColor(Expression.switchCase(lastKind("entrance"), Expression.color(c.routeActive.toArgb()), Expression.color(android.graphics.Color.rgb(0x8A, 0x94, 0xA6)))),
+        PF.lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(14, 3f), Expression.stop(18, 7f))),
+        PF.lineCap(Property.LINE_CAP_ROUND), PF.lineDasharray(arrayOf(0.01f, 2f)),
+    ))
+    style.addLayer(CircleLayer(Ids.L_LAST_ENTRANCE, Ids.LAST_METRES).withFilter(lastKind("entrance-pt")).withProperties(
+        PF.circleRadius(6f), PF.circleColor(c.routeActive.toArgb()), PF.circleStrokeColor(Color.White.toArgb()), PF.circleStrokeWidth(2.5f),
+        PF.circlePitchAlignment(Property.CIRCLE_PITCH_ALIGNMENT_MAP),
+    ))
+    style.addLayer(SymbolLayer(Ids.L_TOLLS, Ids.TOLLS).withProperties(
+        PF.iconImage("toll"), PF.iconAnchor(Property.ICON_ANCHOR_BOTTOM), PF.iconAllowOverlap(true), PF.iconIgnorePlacement(true),
+        PF.iconSize(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(10, 0.55f), Expression.stop(15, 0.9f))),
+    ))
     style.addLayer(SymbolLayer(Ids.L_ALERTS, Ids.ALERTS).withProperties(
         PF.iconImage(Expression.concat(Expression.literal("alert-"), Expression.get("type"))),
         PF.iconAnchor(Property.ICON_ANCHOR_BOTTOM), PF.iconAllowOverlap(true), PF.iconIgnorePlacement(true),
         PF.iconSize(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(10, 0.6f), Expression.stop(15, 1f))),
     ))
+    addPuckLayers(style, Ids.PUCK, Ids.L_PUCK_ACC, Ids.L_PUCK)
+    addPuckLayers(style, Ids.DRIVE_PUCK, Ids.L_DRIVE_PUCK_ACC, Ids.L_DRIVE_PUCK)
+}
+
+private fun addPuckLayers(style: Style, source: String, accId: String, puckId: String) {
     // Accuracy circle (metres → pixels: r_px = acc / (156543.03 · cos φ / 2^zoom)), under the puck.
-    style.addLayer(CircleLayer(Ids.L_PUCK_ACC, Ids.PUCK).withProperties(
+    style.addLayer(CircleLayer(accId, source).withProperties(
         PF.circleRadius(Expression.interpolate(Expression.exponential(2f), Expression.zoom(),
             Expression.stop(0, Expression.get("acc0")),
             Expression.stop(22, Expression.product(Expression.get("acc0"), Expression.literal(4194304.0))))),
@@ -444,11 +499,63 @@ private fun installLayers(style: Style, c: GimanoColors, icons: Map<String, Bitm
         PF.circleStrokeColor(android.graphics.Color.argb(110, 0, 71, 171)), PF.circleStrokeWidth(1.5f),
         PF.circlePitchAlignment(Property.CIRCLE_PITCH_ALIGNMENT_MAP),
     ))
-    style.addLayer(SymbolLayer(Ids.L_PUCK, Ids.PUCK).withProperties(
+    style.addLayer(SymbolLayer(puckId, source).withProperties(
         PF.iconImage("puck"), PF.iconRotate(Expression.get("bearing")), PF.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
         PF.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_MAP),
         PF.iconAllowOverlap(true), PF.iconIgnorePlacement(true),
     ))
+}
+
+/**
+ * The per-frame loop (docs/driving.md §3): one animated puck, and the camera following it every frame. Returning to
+ * follow after a pan blends from where the camera is over [RESUME_BLEND_MS]. Shared by the phone map and the car surface.
+ */
+internal suspend fun runDriveFrames(
+    map: MapLibreMap, src: GeoJsonSource, d: my.gimano.app.nav.DriveRenderer,
+    follow: () -> Boolean, heightPx: () -> Double, density: Double,
+    topInsetPx: () -> Double = { 0.0 },
+    bottomInsetPx: () -> Double = { 0.0 },
+) {
+    var wasFollowing = false
+    var blendFrom: CameraPosition? = null
+    var blendStart = 0L
+    while (true) {
+        androidx.compose.runtime.withFrameNanos { }
+        val now = android.os.SystemClock.elapsedRealtime()
+        val hPx = heightPx()
+        val inset = topInsetPx()
+        val visible = (hPx - inset - bottomInsetPx()).coerceAtLeast(hPx * 0.3)
+        val f = d.frame(now, visible / density) ?: continue
+        src.setGeoJson(Feature.fromGeometry(pt(f.point)).apply {
+            addNumberProperty("bearing", f.bearing)
+            addNumberProperty("acc0", (f.accuracyM ?: 0.0) / (156543.03 * kotlin.math.cos(Math.toRadians(f.point.lat))))
+        })
+        val following = follow()
+        if (following && !wasFollowing) { blendFrom = map.cameraPosition; blendStart = now }
+        wasFollowing = following
+        if (!following || hPx <= 0) continue
+        // Arrow at anchorY of the uncovered height; the camera centre is moved there with padding.
+        val y = inset + f.anchorY * visible
+        val top = (2 * y - hPx).coerceAtLeast(0.0)
+        val bottom = (hPx - 2 * y).coerceAtLeast(0.0)
+        var target = LatLng(f.point.lat, f.point.lng)
+        var zoom = f.zoom
+        var tilt = f.tilt
+        var bearing = f.bearing
+        blendFrom?.let { b ->
+            val t = ((now - blendStart) / RESUME_BLEND_MS.toDouble()).coerceIn(0.0, 1.0)
+            if (t >= 1.0) blendFrom = null else {
+                val e = t * t * (3 - 2 * t)
+                val from = b.target ?: target
+                target = LatLng(from.latitude + (target.latitude - from.latitude) * e, from.longitude + (target.longitude - from.longitude) * e)
+                zoom = b.zoom + (zoom - b.zoom) * e
+                tilt = b.tilt + (tilt - b.tilt) * e
+                bearing = b.bearing + my.gimano.app.core.geo.GeoMath.angleDiff(b.bearing, bearing) * e
+            }
+        }
+        map.moveCamera(CameraUpdateFactory.newCameraPosition(
+            CameraPosition.Builder().target(target).zoom(zoom).tilt(tilt).bearing(bearing).padding(0.0, top, 0.0, bottom).build()))
+    }
 }
 
 private fun pt(p: GeoPoint) = Point.fromLngLat(p.lng, p.lat)
@@ -485,7 +592,43 @@ private fun hatch(ink: Color, density: Density): Bitmap = render(12f, 12f, densi
     drawLine(ink.copy(alpha = 0.55f), Offset(size.width / 2, size.height * 1.5f), Offset(size.width * 1.5f, size.height / 2), strokeWidth = w)
 }
 
-private fun updateSources(style: Style, s: MapRenderState) {
+/** What each source last received, so unchanged data is never pushed again. */
+internal class SourceCache {
+    var style: Style? = null
+    private val last = HashMap<String, Any?>()
+    fun clear() = last.clear()
+    /** Runs [push] only when [key] differs from what [id] last received. */
+    fun push(id: String, key: Any?, push: () -> Unit) {
+        if (last.containsKey(id) && last[id] == key) return
+        last[id] = key
+        push()
+    }
+}
+
+private const val RESUME_BLEND_MS = 800L
+
+internal fun updateSources(style: Style, s: MapRenderState, cache: SourceCache) {
+    cache.push(Ids.ROUTES, s.routes) { pushRoutes(style, s) }
+    cache.push(Ids.ROUTE_TRAFFIC, s.routes to s.showTraffic) { pushTraffic(style, s) }
+    cache.push(Ids.JAMS, Triple(s.jams, s.showTraffic, s.routes.isNotEmpty())) { pushJams(style, s) }
+    cache.push(Ids.DRIVERS, Triple(s.drivers, s.showDrivers, s.navigating)) { pushDrivers(style, s) }
+    cache.push(Ids.ALERTS, s.alerts to s.showAlerts) { pushAlerts(style, s) }
+    cache.push(Ids.TOLLS, s.tolls) { style.getSourceAs<GeoJsonSource>(Ids.TOLLS)?.setGeoJson(FeatureCollection.fromFeatures(s.tolls.map { Feature.fromGeometry(pt(it)) })) }
+    cache.push(Ids.PUCK, Triple(s.puck, s.puckBearing, s.puckAccuracyM)) { pushPuck(style, s) }
+    cache.push(Ids.LAST_METRES, s.lastMetres) {
+        val f = s.lastMetres.flatMap { l ->
+            listOfNotNull(
+                Feature.fromGeometry(LineString.fromLngLats(l.points.map(::pt))).apply { addStringProperty("kind", l.kind) },
+                if (l.kind == "entrance") Feature.fromGeometry(pt(l.points.last())).apply { addStringProperty("kind", "entrance-pt") } else null,
+            )
+        }
+        style.getSourceAs<GeoJsonSource>(Ids.LAST_METRES)?.setGeoJson(FeatureCollection.fromFeatures(f))
+    }
+    cache.push(Ids.PINS, Triple(s.privatePins, s.stops, s.pin)) { pushPins(style, s) }
+    cache.push(Ids.BUILD_LINES, s.builder) { pushBuilder(style, s) }
+}
+
+private fun pushRoutes(style: Style, s: MapRenderState) {
     // Draw alternatives first so the selected route is on top within the same source.
     val routeFeatures = s.routes.sortedBy { it.selected }.filter { it.points.size >= 2 }.map { r ->
         Feature.fromGeometry(LineString.fromLngLats(r.points.map(::pt))).apply {
@@ -493,6 +636,9 @@ private fun updateSources(style: Style, s: MapRenderState) {
         }
     }
     style.getSourceAs<GeoJsonSource>(Ids.ROUTES)?.setGeoJson(FeatureCollection.fromFeatures(routeFeatures))
+}
+
+private fun pushTraffic(style: Style, s: MapRenderState) {
 
     val traffic = if (!s.showTraffic) emptyList() else s.routes.filter { it.selected }.flatMap { r ->
         r.traffic.filter { it.level > 0 }.mapNotNull { seg ->
@@ -504,14 +650,23 @@ private fun updateSources(style: Style, s: MapRenderState) {
         }
     }
     style.getSourceAs<GeoJsonSource>(Ids.ROUTE_TRAFFIC)?.setGeoJson(FeatureCollection.fromFeatures(traffic))
+}
+
+private fun pushJams(style: Style, s: MapRenderState) {
 
     val jams = if (!s.showTraffic || s.routes.isNotEmpty()) emptyList() else s.jams.filter { it.second.size >= 2 }.map { (j, pts) ->
         Feature.fromGeometry(LineString.fromLngLats(pts.map(::pt))).apply { addNumberProperty("level", j.level.coerceIn(1, 4)) }
     }
     style.getSourceAs<GeoJsonSource>(Ids.JAMS)?.setGeoJson(FeatureCollection.fromFeatures(jams))
+}
+
+private fun pushDrivers(style: Style, s: MapRenderState) {
 
     val drivers = if (!s.showDrivers || s.navigating) emptyList() else s.drivers.map { d -> Feature.fromGeometry(Point.fromLngLat(d.lng, d.lat)) }
     style.getSourceAs<GeoJsonSource>(Ids.DRIVERS)?.setGeoJson(FeatureCollection.fromFeatures(drivers))
+}
+
+private fun pushAlerts(style: Style, s: MapRenderState) {
 
     val alerts = if (!s.showAlerts) emptyList() else s.alerts.map { a ->
         Feature.fromGeometry(Point.fromLngLat(a.lng, a.lat)).apply {
@@ -520,6 +675,9 @@ private fun updateSources(style: Style, s: MapRenderState) {
         }
     }
     style.getSourceAs<GeoJsonSource>(Ids.ALERTS)?.setGeoJson(FeatureCollection.fromFeatures(alerts))
+}
+
+private fun pushPuck(style: Style, s: MapRenderState) {
 
     val puck = s.puck?.let { g ->
         listOf(Feature.fromGeometry(pt(g)).apply {
@@ -530,11 +688,17 @@ private fun updateSources(style: Style, s: MapRenderState) {
         })
     } ?: emptyList()
     style.getSourceAs<GeoJsonSource>(Ids.PUCK)?.setGeoJson(FeatureCollection.fromFeatures(puck))
+}
+
+private fun pushPins(style: Style, s: MapRenderState) {
 
     val pins = (s.privatePins.map { (id, g) -> Feature.fromGeometry(pt(g)).apply { addStringProperty("icon", "private"); addStringProperty("pid", id) } } +
         s.stops.map { Feature.fromGeometry(pt(it)).apply { addStringProperty("icon", "stop") } } +
         listOfNotNull(s.pin?.let { Feature.fromGeometry(pt(it)).apply { addStringProperty("icon", "pin") } }))
     style.getSourceAs<GeoJsonSource>(Ids.PINS)?.setGeoJson(FeatureCollection.fromFeatures(pins))
+}
+
+private fun pushBuilder(style: Style, s: MapRenderState) {
 
     val b = s.builder
     val lines = b?.lines.orEmpty().filter { it.points.size >= 2 }.map { l ->
@@ -556,10 +720,12 @@ private fun rememberMapIcons(c: GimanoColors, density: Density): Map<String, Bit
     }
     val navPainter = rememberVectorPainter(Icons.Filled.Navigation)
     val pinPainter = rememberVectorPainter(Icons.Filled.Place)
+    val tollPainter = rememberVectorPainter(my.gimano.app.ui.common.Duotone.vector("toll", c.brandInk, c.brandTint))
     return remember(c, density) {
         val out = HashMap<String, Bitmap>()
         painters.forEach { (type, p) -> out["alert-$type"] = pebble(p, ReportColors.duotone(type).tile, ReportColors.duotone(type).stroke, density, 38f) }
         out["puck"] = puck(navPainter, c.brand, density)
+        out["toll"] = pebble(tollPainter, c.brandMist, c.brandInk, density, 34f)
         out["pin"] = pin(pinPainter, c.report, density, 44f)
         out["stop"] = pin(pinPainter, c.brand, density, 36f)
         out["private"] = pin(pinPainter, c.brandInk, density, 38f)
