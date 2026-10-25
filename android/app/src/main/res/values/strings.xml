@@ -50,7 +50,8 @@
     <string name="continue_drive">Continue</string>
     <string name="overview">Route overview</string>
     <string name="rerouting">Recalculating…</string>
-    <string name="arrived">You have arrived</string>
+    <string name="arrived">You\'ve arrived</string>
+    <string name="wrong_entrance">Wrong entrance?</string>
     <string name="done">Done</string>
     <string name="what_do_you_see">What do you see?</string>
     <string name="send">Send</string>

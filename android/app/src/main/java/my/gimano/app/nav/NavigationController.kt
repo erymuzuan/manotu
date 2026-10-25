@@ -150,7 +150,7 @@ class NavigationController(
         stopsVisited = 0
         stopGate.value = -1
         val mode = TravelMode.from(route.vehicle ?: request?.vehicle)
-        tracker = NavigationTracker(route)
+        tracker = NavigationTracker(route, destination.point)
         tolls = my.gimano.app.core.nav.TollTracker(route, tracker!!.geometry)
         snap.reset(); cameraModes.reset(); cameraModes.setRoute(route, tracker!!.geometry)
         planner = VoicePromptPlanner(mode.wire)
@@ -348,7 +348,7 @@ class NavigationController(
         // Along-route distances restart at the driver's position on the new route: a stop card still showing must
         // close after 100 m of driving on it (not after the old route's distance), or voice prompts stay muted.
         stopCardAlongM = 0.0
-        tracker = NavigationTracker(route)
+        tracker = NavigationTracker(route, _state.value.destination?.point)
         // Plazas passed on the old route stay paid; the new route's plazas start from here.
         tollsCarried += tolls?.paidMyr ?: 0.0
         tolls = my.gimano.app.core.nav.TollTracker(route, tracker!!.geometry)

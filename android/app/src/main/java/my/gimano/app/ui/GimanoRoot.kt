@@ -182,6 +182,15 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     val navPoints = remember(nav.route?.id) { nav.route?.let { runCatching { Polyline.decode(it.polyline) }.getOrNull() }.orEmpty() }
     val navigating = screen == Screen.Navigating || (screen is Screen.Search && nav.active)
     val renderState = MapRenderState(
+        lastMetres = when {
+            navigating && nav.route != null -> my.gimano.app.core.nav.LastMetres.lines(navPoints.lastOrNull(),
+                nav.route?.arrival?.let { my.gimano.app.core.geo.GeoPoint(it.lat, it.lng) }, nav.destination?.point)
+            screen == Screen.RoutePreview -> ui.plan?.selected?.let { r ->
+                my.gimano.app.core.nav.LastMetres.lines(ui.plan?.decoded?.get(r.id)?.lastOrNull(),
+                    r.arrival?.let { my.gimano.app.core.geo.GeoPoint(it.lat, it.lng) }, ui.plan?.destination?.point)
+            }.orEmpty()
+            else -> emptyList()
+        },
         tolls = when {
             navigating -> nav.route?.tolls.orEmpty().map { my.gimano.app.core.geo.GeoPoint(it.lat, it.lng) }
             screen == Screen.RoutePreview -> ui.plan?.selected?.tolls.orEmpty().map { my.gimano.app.core.geo.GeoPoint(it.lat, it.lng) }

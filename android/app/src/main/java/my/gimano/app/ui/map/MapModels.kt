@@ -44,6 +44,8 @@ data class MapRenderState(
     val builder: BuilderDraw? = null,
     /** Toll plazas along the drawn route (docs/driving.md §1). */
     val tolls: List<GeoPoint> = emptyList(),
+    /** Dashed last metres (docs/driving.md §4): route end → entrance (blue dots), entrance → pin (grey dots). */
+    val lastMetres: List<my.gimano.app.core.nav.LastMetres.Line> = emptyList(),
 )
 
 /** One-shot camera instructions; [id] makes repeated identical commands re-apply. */

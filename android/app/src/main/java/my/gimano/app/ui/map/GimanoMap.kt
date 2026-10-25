@@ -105,6 +105,9 @@ private object Ids {
     const val ALERTS = "g-alerts"
     const val PUCK = "g-puck"
     const val TOLLS = "g-tolls"
+    const val LAST_METRES = "g-last-metres"
+    const val L_LAST_METRES = "g-l-last-metres"
+    const val L_LAST_ENTRANCE = "g-l-last-entrance"
     const val DRIVE_PUCK = "g-drive-puck"
     const val L_DRIVE_PUCK = "g-l-drive-puck"
     const val L_DRIVE_PUCK_ACC = "g-l-drive-puck-acc"
@@ -391,7 +394,7 @@ private fun Style.addBelowLabels(layer: Layer, below: String?) {
 private fun installLayers(style: Style, c: GimanoColors, icons: Map<String, Bitmap>) {
     icons.forEach { (k, v) -> style.addImage(k, v) }
     val empty = FeatureCollection.fromFeatures(emptyList())
-    listOf(Ids.ROUTES, Ids.ROUTE_TRAFFIC, Ids.JAMS, Ids.DRIVERS, Ids.ALERTS, Ids.PUCK, Ids.PINS, Ids.BUILD_LINES, Ids.BUILD_PTS, Ids.TOLLS, Ids.DRIVE_PUCK).forEach {
+    listOf(Ids.ROUTES, Ids.ROUTE_TRAFFIC, Ids.JAMS, Ids.DRIVERS, Ids.ALERTS, Ids.PUCK, Ids.PINS, Ids.BUILD_LINES, Ids.BUILD_PTS, Ids.TOLLS, Ids.DRIVE_PUCK, Ids.LAST_METRES).forEach {
         style.addSource(GeoJsonSource(it, empty))
     }
     val below = firstSymbolLayerId(style)
@@ -461,6 +464,17 @@ private fun installLayers(style: Style, c: GimanoColors, icons: Map<String, Bitm
     ))
     style.addLayer(SymbolLayer(Ids.L_PINS, Ids.PINS).withProperties(
         PF.iconImage(Expression.get("icon")), PF.iconAnchor(Property.ICON_ANCHOR_BOTTOM), PF.iconAllowOverlap(true), PF.iconIgnorePlacement(true),
+    ))
+    // Last metres: round dots (a zero-length dash with round caps), blue to the entrance, grey on to the pin.
+    val lastKind = { k: String -> Expression.eq(Expression.get("kind"), k) }
+    style.addLayer(LineLayer(Ids.L_LAST_METRES, Ids.LAST_METRES).withFilter(Expression.any(lastKind("entrance"), lastKind("pin"))).withProperties(
+        PF.lineColor(Expression.switchCase(lastKind("entrance"), Expression.color(c.routeActive.toArgb()), Expression.color(android.graphics.Color.rgb(0x8A, 0x94, 0xA6)))),
+        PF.lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(14, 3f), Expression.stop(18, 7f))),
+        PF.lineCap(Property.LINE_CAP_ROUND), PF.lineDasharray(arrayOf(0.01f, 2f)),
+    ))
+    style.addLayer(CircleLayer(Ids.L_LAST_ENTRANCE, Ids.LAST_METRES).withFilter(lastKind("entrance-pt")).withProperties(
+        PF.circleRadius(6f), PF.circleColor(c.routeActive.toArgb()), PF.circleStrokeColor(Color.White.toArgb()), PF.circleStrokeWidth(2.5f),
+        PF.circlePitchAlignment(Property.CIRCLE_PITCH_ALIGNMENT_MAP),
     ))
     style.addLayer(SymbolLayer(Ids.L_TOLLS, Ids.TOLLS).withProperties(
         PF.iconImage("toll"), PF.iconAnchor(Property.ICON_ANCHOR_BOTTOM), PF.iconAllowOverlap(true), PF.iconIgnorePlacement(true),
@@ -601,6 +615,15 @@ internal fun updateSources(style: Style, s: MapRenderState, cache: SourceCache) 
     cache.push(Ids.ALERTS, s.alerts to s.showAlerts) { pushAlerts(style, s) }
     cache.push(Ids.TOLLS, s.tolls) { style.getSourceAs<GeoJsonSource>(Ids.TOLLS)?.setGeoJson(FeatureCollection.fromFeatures(s.tolls.map { Feature.fromGeometry(pt(it)) })) }
     cache.push(Ids.PUCK, Triple(s.puck, s.puckBearing, s.puckAccuracyM)) { pushPuck(style, s) }
+    cache.push(Ids.LAST_METRES, s.lastMetres) {
+        val f = s.lastMetres.flatMap { l ->
+            listOfNotNull(
+                Feature.fromGeometry(LineString.fromLngLats(l.points.map(::pt))).apply { addStringProperty("kind", l.kind) },
+                if (l.kind == "entrance") Feature.fromGeometry(pt(l.points.last())).apply { addStringProperty("kind", "entrance-pt") } else null,
+            )
+        }
+        style.getSourceAs<GeoJsonSource>(Ids.LAST_METRES)?.setGeoJson(FeatureCollection.fromFeatures(f))
+    }
     cache.push(Ids.PINS, Triple(s.privatePins, s.stops, s.pin)) { pushPins(style, s) }
     cache.push(Ids.BUILD_LINES, s.builder) { pushBuilder(style, s) }
 }

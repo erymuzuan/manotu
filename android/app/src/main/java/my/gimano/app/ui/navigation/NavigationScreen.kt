@@ -323,16 +323,39 @@ private fun ArrivedCard(nav: NavState, vm: MainViewModel) {
     val c = Gimano.colors
     // Tracking already stopped on arrival; close the card by itself if the driver doesn't.
     LaunchedEffect(Unit) { delay(20_000); vm.stopNavigation() }
+    val lang = currentLang()
+    // docs/driving.md §4: which side the entrance is on, and how far from the road.
+    val side = remember(nav.route?.id, lang) {
+        val r = nav.route
+        val g = r?.let { runCatching { my.gimano.app.core.nav.RouteGeometry(my.gimano.app.core.geo.Polyline.decode(it.polyline)) }.getOrNull() }
+        val end = g?.points?.lastOrNull()
+        val travel = g?.takeIf { it.lengthM > 1 }?.let { my.gimano.app.core.geo.GeoMath.bearingDeg(it.pointAt(it.lengthM - 20).first, it.pointAt(it.lengthM).first) }
+        my.gimano.app.core.nav.ArrivalText.line(r?.arrival, end, travel, nav.destination?.point, lang)
+    }
+    val dest = nav.destination
+    val canReport = dest?.placeId != null && !dest.eventStop && !dest.placeId.startsWith("pin:") && !dest.placeId.startsWith("private:")
     SheetSurface(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Filled.SportsScore, null, tint = c.brand, modifier = Modifier.size(48.dp))
             Text(stringResource(R.string.arrived), style = GimanoType.title, color = c.text, modifier = Modifier.padding(top = 8.dp))
-            nav.destination?.let { Text(it.name, fontSize = 16.sp, color = c.textMuted, modifier = Modifier.padding(top = 4.dp)) }
+            dest?.let { Text(it.name, fontSize = 16.sp, color = c.textMuted, modifier = Modifier.padding(top = 4.dp)) }
+            side?.let {
+                Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.MeetingRoom, null, tint = c.brand, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(it, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.text)
+                }
+            }
             Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = vm::stopNavigation, Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(Radius.md),
-                colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn),
-            ) { Text(stringResource(R.string.done), fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (canReport) OutlinedButton(
+                    onClick = vm::wrongEntrance, Modifier.weight(1f).height(54.dp), shape = RoundedCornerShape(Radius.md),
+                ) { Text(stringResource(R.string.wrong_entrance), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.text, maxLines = 1) }
+                Button(
+                    onClick = vm::stopNavigation, Modifier.weight(1f).height(54.dp), shape = RoundedCornerShape(Radius.md),
+                    colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn),
+                ) { Text(stringResource(R.string.done), fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+            }
         }
     }
 }

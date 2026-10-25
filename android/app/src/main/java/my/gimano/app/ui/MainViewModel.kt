@@ -823,6 +823,18 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 
+    /**
+     * "Pintu masuk salah?" on the arrival card (docs/driving.md §4): ends the drive, opens the destination's place card
+     * and starts the existing place_entrance_wrong flow (pick the right entrance on the map).
+     */
+    fun wrongEntrance() {
+        val d = nav.value.destination ?: return
+        val id = d.placeId ?: return
+        stopNavigation()
+        showPlace(PlaceSummary(id, d.name, address = d.address, lat = d.point.lat, lng = d.point.lng))
+        pickEntrance()
+    }
+
     /** "Pintu masuk / parkir salah": pick the right point with a green pin. */
     fun pickEntrance() {
         val p = _ui.value.place?.summary ?: return

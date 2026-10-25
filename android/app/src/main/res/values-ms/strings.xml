@@ -49,7 +49,8 @@
     <string name="continue_drive">Teruskan</string>
     <string name="overview">Gambaran laluan</string>
     <string name="rerouting">Mengira semula…</string>
-    <string name="arrived">Anda telah tiba</string>
+    <string name="arrived">Anda sudah tiba</string>
+    <string name="wrong_entrance">Pintu masuk salah?</string>
     <string name="done">Selesai</string>
     <string name="what_do_you_see">Apa yang anda nampak?</string>
     <string name="send">Hantar</string>

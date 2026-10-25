@@ -126,6 +126,8 @@ data class PlaceSummary(
     val badge: PlaceBadge? = null,
     /** Hidden for a moderator (near a restricted area or security details): "Sedang disemak" in My contributions. */
     val heldForReview: Boolean = false,
+    /** Where a route to this place ends (its entrance); the display pin (lat/lng) is unchanged. */
+    val navigationPoint: NavigationPoint? = null,
 )
 
 @Serializable
@@ -195,12 +197,14 @@ data class Place(
     val contributorTier: String? = null,
     /** Hidden for a moderator (docs/api.md "Restricted areas"). */
     val heldForReview: Boolean = false,
+    /** Where a route to this place ends (its entrance); the display pin (lat/lng) is unchanged. */
+    val navigationPoint: NavigationPoint? = null,
 ) {
     val isCommunity get() = source == "community"
     val isUnverified get() = isCommunity && status != "published"
     val isGold get() = contributorTier == "emas"
     fun summary() = PlaceSummary(id, name, category, address, lat, lng, distanceM, brand, source, status, rating, reviewCount, thumbnailUrl,
-        confirmationsWeighted, required, rural, contributorTier, badge = badge, heldForReview = heldForReview)
+        confirmationsWeighted, required, rural, contributorTier, badge = badge, heldForReview = heldForReview, navigationPoint = navigationPoint)
 }
 
 @Serializable
@@ -440,6 +444,8 @@ data class Route(
     val tollEstimateMyr: Double? = null,
     val tollFareComplete: Boolean = false,
     val tolls: List<TollPlaza> = emptyList(),
+    /** A place destination routed to its entrance (docs/api.md "Arriving at the entrance"). */
+    val arrival: NavigationPoint? = null,
     val polyline: String,
     val bbox: List<Double> = emptyList(),
     val legs: List<Leg> = emptyList(),
@@ -463,6 +469,19 @@ data class Leg(
 
 @Serializable
 data class LegTarget(val lat: Double, val lng: Double, val name: String? = null)
+
+/**
+ * Where a route to a place ends (docs/api.md "Arriving at the entrance"). source: confirmed | osm_entrance | outline;
+ * kind: the OSM entrance=* value ("main" first) when known.
+ */
+@Serializable
+data class NavigationPoint(
+    val lat: Double,
+    val lng: Double,
+    val issueId: String? = null,
+    val source: String = "osm_entrance",
+    val kind: String? = null,
+)
 
 @Serializable
 data class TollPlaza(
