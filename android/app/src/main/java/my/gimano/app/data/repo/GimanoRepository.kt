@@ -51,6 +51,12 @@ interface GimanoRepository : my.gimano.app.data.share.ShareApi {
     suspend fun sendCrashReport(body: CrashReportRequest): CrashCreated
 
     suspend fun createPlace(body: CreatePlaceRequest): Place
+    /** Owner edit of a community place (PATCH, signed): checked again; a rejected place may be edited ("Edit and try again"). */
+    suspend fun updatePlace(placeId: String, body: CreatePlaceRequest): Place
+    /** Owner only: a pending/rejected place is removed ("Discard"); a published one becomes closed. */
+    suspend fun deletePlace(placeId: String)
+    /** "Ask for a review" of a place the AI check didn't accept (signed, once per place) → the owner's Place, held. */
+    suspend fun appealPlace(placeId: String, note: String?): Place
     suspend fun suggestEdit(placeId: String, body: SuggestEditRequest): SuggestionCreated
     suspend fun verifyPlace(placeId: String, body: VerifyRequest, ts: Long? = null): VerifyResult
     /** Pending community places in the geohash-6 [cell] and its 8 neighbours (excludes my own). */

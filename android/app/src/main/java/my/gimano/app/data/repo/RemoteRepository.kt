@@ -200,6 +200,12 @@ class RemoteRepository(
     override suspend fun sendCrashReport(body: CrashReportRequest) = authed { crashReport(body) }
 
     override suspend fun createPlace(body: CreatePlaceRequest) = authed { createPlace(body) }
+    override suspend fun updatePlace(placeId: String, body: CreatePlaceRequest) = authed { updatePlace(placeId, body.copy(notDuplicateOf = null)) }
+    override suspend fun deletePlace(placeId: String) {
+        val r = authed { deletePlace(placeId) }
+        if (!r.isSuccessful && r.code() != 404) throw HttpException(r)   // 404: already gone
+    }
+    override suspend fun appealPlace(placeId: String, note: String?) = authed { appealPlace(placeId, AppealRequest(note?.trim()?.ifBlank { null })) }
     override suspend fun suggestEdit(placeId: String, body: SuggestEditRequest) = authed { suggestEdit(placeId, body) }
     override suspend fun verifyPlace(placeId: String, body: VerifyRequest, ts: Long?) = authed { verifyPlace(placeId, body, ts?.toString()) }
     fun nowTs(): Long = signer.nowTs()

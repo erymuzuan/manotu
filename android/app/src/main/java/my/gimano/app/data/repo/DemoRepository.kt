@@ -11,6 +11,8 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.random.Random
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 /** Offline, in-memory backend used for demos and when the server is unreachable. */
 class DemoRepository(
@@ -328,8 +330,26 @@ class DemoRepository(
 
     override suspend fun inbox(): List<InboxItem> {
         val now = Instant.now()
+        seedMine(); settleChecks()
         return buildList {
-            community.values.filter { it.status == "published" }.forEach { add(InboxItem("pub-${it.id}", "place_published", "Place published", "\"${it.name}\" was confirmed by 3 drivers. +20 points", now.toString(), it.id)) }
+            community.values.filter { it.status == "published" && it.id !in mine }.forEach { add(InboxItem("pub-${it.id}", "place_published", "Place published", "\"${it.name}\" was confirmed by 3 drivers. +20 points", now.toString(), it.id)) }
+            // The AI check's results for my places (design C2). Titles are left to the app's own copy.
+            mine.mapNotNull { community[it] }.forEach { p ->
+                val kind = when {
+                    p.screening?.state == "held" -> "place_held"
+                    p.screening?.state == "rejected" -> "place_not_accepted"
+                    p.id in lateLive -> "place_live"
+                    else -> null
+                }
+                // Same wording as the server's InboxRules (English).
+                val (title, text) = when (kind) {
+                    "place_held" -> "${p.name}: a maintainer will check it" to "Usually within 24 hours. Until then only you can see it."
+                    "place_not_accepted" -> "${p.name} was not accepted" to "Open it to see why. You can edit it or ask for a review."
+                    else -> "${p.name} is now on the map" to "Not verified yet: drivers nearby will be asked to confirm it."
+                }
+                if (kind != null) add(InboxItem("$kind-${p.id}", kind, title, text, now.minusSeconds(if (p.id.startsWith("demo-mine-")) 86_400 else 0).toString(),
+                    refType = "place", refId = p.id))
+            }
             feedbackStore.forEach { add(InboxItem("fb-${it.id}", "feedback_status", "Feedback received", it.message.take(80), it.createdAt)) }
             add(InboxItem("welcome", "announcement", "Welcome to Manotu", "Light theme, planned drives and Share my drive are here.", now.minusSeconds(86_400).toString()))
         }
@@ -362,17 +382,112 @@ class DemoRepository(
     private fun settle(p: Photo): Photo =
         if (p.status == "processing" && System.currentTimeMillis() - (photoUploadedAt[p.id] ?: 0) > 2_000) p.copy(status = "published") else p
 
+    /** The demo user's own community places (My places); the sample ones are seeded on first use. */
+    private val mine = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    /** When a demo place answered "checking": it passes 15 s later and a place_live item arrives in the Inbox. */
+    private val checkingSince = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val lateLive = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * Demo AI check (design "Add a place with an AI gate"): a pass by default (A4, live, 0 of 1). The other outcomes are
+     * reachable by words in the name or description, so every screen can be seen without a server:
+     * "speedmart" → 409 duplicate (B1), "forex" / "untung" / "whatsapp" → advert (B3), "scam" → scam, "pil kurus" / "ubat kuat"
+     * → illegal, "rumah" → someone's home (B4), "cctv" / "pengawal" / "guard" → held for a person (B2), "lambat" / "slow" →
+     * still checking (B6), "limit" → 429 in 40 min (B5), "pause" → adding paused (B5), "emas" / "gold" → Emas, live at once (A5).
+     */
     override suspend fun createPlace(body: CreatePlaceRequest): Place {
-        latency()
+        delay(900)   // the check takes a moment (A3)
+        val text = (body.name + " " + body.description.orEmpty()).lowercase()
+        fun has(vararg w: String) = w.any { it in text }
+        if (body.notDuplicateOf == null && has("speedmart", "speed mart")) {
+            val existing = PlaceSummary("osm-demo-99sm", "99 Speedmart Bandar Baru Bangi Seksyen 9", "convenience", "Seksyen 9, Bandar Baru Bangi",
+                body.lat + 0.00036, body.lng, distanceM = 40.0, source = "community", status = "published")
+            throw demoProblem(409, ProblemDetails(title = "Duplicate", status = 409, existing = existing))
+        }
+        if (has("limit")) throw demoProblem(429, ProblemDetails(title = "Too many requests", status = 429, retryAfterSeconds = 2400))
+        if (has("pause", "jeda")) throw demoProblem(403, ProblemDetails(title = "Adding paused", status = 403, code = "adding_paused",
+            pausedUntil = Instant.now().plus(22, ChronoUnit.HOURS).toString()))
         val id = "community-" + UUID.randomUUID().toString().take(8)
-        val p = Place(
+        val base = Place(
             id = id, name = body.name, category = body.category, address = body.address ?: "", lat = body.lat, lng = body.lng,
             phone = body.phone, website = body.website, openingHours = body.openingHours, amenities = body.amenities.orEmpty(),
             source = "community", status = "pending", description = body.description, addedBy = Author(user.displayName), verifiedCount = 0,
-            confirmationsWeighted = 0.0, required = 3.0,
+            confirmationsWeighted = 0.0, required = 1.0,
         )
+        fun rejected(vararg r: String) = base.copy(status = "rejected", screening = PlaceScreening("rejected", r.toList(), canAppeal = true))
+        val p = when {
+            has("forex", "untung", "whatsapp") -> rejected("spam")
+            has("scam") -> rejected("scam")
+            has("pil kurus", "ubat kuat") -> rejected("illegal")
+            has("rumah") -> rejected("private_home")
+            has("cctv", "pengawal", "guard") -> base.copy(status = "hidden", heldForReview = true, screening = PlaceScreening("held", listOf("security")))
+            has("lambat", "slow") -> base.copy(screening = PlaceScreening("checking")).also { checkingSince[id] = System.currentTimeMillis() }
+            has("emas", "gold") -> base.copy(status = "published", contributorTier = "emas", screening = PlaceScreening("passed", listOf("ok")))
+            else -> base.copy(screening = PlaceScreening("passed", listOf("ok")))
+        }
         community[id] = p
+        mine += id
         return p
+    }
+
+    override suspend fun updatePlace(placeId: String, body: CreatePlaceRequest): Place {
+        latency()
+        val old = community[placeId] ?: throw demoProblem(404, ProblemDetails(title = "Not found", status = 404))
+        // An edit is checked again: the demo check passes it unless the same words are still there.
+        val again = createPlace(body.copy(notDuplicateOf = placeId))
+        community.remove(again.id); mine.remove(again.id)
+        val p = again.copy(id = placeId, verifiedCount = old.verifiedCount, confirmationsWeighted = old.confirmationsWeighted,
+            screening = again.screening?.copy(canAppeal = again.screening.canAppeal && old.screening?.appealed != true, appealed = old.screening?.appealed == true))
+        community[placeId] = p
+        checkingSince.remove(again.id)?.let { checkingSince[placeId] = it }
+        return p
+    }
+
+    override suspend fun deletePlace(placeId: String) {
+        latency()
+        community.remove(placeId); mine.remove(placeId)
+    }
+
+    override suspend fun appealPlace(placeId: String, note: String?): Place {
+        latency()
+        val p = community[placeId] ?: throw demoProblem(404, ProblemDetails(title = "Not found", status = 404))
+        if (p.screening?.state != "rejected" || p.screening.appealed) throw demoProblem(409, ProblemDetails(title = "Not appealable", status = 409))
+        val held = p.copy(status = "hidden", heldForReview = true, screening = p.screening.copy(state = "held", canAppeal = false, appealed = true))
+        community[placeId] = held
+        return held
+    }
+
+    /** A problem response, as the server sends it (so the app parses demo refusals the same way). */
+    private fun demoProblem(code: Int, pd: ProblemDetails): retrofit2.HttpException {
+        val json = my.gimano.app.data.remote.GimanoJson.encodeToString(ProblemDetails.serializer(), pd)
+        return retrofit2.HttpException(retrofit2.Response.error<Any>(code, json.toResponseBody("application/problem+json".toMediaType())))
+    }
+
+    /** A "checking" demo place passes after 15 s (as the worker would) and leaves a place_live item. */
+    private fun settleChecks() {
+        val now = System.currentTimeMillis()
+        checkingSince.entries.filter { now - it.value > 15_000 }.forEach { (id, _) ->
+            checkingSince.remove(id)
+            community[id]?.let { p -> community[id] = p.copy(screening = PlaceScreening("passed", listOf("ok"))); lateLive += id }
+        }
+    }
+
+    /** My places in demo mode: one sample per status (design C3), plus the places added in this session. */
+    private fun seedMine() {
+        if (mine.any { it.startsWith("demo-mine-") }) return
+        fun s(key: String, name: String, cat: String, lat: Double, lng: Double, status: String, screening: PlaceScreening?, held: Boolean = false, conf: Double = 0.0) {
+            val id = "demo-mine-$key"
+            community[id] = Place(id, name, cat, "", lat, lng, source = "community", status = status, addedBy = Author(user.displayName),
+                confirmationsWeighted = conf, required = 1.0, heldForReview = held, screening = screening,
+                description = if (key == "home") "Mak Teh jual kuih setiap pagi." else null)
+            mine += id
+        }
+        s("verified", "Bengkel Ah Seng Tayar & Servis", "car_repair", 2.9640, 101.7620, "published", PlaceScreening("passed", listOf("ok")), conf = 1.0)
+        s("live", "Kuih Mak Teh", "restaurant", 3.0730, 101.5180, "pending", PlaceScreening("passed", listOf("ok")))
+        s("held", "Parkir IPD Dang Wangi", "parking", 3.1555, 101.6985, "hidden", PlaceScreening("held", listOf("security")), held = true)
+        s("rejected", "Jual pil kurus & ubat kuat", "other", 3.1100, 101.6400, "rejected", PlaceScreening("rejected", listOf("illegal"), canAppeal = false, appealed = true))
+        s("home", "Rumah Mak Teh", "other", 3.0700, 101.5200, "rejected", PlaceScreening("rejected", listOf("private_home"), canAppeal = true))
+        s("hidden", "Warung Tepi Sawah", "restaurant", 3.3500, 101.2500, "hidden", PlaceScreening("passed", listOf("ok")))
     }
 
     override suspend fun suggestEdit(placeId: String, body: SuggestEditRequest): SuggestionCreated {
@@ -405,7 +520,10 @@ class DemoRepository(
         return listOf(p.summary()).filter { (verifications[id] ?: 1) < 3 }
     }
 
-    override suspend fun contributedPlaces(): List<PlaceSummary> = community.values.map { it.summary() }
+    override suspend fun contributedPlaces(): List<PlaceSummary> {
+        seedMine(); settleChecks()
+        return mine.mapNotNull { community[it]?.summary() }.sortedBy { it.id.startsWith("demo-mine-") }
+    }
 
     override suspend fun reviews(placeId: String, sort: String): ReviewsPage {
         latency()

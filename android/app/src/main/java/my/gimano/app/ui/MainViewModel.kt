@@ -324,6 +324,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                 c.issues.reprobeIfUnknown()   // started offline: show complaints once the server answers
                 c.restricted.refresh()   // daily at most (every 30 min while there is no data); no request otherwise
                 runCatching { c.feedback.retryDue() }
+                runCatching { c.placeDrafts.retryQueued() }   // B6: places saved offline go out when the server answers
             }
         }
         viewModelScope.launch { c.liveHub.events.collect(::onLiveEvent) }

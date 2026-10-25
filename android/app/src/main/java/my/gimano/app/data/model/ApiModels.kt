@@ -128,7 +128,26 @@ data class PlaceSummary(
     val heldForReview: Boolean = false,
     /** Where a route to this place ends (its entrance); the display pin (lat/lng) is unchanged. */
     val navigationPoint: NavigationPoint? = null,
+    /** The AI check, for the owner only (GET /me/places/contributed); absent for other viewers. */
+    val screening: PlaceScreening? = null,
 )
+
+/**
+ * docs/api.md "AI check": the owner's view of the check on a community place. [state]: none | checking | passed | held |
+ * rejected | skipped. [reasons] are fixed codes (spam, scam, private_home, ...) that the app maps to its own copy; the
+ * model's text is never shown. [canAppeal]: rejected and not appealed yet.
+ */
+@Serializable
+data class PlaceScreening(
+    val state: String = "none",
+    val reasons: List<String> = emptyList(),
+    val canAppeal: Boolean = false,
+    val appealed: Boolean = false,
+)
+
+/** POST /places/{id}/appeal (signed): an optional note (at most 200 characters) for the maintainer. */
+@Serializable
+data class AppealRequest(val note: String? = null)
 
 @Serializable
 data class SearchResponse(
@@ -199,12 +218,15 @@ data class Place(
     val heldForReview: Boolean = false,
     /** Where a route to this place ends (its entrance); the display pin (lat/lng) is unchanged. */
     val navigationPoint: NavigationPoint? = null,
+    /** The AI check, in the owner's view (POST/PATCH/appeal responses); absent for other viewers. */
+    val screening: PlaceScreening? = null,
 ) {
     val isCommunity get() = source == "community"
     val isUnverified get() = isCommunity && status != "published"
     val isGold get() = contributorTier == "emas"
     fun summary() = PlaceSummary(id, name, category, address, lat, lng, distanceM, brand, source, status, rating, reviewCount, thumbnailUrl,
-        confirmationsWeighted, required, rural, contributorTier, badge = badge, heldForReview = heldForReview, navigationPoint = navigationPoint)
+        confirmationsWeighted, required, rural, contributorTier, badge = badge, heldForReview = heldForReview, navigationPoint = navigationPoint,
+        screening = screening)
 }
 
 @Serializable
@@ -272,6 +294,8 @@ data class CreatePlaceRequest(
     val website: String? = null,
     val openingHours: String? = null,
     val amenities: List<String>? = null,
+    /** The `existing.id` of a 409 the user answered "No, mine is a different place" (left out when null). */
+    val notDuplicateOf: String? = null,
 )
 
 @Serializable
@@ -622,8 +646,14 @@ data class ProblemDetails(
     val status: Int? = null,
     val detail: String? = null,
     @SerialName("errors") val errors: JsonElement? = null,
-    /** Machine-readable reason, e.g. `restricted_area` (docs/api.md "Restricted areas"). */
+    /** Machine-readable reason, e.g. `restricted_area` (docs/api.md "Restricted areas") or `adding_paused`. */
     val code: String? = null,
+    /** 403 `adding_paused`: when adding places opens again (ISO time). */
+    val pausedUntil: String? = null,
+    /** 429: seconds until the next try (also in the Retry-After header). */
+    val retryAfterSeconds: Int? = null,
+    /** 409 on POST /places: the similar place nearby ("Is it already on the map?"). */
+    val existing: PlaceSummary? = null,
 )
 
 
@@ -640,4 +670,12 @@ data class InboxItem(
     val body: String = "",
     val createdAt: String = "",
     val placeId: String? = null,
-)
+    /** "place" for the place kinds (place_held, place_not_accepted, place_live, ...); [refId] is then the place id. */
+    val refType: String? = null,
+    val refId: String? = null,
+    val read: Boolean = false,
+    val count: Int = 1,
+) {
+    /** The community place this item is about, if any. */
+    val placeRef: String? get() = if (refType == "place") refId ?: placeId else placeId
+}

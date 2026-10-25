@@ -128,6 +128,11 @@ fun PlaceCard(sel: PlaceSel, vm: MainViewModel, cvm: ContributeViewModel, apiBas
     }
     var suggest by remember { mutableStateOf(false) }
     LaunchedEffect(d?.id) { if (d != null) cvm.loadReviews(d) }
+    // B1 "Yes, that's it: suggest an edit": opens this place's suggest-an-edit once its details are in.
+    val suggestFor by cvm.suggestFor.collectAsStateWithLifecycle()
+    LaunchedEffect(suggestFor, d?.id) {
+        if (suggestFor != null && d?.id == suggestFor) { suggest = true; cvm.suggestFor.value = null }
+    }
     val addPhoto = my.gimano.app.ui.common.rememberPhotoSource(10) { uris ->
         if (d != null && uris.isNotEmpty()) cvm.addPlacePhotos(d, uris) { vm.refreshPlace() }
     }

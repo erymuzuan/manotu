@@ -100,6 +100,10 @@ class AppContainer(val app: Application) {
         soundMode = { settings.current.soundMode }, langProvider = ::voiceLang,
     )
     val feedback = FeedbackService(db.outbox(), repo)
+    /** Places waiting on this phone (rate limit, pause, offline): outbox kind `place_draft`, never backed up. */
+    val placeDrafts = my.gimano.app.data.places.PlaceDrafts(db.outbox(), repo, File(app.filesDir, "place-drafts"))
+    /** A1 "How adding a place works": shown once on this phone, before the first shared place. */
+    val addPlaceIntro = my.gimano.app.data.places.AddPlaceIntro(app.getSharedPreferences("manotu.addplace", android.content.Context.MODE_PRIVATE))
     val planned = my.gimano.app.data.planned.PlannedDrives(
         app, db.plannedDrives(), db.settings(), repo,
         // No position source: background leave-by checks never carry the user's location ("where I am" drives skip them).

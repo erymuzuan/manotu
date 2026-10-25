@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Add a place with an AI gate (design boards A1–C3). Reason codes map to this fixed copy; the check's own text is never shown. -->
+<resources>
+    <!-- A1 -->
+    <string name="apg_intro_kicker">YOUR FIRST SHARED PLACE</string>
+    <string name="apg_intro_title">How adding a place works</string>
+    <string name="apg_intro_s1_t">Everyone can see it</string>
+    <string name="apg_intro_s1_b">Shared places appear on the map for all drivers, under your pseudonym.</string>
+    <string name="apg_intro_s2_t">A quick automatic check</string>
+    <string name="apg_intro_s2_b">Takes about 2 seconds. It looks only at what you write, never at who you are.</string>
+    <string name="apg_intro_s3_t">People nearby confirm it</string>
+    <string name="apg_intro_s3_b">Until then it shows \"Not verified yet\". Accurate places raise your level.</string>
+    <string name="apg_intro_rules">Shops, stalls, surau, workshops, parking and places to stop. No homes, adverts or job offers. Want it only for yourself? Choose \"Just for me\": it never leaves your phone.</string>
+
+    <!-- A2 -->
+    <string name="apg_share_hint">Shared places get a quick automatic check, then people nearby confirm them.</string>
+
+    <!-- A3 -->
+    <string name="apg_checking_title">Checking before it goes on the map…</string>
+    <string name="apg_check_location_t">Location is fine</string>
+    <string name="apg_check_location_s">Not in a restricted area</string>
+    <string name="apg_check_dup_t">Not on the map yet</string>
+    <string name="apg_check_dup_s">No similar place within 100 m</string>
+    <string name="apg_check_content_t">Content check</string>
+    <string name="apg_check_content_s">Is this a real place drivers can visit?</string>
+    <string name="apg_check_live_t">Goes live</string>
+    <string name="apg_check_live_s">Then people nearby confirm it</string>
+    <string name="apg_checking_button">Checking</string>
+    <string name="apg_checking_note">Usually about 2 seconds. You can close this: the result also arrives in your Inbox.</string>
+
+    <!-- A4 / plain pending -->
+    <string name="apg_live_title">It\'s on the map</string>
+    <string name="apg_not_verified_n">Not verified yet · %1$s of %2$s</string>
+    <string name="apg_not_verified">Not verified yet</string>
+    <string name="apg_community_verified">Community verified</string>
+    <string name="apg_live_body">Drivers can find it in search now. The next person who stops nearby will be asked \"Is this place here?\". When they say yes, it becomes Community verified and you get +20 points.</string>
+    <string name="apg_share_place">Share place</string>
+    <string name="apg_live_note">You can edit it while it\'s not verified yet. An edit is checked again.</string>
+    <string name="apg_pending_title">Added, waiting for confirmations</string>
+    <string name="apg_pending_body">The automatic check didn\'t run this time. Drivers nearby will be asked to confirm it before it shows in search.</string>
+
+    <!-- A5 -->
+    <string name="apg_gold_title">Live and verified</string>
+    <string name="apg_gold_chip">Added by an Emas contributor</string>
+    <string name="apg_gold_body">Your Emas level means it skips the wait. It still passed the same automatic check. Now and then we ask a driver nearby to confirm an Emas place, to keep everyone\'s level fair.</string>
+    <string name="apg_gold_note">If the automatic check is unsure about an Emas place, a person decides. It is never refused automatically.</string>
+
+    <!-- B1 -->
+    <string name="apg_dup_title">Is it already on the map?</string>
+    <string name="apg_dup_body">We found a similar place %1$s from your pin. You wrote \"%2$s\".</string>
+    <string name="apg_dup_body_near">We found a similar place near your pin. You wrote \"%1$s\".</string>
+    <string name="apg_dup_same">Yes, that\'s it: suggest an edit</string>
+    <string name="apg_dup_different">No, mine is a different place</string>
+    <string name="apg_dup_note">\"Different place\" sends it on with that answer. If the check still thinks it\'s the same, a person decides. Nothing is lost either way.</string>
+
+    <!-- B2 -->
+    <string name="apg_held_title">A person will check this one</string>
+    <string name="apg_held_chip">Being checked · usually within 24 h</string>
+    <string name="apg_held_why_security">Why: the description mentions security details (cameras, guard times). We never publish those, but the place itself may be fine. A maintainer may remove that sentence and publish the rest.</string>
+    <string name="apg_held_why_duplicate">Why: it may be the same as a place already on the map. A maintainer compares them.</string>
+    <string name="apg_held_why_unsure">Why: the automatic check wasn\'t sure about it. That doesn\'t mean anything is wrong.</string>
+    <string name="apg_held_why_appealed">You asked for a review. A Manotu maintainer, a person, answers within 24 hours.</string>
+    <string name="apg_held_only_you">Until then only you can see it. You\'ll get the answer in your Inbox.</string>
+    <string name="apg_edit_description">Edit description</string>
+    <string name="apg_held_note">New contributors see this more often: until you have 3 accepted places, anything the check isn\'t sure about goes to a person.</string>
+
+    <!-- B3 -->
+    <string name="apg_rej_advert_t">This looks like an advert, not a place</string>
+    <string name="apg_rej_scam_t">This looks like a scam</string>
+    <string name="apg_rej_illegal_t">This looks like a sale of illegal goods</string>
+    <string name="apg_rej_adult_t">This looks like adult services</string>
+    <string name="apg_rej_gibberish_t">We couldn\'t read this as a place</string>
+    <string name="apg_rej_other_t">This wasn\'t accepted</string>
+    <string name="apg_rej_advert_b">Manotu places are locations drivers can visit. We don\'t accept adverts, investment offers, job offers or promotions. It was not published, and nobody else saw it.</string>
+    <string name="apg_rej_scam_b">It reads like an offer that asks people for money or personal details. We don\'t publish those. It was not published, and nobody else saw it.</string>
+    <string name="apg_rej_illegal_b">We don\'t publish places that sell illegal or unregistered goods or services. It was not published, and nobody else saw it.</string>
+    <string name="apg_rej_adult_b">We don\'t publish adult services. It was not published, and nobody else saw it.</string>
+    <string name="apg_rej_gibberish_b">The name or description doesn\'t read as a place drivers can find. It was not published, and nobody else saw it.</string>
+    <string name="apg_rej_other_b">The automatic check didn\'t accept it. It was not published, and nobody else saw it.</string>
+    <string name="apg_rej_hint">Is there a real shop or office here? Edit the name to what\'s on the signboard and describe the place, not the offer.</string>
+    <string name="apg_edit_try_again">Edit and try again</string>
+    <string name="apg_ask_review_wrong">I think this is wrong: ask for a review</string>
+    <string name="apg_discard">Discard</string>
+    <string name="apg_review_closed">A person reviewed it, and it stays unpublished.</string>
+
+    <!-- B4 -->
+    <string name="apg_home_t">This looks like someone\'s home</string>
+    <string name="apg_person_t">This looks like it\'s about a person</string>
+    <string name="apg_home_b">To protect people\'s privacy, we don\'t publish private homes for everyone. You can still keep it on the map for yourself. A \"Just for me\" place stays on this phone and in your own backup, and never reaches Manotu.</string>
+    <string name="apg_person_b">To protect people\'s privacy, we don\'t publish places that name or point at a person. You can still keep it on the map for yourself. A \"Just for me\" place stays on this phone and in your own backup, and never reaches Manotu.</string>
+    <string name="apg_keep_private">Keep it just for me</string>
+    <string name="apg_ask_review_business">It\'s a business: ask for a review</string>
+    <string name="apg_home_hint">Home businesses (kuih, tailors, homestays) are welcome. Name the business, not the person, and add opening hours.</string>
+
+    <!-- B5 -->
+    <plurals name="apg_limit_title">
+        <item quantity="one">You can add more in %d minute</item>
+        <item quantity="other">You can add more in %d minutes</item>
+    </plurals>
+    <string name="apg_limit_title_later">You can add more later</string>
+    <string name="apg_limit_body">There\'s a limit on how many places can be shared each hour and each day. It grows as your places get confirmed.</string>
+    <string name="apg_limit_draft">Save it as a draft on this phone and share it from My places when the time is up.</string>
+    <string name="apg_paused_title">Adding is paused until %1$s</string>
+    <string name="apg_paused_title_later">Adding is paused for now</string>
+    <string name="apg_paused_body">Three of your places today were not accepted. It lifts by itself.</string>
+    <string name="apg_save_draft">Save draft</string>
+    <string name="apg_private_instead">Keep it just for me instead</string>
+
+    <!-- B6 -->
+    <string name="apg_slow_title">Sent. We\'re still checking</string>
+    <string name="apg_slow_body">%1$s is safely with us. It will go on the map as soon as the check finishes, usually within a few minutes. You\'ll get a message in your Inbox.</string>
+    <string name="apg_offline_title">No connection</string>
+    <string name="apg_offline_body">Saved on this phone. It will be sent and checked when you\'re back online.</string>
+    <string name="apg_slow_note">If the check service is down for more than an hour, a person reviews the place instead. Nothing is lost.</string>
+
+    <!-- C1 -->
+    <string name="apg_appeal_title">Ask for a review</string>
+    <string name="apg_not_accepted_reason">Not accepted: %1$s</string>
+    <string name="apg_reason_advert">looks like an advert</string>
+    <string name="apg_reason_scam">looks like a scam</string>
+    <string name="apg_reason_illegal">looks like a sale of illegal goods</string>
+    <string name="apg_reason_adult">looks like adult services</string>
+    <string name="apg_reason_gibberish">couldn\'t be read as a place</string>
+    <string name="apg_reason_home">looks like someone\'s home</string>
+    <string name="apg_reason_person">looks like it\'s about a person</string>
+    <string name="apg_reason_other">didn\'t pass the automatic check</string>
+    <string name="apg_appeal_label">What should the reviewer know?</string>
+    <string name="apg_appeal_count">%1$d / %2$d</string>
+    <string name="apg_appeal_info">A Manotu maintainer, a person, answers within 24 hours. One review per place. Don\'t include phone numbers or names of people here.</string>
+    <string name="apg_appeal_tip_home">Tip: naming the business, not the person, and adding opening hours often passes the check straight away.</string>
+    <string name="apg_appeal_tip">Tip: using the name on the signboard and describing the place often passes the check straight away.</string>
+    <string name="apg_appeal_send">Send for review</string>
+    <string name="appeal_already">A review was already asked for this place</string>
+
+    <!-- Messages -->
+    <string name="add_late_live">Your place is on the map</string>
+    <string name="add_late_held">A person will check your place. The answer comes in your Inbox.</string>
+    <string name="add_late_not_accepted">Your place wasn\'t accepted. Your Inbox says why.</string>
+    <string name="add_late_checking">Still checking your place. The result comes in your Inbox.</string>
+    <string name="add_late_attention">Your place wasn\'t sent. Try again from Add a place.</string>
+    <string name="add_offline_saved">No connection: saved on this phone, sent when you\'re back online</string>
+    <string name="add_draft_saved">Saved as a draft on this phone</string>
+    <string name="add_discarded">Discarded</string>
+
+    <!-- C2 (when the server sends no title) -->
+    <string name="inbox_place_held">A maintainer will check your place</string>
+    <string name="inbox_place_not_accepted">Your place was not accepted</string>
+    <string name="inbox_place_live">Your place is now on the map</string>
+
+    <!-- C3 -->
+    <string name="mp_verified">Community verified</string>
+    <string name="mp_live">Live · not verified yet</string>
+    <string name="mp_waiting">Waiting for verification</string>
+    <string name="mp_checking">Automatic check running</string>
+    <string name="mp_held">Being checked by a person</string>
+    <string name="mp_not_accepted">Not accepted</string>
+    <string name="mp_hidden">Hidden: reported \"not here\"</string>
+    <string name="mp_expired">Expired unverified</string>
+    <string name="mp_closed">Closed</string>
+    <string name="mp_draft">Draft on this phone</string>
+    <string name="mp_queued">Queued: sent when online</string>
+    <string name="mp_private">On this phone only</string>
+    <string name="mp_x_of_y">%1$s of %2$s</string>
+    <string name="mp_within_24h">&lt; 24 h</string>
+    <string name="mp_share_in">Share in %1$d min</string>
+    <string name="mp_share_now">Share now</string>
+    <string name="mp_ask_review">Ask for a review</string>
+    <string name="mp_review_closed">Review closed</string>
+    <string name="mp_moderator">Moderator</string>
+    <string name="mp_private_next">Private</string>
+    <string name="mp_just_for_me_name">%1$s (just for me)</string>
+    <string name="mp_discard_draft">Discard draft</string>
+</resources>

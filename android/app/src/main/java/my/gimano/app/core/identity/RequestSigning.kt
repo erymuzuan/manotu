@@ -32,7 +32,7 @@ object RequestSigning {
     private val rules: List<Pair<Set<String>, Regex>> = listOf(
         setOf("POST") to Regex("/places"),
         setOf("PATCH") to Regex("/places/[^/]+"),
-        setOf("POST") to Regex("/places/[^/]+/(verify|suggest-edit|reviews)"),
+        setOf("POST") to Regex("/places/[^/]+/(verify|suggest-edit|reviews|appeal)"),
         setOf("PATCH", "DELETE") to Regex("/reviews/[^/]+"),
         setOf("POST") to Regex("/photos"),
         setOf("POST") to Regex("/reports"),

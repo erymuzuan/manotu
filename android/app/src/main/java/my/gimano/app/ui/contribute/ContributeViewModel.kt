@@ -16,8 +16,12 @@ import kotlinx.coroutines.launch
 import my.gimano.app.AppContainer
 import my.gimano.app.R
 import my.gimano.app.core.geo.GeoPoint
+import my.gimano.app.core.places.AddResult
+import my.gimano.app.core.places.CreateFailure
 import my.gimano.app.core.places.OpeningHours
+import my.gimano.app.core.places.PlaceGate
 import my.gimano.app.core.places.RatingSummary
+import my.gimano.app.data.places.PlaceDraft
 import my.gimano.app.core.safety.RestrictedZone
 import my.gimano.app.data.model.*
 import my.gimano.app.data.places.ContributionLog
@@ -44,8 +48,22 @@ data class AddPlaceState(
     val week: Map<String, List<OpeningHours.Range>> = OpeningHours.DAYS.take(5).associateWith { listOf(OpeningHours.Range("09:00", "18:00")) },
     val photos: List<Uri> = emptyList(),
     val saving: Boolean = false,
-    val duplicate: Place? = null,
     val error: String? = null,
+    /** What the AI-gate flow shows over the form (A1, A3, the results, B1, B5, B6, C1); null = the form itself. */
+    val overlay: AddOverlay? = null,
+    /** Editing a place already on the server ("Edit and try again", "Edit description"): PATCH instead of POST. */
+    val editingId: String? = null,
+    /** [editingId] is a place the check didn't accept: "Just for me" then removes that server copy. */
+    val editingRejected: Boolean = false,
+    /** Sending a draft kept on this phone: removed once it is sent. */
+    val draftId: String? = null,
+    /** B1 "No, mine is a different place": the existing place's id, sent as notDuplicateOf. */
+    val notDuplicateOf: String? = null,
+    /** C1: the note being written (≤ 200 characters). */
+    val appealNote: String = "",
+    val appealSending: Boolean = false,
+    /** The result was opened from the Inbox or My places (not right after sending): "OK" goes back there. */
+    val fromList: Boolean = false,
     /** docs/safety.md §4: where the pin is relative to the restricted areas (checked on the phone, offline). */
     val zone: RestrictedZone = RestrictedZone.CLEAR,
     /** A: "Tidak boleh dikongsi di sini" instead of the form. */
@@ -57,6 +75,31 @@ data class AddPlaceState(
     val nearArea get() = zone == RestrictedZone.NEAR && !privateOnly
     val hours: String? get() = if (!hoursEnabled) null else OpeningHours.build(week, open247).ifBlank { null }
     val canContinue get() = name.isNotBlank() && category != null
+
+    fun request(): CreatePlaceRequest = CreatePlaceRequest(
+        name.trim(), category ?: "other", pin.lat, pin.lng, address.ifBlank { null }, description.trim().ifBlank { null },
+        phone.ifBlank { null }, website.ifBlank { null }, hours, amenities.toList().ifEmpty { null }, notDuplicateOf,
+    )
+}
+
+/** The AI-gate screens (design "Add a place with an AI gate", boards A1–C1). */
+sealed interface AddOverlay {
+    /** A1: how adding a place works (once, before the first shared place). */
+    data object Intro : AddOverlay
+    /** A3: waiting for the server's checks. */
+    data object Checking : AddOverlay
+    /** A4, A5, B2, B3, B4, B6 (still checking): what the server answered. */
+    data class Result(val place: Place, val kind: AddResult) : AddOverlay
+    /** B1: a similar place is already on the map (409). */
+    data class Duplicate(val existing: PlaceSummary?) : AddOverlay
+    /** B5: the hourly/daily limit (429), [minutes] until the next share. */
+    data class Limit(val minutes: Int?, val retryAfterSeconds: Int?) : AddOverlay
+    /** B5, paused variant (403 adding_paused). */
+    data class Paused(val until: java.time.Instant?) : AddOverlay
+    /** B6, no connection: saved on this phone, sent when back online. */
+    data object Offline : AddOverlay
+    /** C1: ask a person to review a place that wasn't accepted. [back] is the result screen it came from. */
+    data class Appeal(val place: Place, val back: Result) : AddOverlay
 }
 
 /** One photo being attached: uploading → processing → published (or failed). */
@@ -81,6 +124,12 @@ sealed interface ContribEvent {
     data object Close : ContribEvent
     data class Text(val text: String) : ContribEvent
     data class ShowPlace(val summary: PlaceSummary) : ContribEvent
+    /** Leave the flow for My places (the boards' "Done" / "OK"). */
+    data object OpenMyPlaces : ContribEvent
+    /** Show the add-a-place screen (a result or a draft opened from the Inbox or My places). */
+    data object OpenAddPlace : ContribEvent
+    /** A4 "Share place": the system share sheet with [text]. */
+    data class Share(val text: String) : ContribEvent
 }
 
 class ContributeViewModel(private val c: AppContainer) : ViewModel() {
@@ -97,6 +146,7 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     fun startAdd(at: GeoPoint, name: String) {
         // Long-press / "Tambah tempat" inside a restricted area goes straight to A.
         val zone = c.restricted.zone(at)
+        activeSend = 0
         _add.value = AddPlaceState(pin = at, name = name, zone = zone, blockedSheet = zone == RestrictedZone.BLOCKED)
         onPinMoved(at)
     }
@@ -116,11 +166,26 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
 
     fun update(f: (AddPlaceState) -> AddPlaceState) = _add.update(f)
 
+    val use24h: Boolean get() = c.settings.current.use24h
+
+    /** My places (C3): drafts waiting on this phone. */
+    val drafts get() = c.placeDrafts.drafts
+
     /** Pin step "Next": a pin in a restricted area (or within blockM) gets A instead of the form. */
     fun nextFromPin() {
         val s = _add.value
         if (!s.privateOnly && c.restricted.zone(s.pin) == RestrictedZone.BLOCKED) _add.update { it.copy(blockedSheet = true) }
-        else step(AddStep.DETAILS)
+        else {
+            step(AddStep.DETAILS)
+            // A1, once on this phone, before the first shared place (a "just for me" place never leaves the phone).
+            if (!s.privateOnly && !c.addPlaceIntro.seen) _add.update { it.copy(overlay = AddOverlay.Intro) }
+        }
+    }
+
+    /** A1 · "Got it". */
+    fun introSeen() {
+        c.addPlaceIntro.markSeen()
+        _add.update { it.copy(overlay = null) }
     }
 
     /** A · "Alih pin": back to the map, the pin stays where it was. */
@@ -152,20 +217,25 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     /** The user-facing message for a failed write: the server's own words for a restricted area, else [fallback]. */
     private fun failure(e: Throwable, fallback: Int): ContribEvent =
         if (e is my.gimano.app.data.repo.RestrictedAreaException) ContribEvent.Text(e.detail) else ContribEvent.Message(fallback)
-    fun showExisting(p: Place) { _add.value = AddPlaceState(); _events.tryEmit(ContribEvent.ShowPlace(p.summary())) }
     fun step(s: AddStep) = _add.update { it.copy(step = s, error = null) }
     fun addPhotos(uris: List<Uri>) = _add.update { it.copy(photos = (it.photos + uris).distinct().take(10)) }
     fun removePhoto(u: Uri) = _add.update { it.copy(photos = it.photos - u) }
 
-    /** "Just for me": stays in the on-device DB (and the user's own backup), never sent to the server. */
+    /**
+     * "Just for me": stays in the on-device DB (and the user's own backup), never sent to the server. From B4 ("Keep it
+     * just for me") or B5, the server's not-accepted copy and any draft on the phone are removed too.
+     */
     fun savePrivate() {
         val s = _add.value
         if (!s.canContinue) return
-        _add.update { it.copy(saving = true) }
+        _add.update { it.copy(saving = true, overlay = null) }
         viewModelScope.launch {
+            // B4 "Keep it just for me": the not-accepted public copy goes; the place now lives only on this phone.
+            s.editingId?.takeIf { s.editingRejected }?.let { id -> runCatching { c.repo.deletePlace(id) } }
             val dir = File(c.app.filesDir, "photos")
             val files = s.photos.mapNotNull { u -> PhotoPrep.decode(c.app, u)?.let { PhotoPrep.saveWebp(it, dir, UUID.randomUUID().toString()) } }
             s.photos.forEach { PhotoPrep.deleteIfCameraTemp(c.app, it) }
+            s.draftId?.let { id -> runCatching { c.placeDrafts.delete(id) } }   // after its photos were copied
             val e = c.local.addPrivatePlace(s.name.trim(), s.category!!, s.pin.lat, s.pin.lng, s.address.ifBlank { null }, s.description.ifBlank { null },
                 s.phone.ifBlank { null }, s.website.ifBlank { null }, s.hours, s.amenities.toList(), files)
             _add.value = AddPlaceState()
@@ -182,40 +252,233 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
         return false
     }
 
-    fun savePublic(force: Boolean = false) {
-        if (!termsOk { savePublic(force) }) return
+    /** Which send is on screen; 0 after "Close" on A3 (the answer then arrives as a short message and in the Inbox). */
+    private var activeSend = 0
+    private var sendSeq = 0
+
+    /**
+     * "Share with everyone": POST /places (or PATCH when editing a place the check held or didn't accept), then the
+     * photos. While the server checks, A3; then the answer's screen (A4/A5/B2/B3/B4/B6) or B1/B5 for a refusal.
+     */
+    fun savePublic() {
+        if (!termsOk { savePublic() }) return
         val s = _add.value
         if (!s.canContinue || s.privateOnly) return
         // Checked again at the moment of sending (the areas may have arrived since the pin step).
         if (c.restricted.zone(s.pin) == RestrictedZone.BLOCKED) { _add.update { it.copy(blockedSheet = true, zone = RestrictedZone.BLOCKED) }; return }
         val near = c.restricted.zone(s.pin) == RestrictedZone.NEAR
-        _add.update { it.copy(saving = true, error = null, duplicate = if (force) null else it.duplicate) }
+        val token = ++sendSeq
+        activeSend = token
+        _add.update { it.copy(saving = true, error = null, overlay = AddOverlay.Checking) }
         viewModelScope.launch {
             try {
-                val p = c.repo.createPlace(CreatePlaceRequest(
-                    s.name.trim(), s.category!!, s.pin.lat, s.pin.lng, s.address.ifBlank { null }, s.description.ifBlank { null },
-                    s.phone.ifBlank { null }, s.website.ifBlank { null }, s.hours, s.amenities.toList().ifEmpty { null },
-                ))
+                val req = s.request()
+                val p = if (s.editingId != null) c.repo.updatePlace(s.editingId, req) else c.repo.createPlace(req)
                 // Photos are refused within reviewM of a restricted area (docs/safety.md B): never sent from there.
                 if (!near) s.photos.forEach { u -> PhotoPrep.decode(c.app, u)?.let { b -> runCatching { c.repo.uploadPhoto(p.id, PhotoPrep.jpeg(b), null) }.onSuccess { ph -> log.photo(ph.id, ph.url) } } }
                 s.photos.forEach { PhotoPrep.deleteIfCameraTemp(c.app, it) }
-                _add.value = AddPlaceState()
-                _events.tryEmit(ContribEvent.Message(if (p.heldForReview) R.string.restricted_held else R.string.place_added_public))
-                _events.tryEmit(ContribEvent.ShowPlace(p.summary()))
+                s.draftId?.let { runCatching { c.placeDrafts.delete(it) } }
+                val kind = PlaceGate.result(p)
+                if (activeSend != token) { _events.tryEmit(ContribEvent.Message(lateMessage(kind))); return@launch }
+                // The form stays behind the result: "Edit and try again" / "Keep it just for me" reuse it.
+                _add.update { it.copy(saving = false, overlay = AddOverlay.Result(p, kind), editingId = p.id, editingRejected = kind.notAccepted, draftId = null,
+                    notDuplicateOf = null, photos = emptyList()) }
             } catch (e: HttpException) {
                 val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
-                if (e.code() == 409) {
-                    val existing = body?.let { b -> runCatching { GimanoJson.decodeFromString(Place.serializer(), b) }.getOrNull()
-                        ?: runCatching { GimanoJson.decodeFromString(DuplicateProblem.serializer(), b).place }.getOrNull() }
-                    _add.update { it.copy(saving = false, duplicate = existing, error = if (existing == null) "duplicate" else null) }
-                } else {
-                    _add.update { it.copy(saving = false, error = problemDetail(body) ?: "HTTP ${e.code()}") }
+                val f = PlaceGate.failure(e.code(), body, e.response()?.headers()?.get("Retry-After"))
+                if (activeSend != token) { if (f !is CreateFailure.Other) _events.tryEmit(ContribEvent.Message(R.string.add_late_attention)); return@launch }
+                _add.update {
+                    when (f) {
+                        is CreateFailure.Duplicate -> it.copy(saving = false, overlay = AddOverlay.Duplicate(f.existing))
+                        is CreateFailure.RateLimited -> it.copy(saving = false, overlay = AddOverlay.Limit(f.minutes, f.retryAfterSeconds))
+                        is CreateFailure.Paused -> it.copy(saving = false, overlay = AddOverlay.Paused(f.until))
+                        is CreateFailure.Other -> it.copy(saving = false, overlay = null, error = problemDetail(body) ?: "HTTP ${e.code()}")
+                    }
                 }
             } catch (e: my.gimano.app.data.repo.RestrictedAreaException) {
-                _add.update { it.copy(saving = false, error = e.detail) }   // 422 restricted_area: the server's own words
+                _add.update { it.copy(saving = false, overlay = null, error = e.detail) }   // 422 restricted_area: the server's own words
+            } catch (e: java.io.IOException) {
+                // B6, no connection: kept on the phone and sent (and checked) when the server answers again.
+                if (s.editingId == null && my.gimano.app.core.net.Reachability.isUnreachable(e)) {
+                    val id = saveDraft(s, PlaceDraft.OFFLINE, null)
+                    if (activeSend != token) { _events.tryEmit(ContribEvent.Message(R.string.add_offline_saved)); return@launch }
+                    _add.update { it.copy(saving = false, overlay = AddOverlay.Offline, draftId = id) }
+                } else _add.update { it.copy(saving = false, overlay = null, error = e.message ?: e.javaClass.simpleName) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _add.update { it.copy(saving = false, error = e.message ?: e.javaClass.simpleName) }
+                _add.update { it.copy(saving = false, overlay = null, error = e.message ?: e.javaClass.simpleName) }
             }
+        }
+    }
+
+    /** A3 · "Close": the request carries on; its answer comes as a short message (and in the Inbox). */
+    fun closeChecking() {
+        activeSend = 0
+        _add.value = AddPlaceState()
+        _events.tryEmit(ContribEvent.Close)
+    }
+
+    private fun lateMessage(kind: AddResult): Int = when (kind) {
+        AddResult.LIVE, AddResult.GOLD -> R.string.add_late_live
+        AddResult.HELD -> R.string.add_late_held
+        AddResult.NOT_ACCEPTED, AddResult.NOT_ACCEPTED_PERSONAL -> R.string.add_late_not_accepted
+        AddResult.CHECKING -> R.string.add_late_checking
+        AddResult.PENDING -> R.string.place_added_public
+    }
+
+    /** Leaves the result screens: back to My places (the boards' "Done" / "OK"). */
+    fun finish() {
+        activeSend = 0
+        _add.value = AddPlaceState()
+        _events.tryEmit(ContribEvent.OpenMyPlaces)
+    }
+
+    fun dismissOverlay() = _add.update { it.copy(overlay = null) }
+
+    /** A4 · "Share place". */
+    fun sharePlace(p: Place) {
+        val link = String.format(java.util.Locale.US, "https://www.openstreetmap.org/?mlat=%.5f&mlon=%.5f#map=17/%.5f/%.5f", p.lat, p.lng, p.lat, p.lng)
+        _events.tryEmit(ContribEvent.Share(listOf(p.name, p.address, link).filter { it.isNotBlank() }.joinToString("\n")))
+    }
+
+    /** B1 · "Yes, that's it: suggest an edit": the existing place's card with its suggest-an-edit sheet open. */
+    fun duplicateIsSame(existing: PlaceSummary) {
+        _add.value = AddPlaceState()
+        suggestFor.value = existing.id
+        _events.tryEmit(ContribEvent.ShowPlace(existing))
+    }
+
+    /** B1 · "No, mine is a different place": sent again with that answer (notDuplicateOf). */
+    fun duplicateIsDifferent(existing: PlaceSummary?) {
+        _add.update { it.copy(overlay = null, notDuplicateOf = existing?.id) }
+        savePublic()
+    }
+
+    /** The place card opens "Suggest an edit" for this id once (B1). */
+    val suggestFor = MutableStateFlow<String?>(null)
+
+    /** B2 "Edit description" / B3 "Edit and try again": back to the form; the next send is a PATCH of the same place. */
+    fun editAgain() = _add.update { it.copy(overlay = null, step = AddStep.DETAILS, error = null) }
+
+    /** B3 / B4 · "Discard": the not-accepted place is removed from the server (only its owner could see it). */
+    fun discard(p: Place) {
+        viewModelScope.launch {
+            runCatching { c.repo.deletePlace(p.id) }
+            _add.value = AddPlaceState()
+            _events.tryEmit(ContribEvent.Message(R.string.add_discarded))
+            _events.tryEmit(ContribEvent.OpenMyPlaces)
+        }
+    }
+
+    /** B3 / B4 → C1 "Ask for a review". */
+    fun openAppeal() = _add.update { s ->
+        val r = s.overlay as? AddOverlay.Result ?: return@update s
+        s.copy(overlay = AddOverlay.Appeal(r.place, r), appealNote = "")
+    }
+
+    fun appealNote(v: String) = _add.update { it.copy(appealNote = v.take(PlaceGate.APPEAL_MAX)) }
+
+    /** C1 · back arrow: the result it came from. */
+    fun closeAppeal() = _add.update { s -> (s.overlay as? AddOverlay.Appeal)?.let { s.copy(overlay = it.back) } ?: s }
+
+    /** C1 · "Send for review": POST /places/{id}/appeal → held for a maintainer (B2, "You asked for a review"). */
+    fun sendAppeal() {
+        val s = _add.value
+        val a = s.overlay as? AddOverlay.Appeal ?: return
+        if (!termsOk { sendAppeal() }) return
+        _add.update { it.copy(appealSending = true) }
+        viewModelScope.launch {
+            runCatching { c.repo.appealPlace(a.place.id, s.appealNote.trim().ifBlank { null }) }
+                .onSuccess { p -> _add.update { it.copy(appealSending = false, overlay = AddOverlay.Result(p, AddResult.HELD), appealNote = "") } }
+                .onFailure { e ->
+                    _add.update { it.copy(appealSending = false) }
+                    _events.tryEmit(failure(e, if ((e as? HttpException)?.code() == 409) R.string.appeal_already else R.string.action_failed))
+                }
+        }
+    }
+
+    // ---------------------------------------------------------------- drafts on the phone (B5, B6)
+
+    /** B5 · "Save draft": kept on this phone (outbox, never backed up), shared later from My places. */
+    fun saveLimitedDraft() {
+        val s = _add.value
+        val (reason, notBefore) = when (val o = s.overlay) {
+            is AddOverlay.Limit -> PlaceDraft.LIMIT to o.retryAfterSeconds?.let { java.time.Instant.now().plusSeconds(it.toLong()) }
+            is AddOverlay.Paused -> PlaceDraft.PAUSED to o.until
+            else -> PlaceDraft.LIMIT to null
+        }
+        viewModelScope.launch {
+            saveDraft(s, reason, notBefore)
+            _add.value = AddPlaceState()
+            _events.tryEmit(ContribEvent.Message(R.string.add_draft_saved))
+            _events.tryEmit(ContribEvent.OpenMyPlaces)
+        }
+    }
+
+    /** Copies the photos (metadata-stripped JPEG) and stores the draft; returns its id. */
+    private suspend fun saveDraft(s: AddPlaceState, reason: String, notBefore: java.time.Instant?): String {
+        val id = s.draftId ?: ("draft-" + UUID.randomUUID().toString())
+        val near = c.restricted.zone(s.pin) == RestrictedZone.NEAR
+        val existing = c.placeDrafts.get(id)?.photos.orEmpty().toSet()
+        val photos = if (near) emptyList() else s.photos.mapIndexedNotNull { i, u ->
+            u.path?.takeIf { u.scheme == "file" && it in existing }
+                ?: PhotoPrep.decode(c.app, u)?.let { b -> c.placeDrafts.photoFile(id, i + existing.size).also { f -> f.writeBytes(PhotoPrep.jpeg(b)) }.path }
+        }
+        s.photos.forEach { PhotoPrep.deleteIfCameraTemp(c.app, it) }
+        c.placeDrafts.save(PlaceDraft(id, s.request().copy(notDuplicateOf = s.notDuplicateOf), reason, notBefore?.toString(),
+            java.time.Instant.now().toString(), photos, nearArea = near))
+        return id
+    }
+
+    /** My places · a draft: back into the flow; before its time is up, B5 says how long is left. */
+    fun openDraft(id: String) {
+        viewModelScope.launch {
+            val d = c.placeDrafts.get(id) ?: return@launch
+            val r = d.request
+            val pin = GeoPoint(r.lat, r.lng)
+            val now = java.time.Instant.now()
+            val left = d.readyAt()?.takeIf { it.isAfter(now) }?.let { java.time.Duration.between(now, it).seconds.toInt() }
+            _add.value = AddPlaceState(
+                step = AddStep.VISIBILITY, pin = pin, address = r.address.orEmpty(), name = r.name, category = r.category, phone = r.phone.orEmpty(),
+                website = r.website.orEmpty(), description = r.description.orEmpty(), amenities = r.amenities.orEmpty().toSet(),
+                hoursEnabled = r.openingHours != null, photos = d.photos.map { Uri.fromFile(File(it)) }, zone = c.restricted.zone(pin),
+                draftId = d.id, notDuplicateOf = r.notDuplicateOf, fromList = true,
+                overlay = when {
+                    left == null -> null
+                    d.reason == PlaceDraft.PAUSED -> AddOverlay.Paused(d.readyAt())
+                    else -> AddOverlay.Limit(PlaceGate.minutes(left), left)
+                },
+            ).let { st -> r.openingHours?.let { h -> st.withHours(h) } ?: st }
+            _events.tryEmit(ContribEvent.OpenAddPlace)
+        }
+    }
+
+    /** My places · "Discard" on a draft. */
+    fun discardDraft(id: String) = viewModelScope.launch { c.placeDrafts.delete(id) }
+
+    /**
+     * Inbox (place_held / place_not_accepted / place_live) or My places: the result screen for one of my places, with
+     * the form filled in behind it (so "Edit and try again" and "Keep it just for me" work).
+     */
+    fun openResult(placeId: String, summary: PlaceSummary? = null) {
+        viewModelScope.launch {
+            val mine = summary ?: runCatching { c.repo.contributedPlaces() }.getOrNull()?.firstOrNull { it.id == placeId }
+            val detail = runCatching { c.repo.place(placeId) }.getOrNull()
+            val p = (detail ?: mine?.let { m -> Place(m.id, m.name, m.category, m.address, m.lat, m.lng, source = m.source) } ?: run {
+                _events.tryEmit(ContribEvent.Message(R.string.action_failed)); return@launch
+            }).let { d ->
+                // The owner's view (status, check, confirmations) comes from GET /me/places/contributed.
+                if (mine == null) d else d.copy(status = mine.status ?: d.status, heldForReview = mine.heldForReview, screening = mine.screening ?: d.screening,
+                    confirmationsWeighted = mine.confirmationsWeighted ?: d.confirmationsWeighted, required = mine.required ?: d.required)
+            }
+            val pin = GeoPoint(p.lat, p.lng)
+            _add.value = AddPlaceState(
+                step = AddStep.DETAILS, pin = pin, address = p.address, name = p.name, category = p.category, phone = p.phone.orEmpty(),
+                website = p.website.orEmpty(), description = p.description.orEmpty(), amenities = p.amenities.toSet(), zone = c.restricted.zone(pin),
+                editingId = p.id, editingRejected = PlaceGate.result(p).notAccepted, fromList = true, overlay = AddOverlay.Result(p, PlaceGate.result(p)),
+            ).let { st -> p.openingHours?.let { h -> st.withHours(h) } ?: st }
+            _events.tryEmit(ContribEvent.OpenAddPlace)
         }
     }
 
@@ -396,8 +659,9 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     }
 }
 
-@kotlinx.serialization.Serializable
-data class DuplicateProblem(val place: Place? = null)
+/** The form with a place's OSM opening_hours filled in (unreadable hours leave the editor off). */
+fun AddPlaceState.withHours(h: String): AddPlaceState =
+    OpeningHours.parse(h)?.let { (w, all) -> copy(hoursEnabled = true, week = w, open247 = all) } ?: this
 
 /** What a vote needs about the place. */
 data class VetTarget(val id: String, val lat: Double, val lng: Double, val rural: Boolean) {
