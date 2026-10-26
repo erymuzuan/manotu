@@ -493,9 +493,11 @@ final class EventCenter {
     func checkDeferredLink(defaults: UserDefaults = .standard) {
         let eligible = EventDeferredLink.isEligible(defaults: defaults, now: now(), hasEvents: !events.isEmpty || !hosted.isEmpty)
         guard eligible, UIPasteboard.general.hasStrings || UIPasteboard.general.hasURLs else { return }
-        UIPasteboard.general.detectPatterns(for: [.probableWebURL]) { result in
+        // UIKit calls this back on a background queue: as a plain closure it inherited the main actor and crashed
+        // (dispatch_assert_queue) whenever the clipboard held a link.
+        UIPasteboard.general.detectPatterns(for: [.probableWebURL]) { @Sendable [weak self] result in
             guard case .success(let found) = result, found.contains(.probableWebURL) else { return }
-            Task { @MainActor [weak self] in self?.showDeferredLinkCard = true }
+            Task { @MainActor in self?.showDeferredLinkCard = true }
         }
     }
 

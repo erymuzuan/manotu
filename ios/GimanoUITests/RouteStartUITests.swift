@@ -30,14 +30,11 @@ final class RouteStartUITests: XCTestCase {
     }
 
     /// Route options before a drive (live dev server): a long trip opens the route list, a tap compares with the fastest.
-    /// On a phone the real GPS fix is used; on the simulator the fake location is PJ Section 17.
     func test_RouteOptionsList() {
         let app = XCUIApplication()
-        var args = ["-GimanoDataMode", "live", "-GimanoSkipOnboarding", "YES", "-GimanoNoAutoStart", "YES", "-AppleLanguages", "(en)"]
-        #if targetEnvironment(simulator)
-        args += ["-GimanoFakeLocation", "3.1170,101.6290"]
-        #endif
-        app.launchArguments = args
+        // A fixed start in PJ Section 17 (Debug builds only), so the trip is the same on the simulator and on a phone.
+        app.launchArguments = ["-GimanoDataMode", "live", "-GimanoSkipOnboarding", "YES", "-GimanoNoAutoStart", "YES",
+                               "-GimanoFakeLocation", "3.1170,101.6290", "-AppleLanguages", "(en)"]
         app.launch()
         func shot(_ name: String) { let a = XCTAttachment(screenshot: app.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }
         XCTAssertTrue(app.buttons["whereTo"].waitForExistence(timeout: 40))
@@ -47,6 +44,13 @@ final class RouteStartUITests: XCTestCase {
         let r = app.buttons.matching(identifier: "searchResult").firstMatch
         XCTAssertTrue(r.waitForExistence(timeout: 20)); r.tap()
         XCTAssertTrue(app.buttons["routesButton"].waitForExistence(timeout: 10)); app.buttons["routesButton"].tap()
+        // A fresh install on a phone: grant location through the system prompt.
+        if app.buttons["startAllowLocation"].waitForExistence(timeout: 5) {
+            app.buttons["startAllowLocation"].tap()
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let allow = springboard.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Allow While Using' OR label BEGINSWITH 'Allow Once'")).firstMatch
+            if allow.waitForExistence(timeout: 10) { allow.tap() }
+        }
         let cards = app.buttons.matching(identifier: "routeCard")
         XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 60), "a long trip opens the route list")
         sleep(2)
