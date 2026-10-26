@@ -184,7 +184,7 @@ must be rejected in review.
 ## Public mobile distribution
 
 - APK/IPA and AltStore instructions: `docs/sideloading.md`.
-- Manotu TestFlight and App Store ownership must use Erymuzuan Mustapa's **individual** Apple Developer team, never STAFY COMPANY LIMITED. Verify the selected team before any identifier, signing or upload operation.
+- **Apple distribution uses STAFY COMPANY LIMITED (98KY9PMPX3)** for Manotu (`my.manotu.app`, App Store Connect app `6826478029`), including TestFlight and production App Store releases (owner explicitly reconfirmed 26 October 2026). This supersedes the previous individual-team-only rule. Verify the selected team before any identifier, signing or upload operation. Do not create a duplicate app or transfer ownership without the owner's instruction.
 - AltStore builds have no team-bound iCloud/Google configuration; publish the limitation and retain file backup/restore. Never distribute personal provisioning profiles.
 
 ## Approved proprietary platform dependencies
