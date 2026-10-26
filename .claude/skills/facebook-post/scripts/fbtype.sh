@@ -1,9 +1,10 @@
-# Source me: typing helpers for the Facebook app on the S24 (SwiftKey keyboard).
-# t "text"      type ASCII text (spaces become %s)
+# Source me: typing helpers for the Facebook app on the S24.
+# Check the keyboard first: adb shell settings get secure default_input_method (SwiftKey on 26 Oct 2026).
+# t "text"      type ASCII text (spaces become %s; apostrophes are fine, avoid " $ ` \)
 # n             new line
 # e word [N]    insert the Nth result of a keyboard emoji search (default 1)
 export ANDROID_SERIAL="${ANDROID_SERIAL:-RFCXA0LVBTE}"
-t() { local s="${1// /%s}"; adb shell "input text '$s'"; }
+t() { local s="${1// /%s}"; adb shell "input text \"$s\""; }
 n() { adb shell input keyevent KEYCODE_ENTER; }
 e() {
   adb shell input tap 161 2135; sleep 1.5          # emoji key (keyboard without pop-up banners)

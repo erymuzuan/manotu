@@ -38,6 +38,16 @@ Useful identifiers: `whereTo`, `searchField`, `searchResult`, `routesButton`, `r
 `eventAddInfo.<kind>`, `eventShareInvitation`. Existing UI tests (`EventHostUITests`, `RouteStartUITests`) show
 working flows.
 
+Driving shots: launch with `-GimanoDriveTo "Name|lat,lng|"`, `-GimanoSimSpeed route`, `-GimanoSimTick 1`
+(optionally `-debug.simulationSpeedup 2`) and the app drives the route by itself. Wait for the element you want
+(e.g. `tollBanner`, which appears 1 km before a plaza, 500 m below 60 km/h) by polling every 1–2 s, and take two
+shots ~2 s apart (banners animate in). Some ids match more than one element: `etaClock` needs `app.buttons["etaClock"]`.
+`xcrun simctl status_bar <sim> override --time 9:41` tidies the status bar, but then the app's ETA clock won't
+match it; leave the override off if the ETA is visible.
+
+To keep the repo change short: append the test class, run `build-for-testing`, `git checkout` the file at once,
+then `test-without-building`.
+
 Run and export:
 
 ```bash
