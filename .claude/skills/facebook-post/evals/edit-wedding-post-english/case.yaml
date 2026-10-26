@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: edit-wedding-post-english
+expected_outcome: |
+  The existing wedding post is found on the Manotu page and opened in Edit post, a short accurate English summary is drafted and shown, typed under the Malay text with autocorrect damage fixed, and the run stops before Save for the owner's OK.
