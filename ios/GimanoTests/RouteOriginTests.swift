@@ -105,7 +105,8 @@ struct RouteChoicesTests {
 
     @Test("The road a route is known by")
     func via() {
-        #expect(RouteChoices.via(e5) == "E5")
+        #expect(RouteChoices.via(e5) == "E5")   // no summary: its own main road
+        #expect(RouteChoices.via(Self.route("c", 1, 1, toll: 0, via: ["E20"], summary: "Via E5 Lebuhraya Shah Alam")) == "E5")
         #expect(RouteChoices.via(Self.route("a", 1, 1, toll: 0, summary: "Via E23 Damansara Link")) == "E23")
         #expect(RouteChoices.via(Self.route("b", 1, 1, toll: 0, summary: "Via Jalan Klang Lama, FT2")) == "Jalan Klang Lama")
     }

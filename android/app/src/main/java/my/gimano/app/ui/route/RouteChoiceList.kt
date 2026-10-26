@@ -277,12 +277,11 @@ private fun reasonLabel(code: String): String? = when (code) {
     else -> null
 }
 
-/** The road a route is known by: its own main road, else the first road of "Via E5 …". */
+/** The road a route is known by: the first road of "Via E5 …" (matches its card), else its own main road. */
 private fun viaOf(r: Route): String? {
-    r.viaRoads.orEmpty().firstOrNull()?.let { return it }
     val first = r.summary.removePrefix("Via ").substringBefore(",").trim()
     val ref = first.substringBefore(" ")
-    return (if (ROAD_REF.matches(ref)) ref else first).ifBlank { null }
+    return (if (ROAD_REF.matches(ref)) ref else first).ifBlank { null } ?: r.viaRoads.orEmpty().firstOrNull()
 }
 
 private val ROAD_REF = Regex("^(AH|FT|[A-Z])?\\d{1,4}[A-Z]?$")

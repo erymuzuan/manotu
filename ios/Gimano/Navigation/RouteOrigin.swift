@@ -105,14 +105,13 @@ enum RouteChoices {
         return r.tollFareComplete == true ? r.tollEstimateMyr : nil
     }
 
-    /// The road a route is known by: its own main road, else the first road of "Via E5 …".
+    /// The road a route is known by: the first road of "Via E5 …" (matches its card), else its own main road.
     static func via(_ r: Route) -> String? {
-        if let v = r.viaRoads?.first { return v }
         let first = r.summary.hasPrefix("Via ") ? String(r.summary.dropFirst(4)) : r.summary
         let road = first.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
         let ref = road.split(separator: " ").first.map(String.init) ?? ""
         let isRef = ref.range(of: #"^(AH|FT|[A-Z])?\d{1,4}[A-Z]?$"#, options: .regularExpression) != nil
         let out = isRef ? ref : road
-        return out.isEmpty ? nil : out
+        return out.isEmpty ? r.viaRoads?.first : out
     }
 }
