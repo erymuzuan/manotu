@@ -122,8 +122,8 @@ android {
         create("manotu") {
             dimension = "brand"
             applicationId = "my.manotu.app"
-            versionCode = prop("manotu.versionCode", "12").toInt()
-            versionName = prop("manotu.versionName", "0.4.0")
+            versionCode = prop("manotu.versionCode", "13").toInt()
+            versionName = prop("manotu.versionName", "0.4.1")
             buildConfigField("String", "UPDATE_MANIFEST_URL", "\"https://manotu.app/download/version.json\"")
         }
     }
