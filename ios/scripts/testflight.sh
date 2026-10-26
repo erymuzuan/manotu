@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "${0:A:h}/.."
 source Config/asc.env
-: "${ASC_ISSUER_ID:?}" "${ASC_KEY_ID:?}" "${ASC_KEY_PATH:?}" "${ASC_TEAM_ID:?set ASC_TEAM_ID to Erymuzuan Mustapa's individual team id}"
+: "${ASC_ISSUER_ID:?}" "${ASC_KEY_ID:?}" "${ASC_KEY_PATH:?}" "${ASC_TEAM_ID:?set ASC_TEAM_ID to the approved store team, STAFY COMPANY LIMITED (98KY9PMPX3)}"
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
 BUILD=${1:-}
 # The store build has neither iCloud (App ID has no container yet) nor Google Drive backup (owner decision 2026-10-24).
@@ -25,13 +25,14 @@ echo "iCloud=$(plutil -extract GimanoICloudEnabled raw -o - "$INFO") Drive=$(plu
 if [[ "$GIMANO_DRIVE" == NO ]] && grep -q googleusercontent "$INFO"; then
   echo "Refusing: GIMANO_DRIVE=NO but a Google OAuth client is in Info.plist." >&2; exit 1
 fi
-# AGENTS.md: TestFlight/App Store must use the individual team, never STAFY COMPANY LIMITED.
+# AGENTS.md (owner reconfirmed 26 Oct 2026): Manotu TestFlight/App Store uses STAFY COMPANY LIMITED, team 98KY9PMPX3.
+APPROVED_TEAM_ID=98KY9PMPX3
 APP="$OUT/Gimano.xcarchive/Products/Applications/Gimano.app"
 TEAM_NAME=$(security cms -D -i "$APP/embedded.mobileprovision" | plutil -extract TeamName raw -)
 TEAM_ID=$(security cms -D -i "$APP/embedded.mobileprovision" | plutil -extract TeamIdentifier.0 raw -)
 echo "Signed by team: $TEAM_NAME ($TEAM_ID)"
-if [[ "$TEAM_ID" != "$ASC_TEAM_ID" || "$TEAM_NAME" == *STAFY* ]]; then
-  echo "Refusing: archive is not signed by the individual team $ASC_TEAM_ID." >&2; exit 1
+if [[ "$ASC_TEAM_ID" != "$APPROVED_TEAM_ID" || "$TEAM_ID" != "$APPROVED_TEAM_ID" ]]; then
+  echo "Refusing: archive is not signed by the approved store team $APPROVED_TEAM_ID (got $TEAM_NAME $TEAM_ID)." >&2; exit 1
 fi
 xcodebuild -exportArchive -archivePath "$OUT/Gimano.xcarchive" -exportPath "$OUT/export" \
   -exportOptionsPlist Config/ExportOptions-AppStore.plist "${AUTH[@]}"

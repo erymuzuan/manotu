@@ -21,9 +21,9 @@ Demo data is used only when the server is unreachable or returns 5xx.
 Google client ids live in the git-ignored `Config/Google.xcconfig` (see `Config/Google.xcconfig.example`).
 Build the legacy app with `APP_VARIANT=gimano` (Local.xcconfig or the xcodebuild command line).
 
-### Building for a device once the individual team exists
+### Building for a device
 
-1. Put the **individual** team id in `Config/Local.xcconfig`: `DEVELOPMENT_TEAM = <individual team id>` (never STAFY).
+1. Put the team id in `Config/Local.xcconfig`: `DEVELOPMENT_TEAM = 98KY9PMPX3`.
 2. In Xcode → Settings → Accounts, sign in with that Apple ID (or pass an App Store Connect API key, see below).
 3. developer.apple.com → Identifiers: register **`my.manotu.app`** with capabilities iCloud (CloudKit container
    `iCloud.my.manotu.app`), Background Modes and App Attest (DeviceCheck); automatic signing then creates the profiles.
@@ -33,15 +33,14 @@ Build the legacy app with `APP_VARIANT=gimano` (Local.xcconfig or the xcodebuild
 
 ## One-time setup
 
-> **Team:** TestFlight and the App Store must use Erymuzuan Mustapa's **individual** Apple Developer team, never
-> STAFY COMPANY LIMITED (AGENTS.md). The local `Config/Local.xcconfig` used for device testing currently points at
-> STAFY (98KY9PMPX3), so `scripts/testflight.sh` passes `DEVELOPMENT_TEAM=$ASC_TEAM_ID` explicitly and refuses to
-> upload an archive signed by any other team. Create the App Store Connect app and API key under the individual team.
+> **Team:** TestFlight and the App Store use **STAFY COMPANY LIMITED, team 98KY9PMPX3** (AGENTS.md; owner reconfirmed
+> 26 Oct 2026). `scripts/testflight.sh` passes `DEVELOPMENT_TEAM=$ASC_TEAM_ID` explicitly and refuses to upload an
+> archive signed by any other team. The App Store Connect app (`6826478029`) and the API key belong to that team.
 
 1. **App Store Connect app**: My Apps → + → New App → iOS, name "Gimano", bundle id `my.gimano.app`, SKU `gimano-ios`.
 2. **API key**: App Store Connect → Users and Access → Integrations → App Store Connect API → generate a key with the
    **App Manager** role. Download `AuthKey_<KEY_ID>.p8` (it can be downloaded only once) and note the Issuer ID and Key ID.
-3. `cp Config/asc.env.example Config/asc.env` and fill in `ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_KEY_PATH`, `ASC_TEAM_ID` (individual team).
+3. `cp Config/asc.env.example Config/asc.env` and fill in `ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_KEY_PATH`, `ASC_TEAM_ID` (STAFY, 98KY9PMPX3).
    `Config/asc.env` and `*.p8` are git-ignored; never commit them.
 4. `Config/Local.xcconfig` (git-ignored) must contain `DEVELOPMENT_TEAM = <your team id>`, as for development builds.
    `Config/Google.xcconfig` (git-ignored) holds the Google Drive client ids (see `Config/Google.xcconfig.example`).
