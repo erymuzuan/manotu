@@ -7,7 +7,7 @@ namespace Gimano.Core.Search;
 public static class SearchAliases
 {
     /// <summary>OSM name variants indexed for areas ("Wilayah Persekutuan Putrajaya", "Kuala Lumpur" for name:en …).</summary>
-    public static readonly string[] AreaNameTags = ["official_name", "alt_name", "short_name", "old_name", "name:en", "name:ms"];
+    public static readonly string[] AreaNameTags = ["official_name", "alt_name", "short_name", "old_name", "name:en", "name:ms", "name:zh", "name:ta"];
 
     public static string? AreaVariants(string name, IReadOnlyDictionary<string, string>? tags)
     {

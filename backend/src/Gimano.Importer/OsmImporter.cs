@@ -37,6 +37,7 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
 
     public async Task RunAsync(ImportOptions o, CancellationToken ct)
     {
+        await using var rebuildLock = o.DryRun ? null : await SearchRebuildLock.AcquireAsync(dataSource, true, ct);
         var sw = Stopwatch.StartNew();
         if (!o.DryRun)
         {
@@ -51,12 +52,13 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
             // ---- Pass 1: ways -------------------------------------------------
             var roads = new List<RoadWay>();
             var poiWays = new List<PoiWay>();
+            var poiRelations = new List<(long Id, PlaceCategory Category, Dictionary<string, string> Tags, long[] OuterWays, long[] InnerWays)>();
             var waterWays = new List<(long Id, long[] Nodes)>();
             var restrictedWays = new List<(long Id, long[] Nodes)>();
             var restrictedRels = new List<(long Id, long[] OuterWays)>();
             var adminAreas = new List<(long Id, long LabelNode, Dictionary<string, string> Tags)>();
             var addrWays = new List<(long Id, long[] Nodes, Dictionary<string, string> Tags)>();
-            var boundaries = new List<(long Id, string Name, int Level, long[] OuterWays)>();
+            var boundaries = new List<(long Id, string Name, int Level, long[] OuterWays, long[] InnerWays)>();
             var needed = new List<long>();
             await using (var fs = File.OpenRead(o.PbfPath))
             {
@@ -74,6 +76,16 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
                         }
                         if (o.Places && g.Tags is { Count: > 0 } && Boundary((Relation)g) is { } b) boundaries.Add(b);
                         if (o.Places && g.Tags is { Count: > 0 } && RestrictedRelation((Relation)g) is { } rr) restrictedRels.Add(rr);
+                        if (o.Places && g.Tags is { Count: > 0 })
+                        {
+                            var relation = (Relation)g;
+                            var relationTags = ToDict(g.Tags);
+                            if (relationTags.GetValueOrDefault("type") == "multipolygon" && OsmCategoryMapper.Map(relationTags) is { } category
+                                && OsmCategoryMapper.ShouldImport(category, relationTags))
+                                poiRelations.Add((g.Id!.Value, category, relationTags,
+                                    (relation.Members ?? []).Where(m => m.Type == OsmGeoType.Way && m.Role != "inner").Select(m => m.Id).ToArray(),
+                                    (relation.Members ?? []).Where(m => m.Type == OsmGeoType.Way && m.Role == "inner").Select(m => m.Id).ToArray()));
+                        }
                         continue;
                     }
                     var w = (Way)g;
@@ -113,9 +125,9 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
             }
             // ---- Pass 1b: outer ways of admin boundaries and restricted multipolygons (ways come before relations, so a second look) ----
             var boundaryWays = new Dictionary<long, long[]>();
-            if (boundaries.Count > 0 || restrictedRels.Count > 0)
+            if (boundaries.Count > 0 || restrictedRels.Count > 0 || poiRelations.Count > 0)
             {
-                var wanted = boundaries.SelectMany(b => b.OuterWays).Concat(restrictedRels.SelectMany(r => r.OuterWays)).ToHashSet();
+                var wanted = boundaries.SelectMany(b => b.OuterWays.Concat(b.InnerWays)).Concat(restrictedRels.SelectMany(r => r.OuterWays)).Concat(poiRelations.SelectMany(r => r.OuterWays.Concat(r.InnerWays))).ToHashSet();
                 await using var fs = File.OpenRead(o.PbfPath);
                 foreach (var g in new PBFOsmStreamSource(fs))
                 {
@@ -187,6 +199,14 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
                     outlines.Add(("w" + w.Id, pts));
             }
 
+            foreach (var relation in poiRelations)
+            {
+                var shape = AssemblePolygon(relation.OuterWays, relation.InnerWays, boundaryWays, TryCoord);
+                if (shape is null) continue;
+                var point = shape.PointOnSurface;
+                places.Add(ToPlace("r", relation.Id, relation.Category, relation.Tags, point.Y, point.X));
+            }
+
             foreach (var w in addrWays)
             {
                 var pts = w.Nodes.Select(id => TryCoord(id, out var p) ? p : (GeoPoint?)null).OfType<GeoPoint>().ToList();
@@ -238,6 +258,8 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
             if (o.Places) await WriteEntrancesAsync(entrances, outlines, ct);
             else if (o.Roads) await DropRestrictedRoadsAsync(ct);
             if (o.Places && o.Roads) await EnrichAddressesAsync(ct);
+            if (o.Places) await PlaceCorrections.ReplayAsync(db, ct);
+            if (o.Places) await EnrichLocalitiesAsync(ct);
         }
 
         if (!o.DryRun && o.TollsCsv is not null) await ImportTollRatesAsync(o.TollsCsv, ct);
@@ -355,13 +377,13 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
     }
 
     /// <summary>admin_level 4–8 boundary relations with a name, and their outer member ways.</summary>
-    internal static (long Id, string Name, int Level, long[] OuterWays)? Boundary(Relation r)
+    internal static (long Id, string Name, int Level, long[] OuterWays, long[] InnerWays)? Boundary(Relation r)
     {
         var tags = ToDict(r.Tags);
         if (tags.GetValueOrDefault("boundary") != "administrative" || !tags.TryGetValue("name", out var name) || name.Length == 0) return null;
         if (!int.TryParse(tags.GetValueOrDefault("admin_level"), out var level) || level is < 4 or > 8) return null;
         var outers = (r.Members ?? []).Where(m => m.Type == OsmGeoType.Way && m.Role is "outer" or "" or null).Select(m => m.Id).ToArray();
-        return outers.Length == 0 ? null : (r.Id!.Value, name, level, outers);
+        return outers.Length == 0 ? null : (r.Id!.Value, name, level, outers, (r.Members ?? []).Where(m => m.Type == OsmGeoType.Way && m.Role == "inner").Select(m => m.Id).ToArray());
     }
 
     /// <summary>OSM entrance=* (not exits, emergency-only or "no"); the value is kept to rank and word it ("main" first).</summary>
@@ -481,6 +503,11 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
         }
         logger.LogInformation("Wrote {Count} restricted areas", count);
         await DropRestrictedRoadsAsync(ct);
+        await using var hide = new NpgsqlCommand("""
+            DELETE FROM places p USING restricted_areas r WHERE ST_DWithin(p.location, r.geom, 100);
+            DELETE FROM street_addresses p USING restricted_areas r WHERE ST_DWithin(p.location, r.geom, 100);
+            """, conn) { CommandTimeout = 1800 };
+        await hide.ExecuteNonQueryAsync(ct);
     }
 
     private async Task DropRestrictedRoadsAsync(CancellationToken ct)
@@ -516,7 +543,44 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
         return rings;
     }
 
-    private async Task WriteBoundariesAsync(List<(long Id, string Name, int Level, long[] OuterWays)> boundaries, Dictionary<long, long[]> ways,
+    private static NetTopologySuite.Geometries.MultiPolygon? AssemblePolygon(long[] outerIds, long[] innerIds,
+        Dictionary<long, long[]> ways, CoordLookup coord)
+    {
+        if (outerIds.Concat(innerIds).Any(id => !ways.ContainsKey(id))) return null;
+        List<NetTopologySuite.Geometries.LinearRing> Rings(long[] ids)
+        {
+            var result = new List<NetTopologySuite.Geometries.LinearRing>();
+            foreach (var nodes in AssembleRings(ids.Select(id => ways[id])))
+            {
+                var points = new List<NetTopologySuite.Geometries.Coordinate>();
+                foreach (var node in nodes)
+                {
+                    if (!coord(node, out var at)) return [];
+                    points.Add(new(at.Lng, at.Lat));
+                }
+                var ring = GeoMath.Factory.CreateLinearRing(points.ToArray());
+                if (!ring.IsValid) return [];
+                result.Add(ring);
+            }
+            return result;
+        }
+        var shells = Rings(outerIds); var holes = Rings(innerIds);
+        if (shells.Count == 0 || (innerIds.Length > 0 && holes.Count == 0)) return null;
+        var polygons = new List<NetTopologySuite.Geometries.Polygon>();
+        foreach (var shell in shells)
+        {
+            var outside = GeoMath.Factory.CreatePolygon(shell);
+            var inside = holes.Where(h => outside.Covers(GeoMath.Factory.CreatePolygon(h))).ToArray();
+            var polygon = GeoMath.Factory.CreatePolygon(shell, inside);
+            if (!polygon.IsValid) return null;
+            if (!polygon.Shell.IsCCW) polygon = (NetTopologySuite.Geometries.Polygon)polygon.Reverse();
+            polygons.Add(polygon);
+        }
+        var multi = GeoMath.Factory.CreateMultiPolygon(polygons.ToArray());
+        return multi.IsValid ? multi : null;
+    }
+
+    private async Task WriteBoundariesAsync(List<(long Id, string Name, int Level, long[] OuterWays, long[] InnerWays)> boundaries, Dictionary<long, long[]> ways,
         CoordLookup coord, CancellationToken ct)
     {
         await using var conn = await dataSource.OpenConnectionAsync(ct);
@@ -526,24 +590,13 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
         {
             foreach (var b in boundaries.DistinctBy(b => b.Id))
             {
-                var polys = new List<NetTopologySuite.Geometries.Polygon>();
-                foreach (var ring in AssembleRings(b.OuterWays.Where(ways.ContainsKey).Select(id => ways[id])))
-                {
-                    var pts = new List<NetTopologySuite.Geometries.Coordinate>(ring.Count);
-                    foreach (var n in ring) if (coord(n, out var p)) pts.Add(new(p.Lng, p.Lat));
-                    if (pts.Count < 4 || !pts[0].Equals2D(pts[^1])) continue;
-                    var poly = GeoMath.Factory.CreatePolygon(pts.ToArray());
-                    if (!poly.IsValid) poly = poly.Buffer(0) as NetTopologySuite.Geometries.Polygon ?? poly;
-                    if (!poly.IsValid || poly.IsEmpty) continue;
-                    if (!poly.Shell.IsCCW) poly = (NetTopologySuite.Geometries.Polygon)poly.Reverse();
-                    polys.Add(poly);
-                }
-                if (polys.Count == 0) continue;
+                var shape = AssemblePolygon(b.OuterWays, b.InnerWays, ways, coord);
+                if (shape is null) continue;
                 await writer.StartRowAsync(ct);
                 await writer.WriteAsync(b.Id, NpgsqlDbType.Bigint, ct);
                 await writer.WriteAsync(Truncate(b.Name, 200), NpgsqlDbType.Text, ct);
                 await writer.WriteAsync(b.Level, NpgsqlDbType.Integer, ct);
-                await writer.WriteAsync(GeoMath.Factory.CreateMultiPolygon(polys.ToArray()), NpgsqlDbType.Geography, ct);
+                await writer.WriteAsync(shape, NpgsqlDbType.Geography, ct);
                 count++;
             }
             await writer.CompleteAsync(ct);
@@ -552,7 +605,7 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
     }
 
     internal static bool IsAddress(IReadOnlyDictionary<string, string> tags) =>
-        tags.TryGetValue("addr:housenumber", out var hn) && hn.Length is > 0 and <= 40
+        ImportEligibility.IncludeAddress(tags) && tags.TryGetValue("addr:housenumber", out var hn) && hn.Length is > 0 and <= 40
         && tags.TryGetValue("addr:street", out var st) && st.Length is > 0 and <= 200;
 
     internal static AddressPoint ToAddress(string id, IReadOnlyDictionary<string, string> tags, double lat, double lng) => new(
@@ -694,6 +747,30 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
         logger.LogInformation("Filled {Count} missing addresses from nearby roads", n);
     }
 
+    /// <summary>Area context for every POI, independently of whether it already has a street address.</summary>
+    internal async Task EnrichLocalitiesAsync(CancellationToken ct)
+    {
+        const string sql = """
+            UPDATE places p SET tags = p.tags || jsonb_build_object('manotu:admin_names', areas.names)
+            FROM (SELECT p2.id, string_agg(DISTINCT a.name, ', ') AS names
+                  FROM places p2 JOIN admin_areas a ON ST_Covers(a.geom, p2.location)
+                  WHERE p2.category <> 'Area' GROUP BY p2.id) areas WHERE p.id = areas.id;
+            UPDATE places p SET tags = p.tags || jsonb_build_object(
+                'manotu:locality', a.name, 'manotu:locality_id', a.id, 'manotu:locality_method', 'nearest_place')
+            FROM (SELECT p2.id,
+                (SELECT a.id FROM places a WHERE a.category = 'Area' AND a.country = p2.country
+                    AND a.tags->>'place' IN ('city','town','village','suburb','neighbourhood','quarter')
+                    AND ST_DWithin(a.location, p2.location,
+                        CASE WHEN a.tags->>'place' IN ('city','town') THEN 20000 ELSE 2500 END)
+                    ORDER BY a.location <-> p2.location LIMIT 1) AS area_id
+                FROM places p2 WHERE p2.category <> 'Area') near
+            JOIN places a ON a.id = near.area_id WHERE p.id = near.id;
+            """;
+        await using var conn = await dataSource.OpenConnectionAsync(ct);
+        await using var cmd = new NpgsqlCommand(sql, conn) { CommandTimeout = 1800 };
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     /// <summary>Loads data/tolls/my-toll-rates.csv, matches rows to OSM toll plazas, replaces toll_rates and writes a match report.</summary>
     private async Task ImportTollRatesAsync(string csvPath, CancellationToken ct)
     {
@@ -773,15 +850,18 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
         await using var conn = await dataSource.OpenConnectionAsync(ct);
 
         // One document per street name per geohash-4 cell (~20-40 km), snapped onto the road.
+        var streetEdits = (await db.PlaceSuggestions.AsNoTracking().Where(s => s.Status == SuggestionStatus.Applied && s.StreetOriginalName != null)
+            .OrderBy(s => s.AppliedAt).ThenBy(s => s.Id).ToListAsync(ct)).GroupBy(s => s.PlaceId).Select(g => g.Last()).ToList();
+        var editedWays = streetEdits.SelectMany(s => s.StreetWayIds).ToHashSet();
         var streets = 0;
         var buffer = new List<System.Text.Json.Nodes.JsonObject>(2000);
         await using (var cmd = new NpgsqlCommand("""
-            SELECT 'st-' || gh || '-' || left(md5(name), 10), name, ST_Y(pt), ST_X(pt) FROM (
-              SELECT name, gh, ST_ClosestPoint(ST_Collect(g), ST_Centroid(ST_Collect(g))) AS pt FROM (
-                SELECT name, geom::geometry AS g, ST_GeoHash(ST_StartPoint(geom::geometry), 4) AS gh
-                FROM road_segments WHERE name IS NOT NULL AND name <> '') s
+            SELECT 'st-' || gh || '-' || left(md5(name), 10), name, ST_Y(pt), ST_X(pt), ways FROM (
+              SELECT name, gh, array_agg(DISTINCT osm_way_id) AS ways, ST_ClosestPoint(ST_Collect(g), ST_Centroid(ST_Collect(g))) AS pt FROM (
+                SELECT name, osm_way_id, geom::geometry AS g, ST_GeoHash(ST_StartPoint(geom::geometry), 4) AS gh
+                FROM road_segments WHERE name IS NOT NULL AND name <> '' AND NOT (osm_way_id = ANY(@edited))) s
               GROUP BY name, gh) t
-            """, conn) { CommandTimeout = 1800 })
+            """, conn) { CommandTimeout = 1800, Parameters = { new NpgsqlParameter("edited", editedWays.ToArray()) } })
         await using (var r = await cmd.ExecuteReaderAsync(ct))
         {
             while (await r.ReadAsync(ct))
@@ -791,6 +871,8 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
                 if (buffer.Count == 2000) { streets += await index.BulkIndexAsync(buffer, target, ct); buffer.Clear(); }
             }
         }
+        foreach (var edit in streetEdits)
+            if (await StreetCorrections.DocumentAsync(db, edit, ct) is { } correctedStreet) buffer.Add(correctedStreet);
         streets += await index.BulkIndexAsync(buffer, target, ct); buffer.Clear();
         total += streets;
 
@@ -833,7 +915,7 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
         return total;
     }
 
-    private async Task IndexSearchAsync(bool recreate, CancellationToken ct)
+    internal async Task IndexSearchAsync(bool recreate, CancellationToken ct)
     {
         // A rebuild fills a new physical index and swaps the alias at the end, so search keeps working meanwhile.
         string? target = null;
@@ -841,6 +923,7 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
         else await index.EnsureIndexAsync(ct: ct);
         // Reviews/photos aggregates and community places must survive a re-import.
         var aggregates = await PlaceDocuments.AggregatesAsync(db, null, ct);
+        var closedIds = (await db.Issues.Where(i => i.Kind == IssueKind.PlaceClosedPerm && i.State == IssueState.Confirmed && i.PlaceId != null).Select(i => i.PlaceId!).ToListAsync(ct)).ToHashSet();
         const int batch = 2000;
         var total = 0;
         string? lastId = null;
@@ -850,12 +933,12 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
             if (lastId is not null) q = q.Where(p => string.Compare(p.Id, lastId) > 0);
             var rows = await q.Take(batch).ToListAsync(ct);
             if (rows.Count == 0) break;
-            total += await index.BulkIndexAsync(rows.Select(p => SearchQueryBuilder.ToDocument(p, aggregates.GetValueOrDefault(p.Id))), target, ct);
+            total += await index.BulkIndexAsync(rows.Select(p => { var doc = SearchQueryBuilder.ToDocument(p, aggregates.GetValueOrDefault(p.Id)); if (closedIds.Contains(p.Id)) doc["closed"] = true; return doc; }), target, ct);
             lastId = rows[^1].Id;
             if (total % 20000 < batch) logger.LogInformation("Indexed {Total} places…", total);
         }
         var community = await db.CommunityPlaces.AsNoTracking().ToListAsync(ct);
-        total += await index.BulkIndexAsync(community.Select(p => SearchQueryBuilder.ToDocument(p, aggregates.GetValueOrDefault(p.Id))), target, ct);
+        total += await index.BulkIndexAsync(community.Select(p => { var doc = SearchQueryBuilder.ToDocument(p, aggregates.GetValueOrDefault(p.Id)); if (closedIds.Contains(p.Id)) doc["closed"] = true; return doc; }), target, ct);
         total += await IndexStreetsAndAddressesAsync(target, ct);
         if (target is not null) await index.CompleteRebuildAsync(target, ct);
         else await index.RefreshAsync(ct);

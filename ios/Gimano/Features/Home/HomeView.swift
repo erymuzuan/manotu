@@ -25,6 +25,14 @@ struct HomeView: View {
                     }
                     .padding(.horizontal, Tokens.Space.gutter)
                     .padding(.top, 8)
+                    if model.homeDetent != .full, let area = model.map.visibleSearchArea {
+                        Button("Search this area") {
+                            model.searchViewport = area
+                            model.screen = .search(.destination)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("searchThisArea")
+                    }
                     // After installing from an invitation page (§5.6): one tap to paste the copied link.
                     if model.events.showDeferredLinkCard && model.homeDetent != .full {
                         EventDeferredLinkCard()

@@ -66,11 +66,12 @@ public static class OsmCategoryMapper
 
     public static PlaceCategory? Map(IReadOnlyDictionary<string, string> tags)
     {
+        if (ImportEligibility.Exclusion(tags) is not null) return null;
         string? Tag(string k) => tags.TryGetValue(k, out var v) ? v : null;
 
         var amenity = Tag("amenity");
         var religion = Tag("religion");
-        var name = Tag("name") ?? "";
+        var name = ImportEligibility.Name(tags) ?? "";
 
         if (amenity == "place_of_worship")
         {
@@ -108,7 +109,7 @@ public static class OsmCategoryMapper
         if (Tag("tourism") is { } tourism && Tourism.TryGetValue(tourism, out var t)) return t;
         if (Tag("leisure") is "park" && name.Length > 0) return PlaceCategory.Tourism;
 
-        return null;
+        return ImportEligibility.IncludeNamed(tags) ? PlaceCategory.Other : null;
     }
 
     /// <summary>OSM place=* values imported as searchable areas, with their base popularity.</summary>
@@ -128,13 +129,13 @@ public static class OsmCategoryMapper
 
     /// <summary>Whether a mapped feature is worth importing (needs a name, except a few categories).</summary>
     public static bool ShouldImport(PlaceCategory category, IReadOnlyDictionary<string, string> tags) =>
-        tags.ContainsKey("name") || tags.ContainsKey("brand") ||
+        ImportEligibility.Exclusion(tags) is null && (ImportEligibility.Name(tags) is not null ||
         category is PlaceCategory.Fuel or PlaceCategory.EvCharging or PlaceCategory.TollBooth or PlaceCategory.RestArea
-            or PlaceCategory.Toilets or PlaceCategory.Atm or PlaceCategory.Parking;
+            or PlaceCategory.Toilets or PlaceCategory.Atm or PlaceCategory.Parking);
 
     public static string DisplayName(PlaceCategory category, IReadOnlyDictionary<string, string> tags)
     {
-        if (tags.TryGetValue("name", out var n) && n.Length > 0) return n;
+        if (ImportEligibility.Name(tags) is { } display) return display;
         if (tags.TryGetValue("name:en", out var en) && en.Length > 0) return en;
         if (tags.TryGetValue("brand", out var b) && b.Length > 0) return b;
         return category switch

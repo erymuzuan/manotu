@@ -51,16 +51,17 @@ public sealed class PlaceSearchIndex(IOpenSearchLowLevelClient client, OpenSearc
     /// <summary>Creates a new physical index for a full rebuild and returns its name (bulk into it, then complete).</summary>
     public Task<string> BeginRebuildAsync(CancellationToken ct = default) => CreatePhysicalAsync(ct);
 
-    /// <summary>Refreshes the new index and atomically points the alias at it; old physical indices are deleted.</summary>
+    /// <summary>Refreshes the new index and atomically points the alias at it; old physical indices are retained.</summary>
     public async Task CompleteRebuildAsync(string physical, CancellationToken ct = default)
     {
-        await client.Indices.RefreshAsync<StringResponse>(physical, ctx: ct);
+        var refresh = await client.Indices.RefreshAsync<StringResponse>(physical, ctx: ct);
+        if (!refresh.Success || JsonNode.Parse(refresh.Body)?["_shards"]?["failed"]?.GetValue<int>() > 0) throw new InvalidOperationException("Index refresh failed; promotion blocked.");
         await SwapAliasAsync(physical, ct);
     }
 
     private async Task<string> CreatePhysicalAsync(CancellationToken ct)
     {
-        var physical = $"{Index}-{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var physical = $"{Index}-{DateTime.UtcNow:yyyyMMddHHmmssfff}";
         var r = await client.Indices.CreateAsync<StringResponse>(physical, PostData.String(SearchQueryBuilder.IndexDefinition(names.Replicas).ToJsonString()), ctx: ct);
         if (!r.Success) throw new InvalidOperationException($"Creating index '{physical}' failed: {r.HttpStatusCode} {Trim(r.Body)}");
         logger.LogInformation("Created OpenSearch index {Index}", physical);
@@ -79,23 +80,22 @@ public sealed class PlaceSearchIndex(IOpenSearchLowLevelClient client, OpenSearc
                 // Before aliases were used (dev stacks), the alias name itself may be a concrete index: replace it.
                 if (name == Index && value?["aliases"] is JsonObject al && !al.ContainsKey(Index))
                 {
-                    await client.Indices.DeleteAsync<StringResponse>(Index, ctx: ct);
-                    continue;
+                    throw new InvalidOperationException("Legacy concrete index must be backed up and migrated to an alias before rebuilding; active search data was preserved.");
                 }
                 if (name != physical) current.Add(name);
             }
         }
         else if ((await client.Indices.ExistsAsync<StringResponse>(Index, ctx: ct)).HttpStatusCode == 200)
         {
-            await client.Indices.DeleteAsync<StringResponse>(Index, ctx: ct); // legacy concrete index with the alias's name
+            throw new InvalidOperationException("Legacy concrete index must be backed up and migrated to an alias before rebuilding; active search data was preserved.");
         }
 
         var actions = new JsonArray { new JsonObject { ["add"] = new JsonObject { ["index"] = physical, ["alias"] = Index } } };
         foreach (var old in current) actions.Add(new JsonObject { ["remove"] = new JsonObject { ["index"] = old, ["alias"] = Index } });
         var r = await client.DoRequestAsync<StringResponse>(OpenSearch.Net.HttpMethod.POST, "_aliases", ct, PostData.String(new JsonObject { ["actions"] = actions }.ToJsonString()));
         if (!r.Success) throw new InvalidOperationException($"Alias swap {Index} → {physical} failed: {r.HttpStatusCode} {Trim(r.Body)}");
-        foreach (var old in current) await client.Indices.DeleteAsync<StringResponse>(old, ctx: ct);
-        logger.LogInformation("Alias {Alias} → {Index} (removed {Old})", Index, physical, current.Count);
+        // Retain old physical indices for explicit rollback; cleanup is a separate maintenance decision.
+        logger.LogInformation("Alias {Alias} → {Index} (retained {Old} previous indices)", Index, physical, current.Count);
     }
 
     private static string Trim(string? s) => s is null ? "" : s.Length > 300 ? s[..300] : s;
@@ -121,8 +121,9 @@ public sealed class PlaceSearchIndex(IOpenSearchLowLevelClient client, OpenSearc
         if (n == 0) return 0;
         var r = await client.BulkAsync<StringResponse>(PostData.String(sb.ToString()), ctx: ct);
         if (!r.Success) throw new InvalidOperationException($"Bulk index failed: {r.HttpStatusCode} {Trim(r.Body)} {r.OriginalException?.Message}");
-        if (r.Body.Contains("\"errors\":true", StringComparison.Ordinal))
-            logger.LogWarning("Bulk index reported {Count} item errors", System.Text.RegularExpressions.Regex.Matches(r.Body, "\"error\":").Count);
+        var response = JsonNode.Parse(r.Body);
+        if (response?["errors"]?.GetValue<bool>() == true)
+            throw new InvalidOperationException("Bulk indexing contained failed items; index promotion is blocked. Retry or repair the batch before rebuilding.");
         return n;
     }
 

@@ -23,7 +23,7 @@ public enum SearchScope
 /// <param name="SortNearest">Sort by distance instead of relevance (category intent, sort=nearest).</param>
 public sealed record SearchQuery(string Q, double? Lat, double? Lng, int Limit = 10, PlaceCategory? Category = null, string? Country = null, Guid? Viewer = null,
     IReadOnlyList<string>? Variants = null, IReadOnlyList<PlaceCategory>? Categories = null, double? RadiusM = null, bool SortNearest = false,
-    SearchScope Scope = SearchScope.Places, string? HouseNumber = null);
+    SearchScope Scope = SearchScope.Places, string? HouseNumber = null, SearchViewport? Viewport = null);
 
 /// <summary>Per-place review/photo aggregates carried on search documents.</summary>
 public sealed record PlaceAggregates(double? Rating, int ReviewCount, string? ThumbKey);
@@ -91,7 +91,7 @@ public static class SearchQueryBuilder
                 {
                     ["query"] = norm,
                     ["type"] = "bool_prefix",
-                    ["fields"] = new JsonArray("name", "name._2gram", "name._3gram", "brand^0.8", "aliases^0.9", "address^0.3"),
+                    ["fields"] = new JsonArray("name", "name._2gram", "name._3gram", "brand^0.8", "aliases^0.9", "address^0.3", "searchText^0.5"),
                     ["operator"] = "and",
                     ["fuzziness"] = norm.Length >= 4 ? WordFuzziness : "0",
                 }
@@ -124,6 +124,8 @@ public static class SearchQueryBuilder
             should.Add(new JsonObject { ["match_phrase_prefix"] = new JsonObject { ["name"] = new JsonObject { ["query"] = norm, ["boost"] = 3 * w } } });
             should.Add(new JsonObject { ["match"] = new JsonObject { ["aliases"] = new JsonObject { ["query"] = norm, ["boost"] = AliasBoost * w } } });
         }
+        should.Add(Term("status", "published", 2));
+        should.Add(Term("communityUpdated", "true", 2));
         should.Add(Term("category", "area", AreaBoost));
         if (q.Country is null) should.Add(Term("country", "MY", 0.5));
 
@@ -173,7 +175,7 @@ public static class SearchQueryBuilder
             },
         };
         if (q.SortNearest && q.Lat is { } sl && q.Lng is { } sg) body["sort"] = NearestSort(sl, sg);
-        return body;
+        return q.Viewport?.Constrain(body) ?? body;
     }
 
     /// <summary>"Nearest X": category filter, optional radius, distance order (step 5).</summary>
@@ -225,7 +227,7 @@ public static class SearchQueryBuilder
         var sort = new JsonArray(new JsonObject { ["_score"] = new JsonObject { ["order"] = "desc" } });
         if (q.Lat is { } lat && q.Lng is { } lng) sort.Add(NearestSort(lat, lng)[0]!.DeepClone());
         body["sort"] = sort;
-        return body;
+        return q.Viewport?.Constrain(body) ?? body;
     }
 
     public static JsonObject BuildPostcode(string postcode) => new()
@@ -263,6 +265,21 @@ public static class SearchQueryBuilder
             }
         },
     };
+
+    public static JsonObject BuildChainSearch(SearchQuery q, IEnumerable<string> keys)
+    {
+        var body = Build(q with { SortNearest = true });
+        body["query"] = new JsonObject { ["bool"] = new JsonObject
+        {
+            ["must"] = new JsonArray(body["query"]!.DeepClone()),
+            ["filter"] = new JsonArray(new JsonObject { ["bool"] = new JsonObject
+            {
+                ["should"] = new JsonArray(Terms("nameKey", keys), Terms("brandKey", keys)),
+                ["minimum_should_match"] = 1
+            } })
+        } };
+        return body;
+    }
 
     private static JsonArray NearestSort(double lat, double lng) => new(new JsonObject
     {
@@ -302,7 +319,7 @@ public static class SearchQueryBuilder
                         new JsonObject { ["term"] = new JsonObject { ["ownerId"] = v.ToString("D") } }),
                 }
             });
-        return new JsonObject { ["bool"] = new JsonObject { ["should"] = should, ["minimum_should_match"] = 1 } };
+        return new JsonObject { ["bool"] = new JsonObject { ["should"] = should, ["minimum_should_match"] = 1, ["must_not"] = new JsonArray(new JsonObject { ["term"] = new JsonObject { ["closed"] = true } }) } };
     }
 
     /// <summary>Index definition: search_as_you_type on name, geo_point location.</summary>
@@ -368,6 +385,9 @@ public static class SearchQueryBuilder
                 ["brand"] = new JsonObject { ["type"] = "text", ["analyzer"] = "folded" },
                 ["aliases"] = new JsonObject { ["type"] = "text", ["analyzer"] = "folded" },
                 ["address"] = new JsonObject { ["type"] = "text", ["analyzer"] = "folded" },
+                ["searchText"] = new JsonObject { ["type"] = "text", ["analyzer"] = "folded" },
+                ["communityUpdated"] = new JsonObject { ["type"] = "boolean" },
+                ["closed"] = new JsonObject { ["type"] = "boolean" },
                 ["category"] = new JsonObject { ["type"] = "keyword" },
                 ["country"] = new JsonObject { ["type"] = "keyword" },
                 ["location"] = new JsonObject { ["type"] = "geo_point" },
@@ -388,8 +408,11 @@ public static class SearchQueryBuilder
     {
         ["id"] = p.Id,
         ["name"] = p.Name,
+        ["closed"] = p.Tags.GetValueOrDefault("manotu:closed") == "yes",
+        ["communityUpdated"] = p.Tags.GetValueOrDefault("manotu:community_updated") == "yes",
         ["brand"] = p.Brand,
-        ["aliases"] = p.Category == PlaceCategory.Area ? SearchAliases.AreaVariants(p.Name, p.Tags) : null,
+        ["aliases"] = SearchAliases.AreaVariants(p.Name, p.Tags),
+        ["searchText"] = string.Join(" ", p.Name, p.Brand, p.Address, p.Tags.GetValueOrDefault("manotu:locality"), p.Tags.GetValueOrDefault("addr:state"), p.Tags.GetValueOrDefault("manotu:admin_names"), p.Tags.GetValueOrDefault("old_name")),
         ["address"] = p.Address,
         ["category"] = GimanoJson.ToWire(p.Category),
         ["country"] = p.Country,
@@ -407,6 +430,7 @@ public static class SearchQueryBuilder
         ["id"] = p.Id,
         ["name"] = p.Name,
         ["brand"] = null,
+        ["searchText"] = string.Join(" ", p.Name, p.Address),
         ["address"] = p.Address,
         ["category"] = GimanoJson.ToWire(p.Category),
         ["country"] = p.Country,

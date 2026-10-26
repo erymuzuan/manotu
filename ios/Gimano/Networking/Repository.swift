@@ -21,6 +21,7 @@ protocol GimanoRepository: PlaceCardDataSource, DepartureTimesSource {
     func search(query: String, near: LatLng, category: PlaceCategory?, limit: Int) async throws -> [PlaceSummary]
     /// Full search answer (spelling fix, suggestions). `exact` searches the text as typed.
     func searchOutcome(query: String, near: LatLng, category: PlaceCategory?, limit: Int, exact: Bool, sort: ResultSort) async throws -> SearchOutcome
+    func searchInArea(query: String, near: LatLng, category: PlaceCategory?, limit: Int, exact: Bool, sort: ResultSort, viewport: String) async throws -> SearchOutcome
     func nearby(near: LatLng, category: PlaceCategory, radiusM: Int) async throws -> [PlaceSummary]
     func place(id: String, near: LatLng?) async throws -> Place
     func reverseGeocode(_ p: LatLng) async throws -> ReverseGeocode
@@ -257,6 +258,18 @@ final class LiveRepository: GimanoRepository {
     func reverseGeocode(_ p: LatLng) async throws -> ReverseGeocode {
         let q = [URLQueryItem(name: "lat", value: String(p.lat)), URLQueryItem(name: "lng", value: String(p.lng))]
         return try await authed { try await self.client.get("geocode/reverse", query: q) }
+    }
+
+    func searchInArea(query: String, near: LatLng, category: PlaceCategory?, limit: Int, exact: Bool, sort: ResultSort, viewport: String) async throws -> SearchOutcome {
+        var items = [URLQueryItem(name: "q", value: query), URLQueryItem(name: "lat", value: String(near.lat)),
+            URLQueryItem(name: "lng", value: String(near.lng)), URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "viewport", value: viewport), URLQueryItem(name: "exact", value: String(exact)),
+            URLQueryItem(name: "sort", value: sort == .nearest ? "nearest" : "relevance")]
+        if let category { items.append(URLQueryItem(name: "category", value: category.rawValue)) }
+        let request = items
+        let res: SearchResponse = try await authed { try await self.client.get("search", query: request) }
+        let results = res.results.filter { SearchArea.contains(viewport, $0.location) }
+        return SearchOutcome(results: results, correctedQuery: res.correctedQuery, suggestions: [], noMatch: results.isEmpty, interpretation: res.interpretation)
     }
 
     func searchOutcome(query: String, near: LatLng, category: PlaceCategory?, limit: Int, exact: Bool, sort: ResultSort) async throws -> SearchOutcome {
@@ -554,6 +567,10 @@ final class FallbackRepository: GimanoRepository {
         try await run({ try await $0.search(query: query, near: near, category: category, limit: limit) },
                       demoOp: { try await $0.search(query: query, near: near, category: category, limit: limit) })
     }
+    func searchInArea(query: String, near: LatLng, category: PlaceCategory?, limit: Int, exact: Bool, sort: ResultSort, viewport: String) async throws -> SearchOutcome {
+        try await live.searchInArea(query: query, near: near, category: category, limit: limit, exact: exact, sort: sort, viewport: viewport)
+    }
+
     func searchOutcome(query: String, near: LatLng, category: PlaceCategory?, limit: Int, exact: Bool, sort: ResultSort) async throws -> SearchOutcome {
         try await run({ try await $0.searchOutcome(query: query, near: near, category: category, limit: limit, exact: exact, sort: sort) },
                       demoOp: { try await $0.searchOutcome(query: query, near: near, category: category, limit: limit, exact: exact, sort: sort) })
@@ -769,4 +786,13 @@ extension FallbackRepository: EventDropTransport {
 extension FallbackRepository: RouteBuilderTransport {
     func builderRoute(_ request: BuilderRouteRequest) async throws -> BuilderRoutesResponse { try await live.builderRoute(request) }
     func builderMatch(_ request: BuilderMatchRequest) async throws -> BuilderMatchResponse { try await live.builderMatch(request) }
+}
+
+extension GimanoRepository {
+    func searchInArea(query: String, near: LatLng, category: PlaceCategory?, limit: Int, exact: Bool, sort: ResultSort, viewport: String) async throws -> SearchOutcome {
+        var result = try await searchOutcome(query: query, near: near, category: category, limit: limit, exact: exact, sort: sort)
+        result.results = result.results.filter { SearchArea.contains(viewport, $0.location) }
+        result.suggestions = []; result.noMatch = result.results.isEmpty
+        return result
+    }
 }

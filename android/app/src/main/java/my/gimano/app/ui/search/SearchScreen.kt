@@ -104,6 +104,7 @@ fun SearchScreen(ui: UiState, purpose: SearchPurpose, vm: MainViewModel, onMic: 
         if (ui.searching) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = c.brand, trackColor = c.surfaceAlt)
         else Spacer(Modifier.height(2.dp))
 
+        if (ui.searchViewport != null) Text(stringResource(R.string.search_area_scope), modifier = Modifier.padding(16.dp))
         val showingResults = ui.query.isNotBlank() || ui.activeCategory != null
         val noResults = vm.canAddPlaceFromSearch() && ui.activeCategory == null
         if (noResults) {
@@ -114,7 +115,7 @@ fun SearchScreen(ui: UiState, purpose: SearchPurpose, vm: MainViewModel, onMic: 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = (if (showingResults) 110.dp else 24.dp) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())) {
             if (ui.query.isBlank()) {
                 item {
-                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(quickCategories) { (cat, label) ->
                             FilterChip(
                                 selected = ui.activeCategory == cat,
@@ -131,7 +132,7 @@ fun SearchScreen(ui: UiState, purpose: SearchPurpose, vm: MainViewModel, onMic: 
             }
             if (!showingResults) {
                 item { SectionTitle(stringResource(R.string.recents)) }
-                items(ui.recents, key = { "r" + it.id }) { r ->
+                items(ui.recents.filter { r -> ui.searchViewport?.let { my.gimano.app.core.geo.SearchArea.contains(it, r.lat, r.lng) } ?: true }, key = { "r" + it.id }) { r ->
                     RecentRow(r, ui.myLocation?.point) {
                         vm.pickResult(PlaceSummary(r.placeId ?: "pin:${r.lat},${r.lng}", r.name, "other", r.address, r.lat, r.lng))
                     }
@@ -252,8 +253,8 @@ private fun NoResults(ui: UiState, vm: MainViewModel, onPick: () -> Unit, onAdd:
     Column(Modifier.fillMaxSize().navigationBarsPadding().padding(horizontal = 16.dp)) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(Icons.Filled.SearchOff, null, tint = c.brandTint, modifier = Modifier.size(96.dp))
-            Text(stringResource(R.string.no_results_title, ui.query.trim()), fontSize = 22.sp, fontWeight = FontWeight.Black, color = c.text, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Text(stringResource(R.string.no_results_body), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.textMuted, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(if (ui.searchViewport != null) stringResource(R.string.no_results_area) else stringResource(R.string.no_results_title, ui.query.trim()), fontSize = 22.sp, fontWeight = FontWeight.Black, color = c.text, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(if (ui.searchViewport != null) stringResource(R.string.search_area_scope) else stringResource(R.string.no_results_body), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.textMuted, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             if (ui.suggestions.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
                 Text(stringResource(R.string.did_you_mean), Modifier.fillMaxWidth(), fontSize = 14.sp, fontWeight = FontWeight.Black, color = c.textMuted)

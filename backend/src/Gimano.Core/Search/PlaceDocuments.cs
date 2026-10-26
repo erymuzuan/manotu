@@ -33,13 +33,25 @@ public static class PlaceDocuments
     /// <summary>Document for one place id (OSM or community), or null if it doesn't exist (→ delete from the index).</summary>
     public static async Task<JsonObject?> ForIdAsync(GimanoDbContext db, string id, CancellationToken ct)
     {
+        if (id.StartsWith("st-", StringComparison.Ordinal))
+        {
+            var edit = await db.PlaceSuggestions.AsNoTracking().Where(s => s.PlaceId == id && s.Status == SuggestionStatus.Applied && s.StreetOriginalName != null)
+                .OrderByDescending(s => s.AppliedAt).ThenByDescending(s => s.Id).FirstOrDefaultAsync(ct);
+            return edit is null ? null : await StreetCorrections.DocumentAsync(db, edit, ct);
+        }
         var agg = (await AggregatesAsync(db, [id], ct)).GetValueOrDefault(id);
         if (CommunityPlace.IsCommunityId(id))
         {
             var c = await db.CommunityPlaces.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
-            return c is null ? null : SearchQueryBuilder.ToDocument(c, agg);
+            if (c is null) return null;
+            var communityDoc = SearchQueryBuilder.ToDocument(c, agg);
+            if (await db.Issues.AnyAsync(i => i.PlaceId == id && i.Kind == IssueKind.PlaceClosedPerm && i.State == IssueState.Confirmed, ct)) communityDoc["closed"] = true;
+            return communityDoc;
         }
         var p = await db.Places.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
-        return p is null ? null : SearchQueryBuilder.ToDocument(p, agg);
+        if (p is null) return null;
+        var doc = SearchQueryBuilder.ToDocument(p, agg);
+        if (await db.Issues.AnyAsync(i => i.PlaceId == id && i.Kind == Contracts.IssueKind.PlaceClosedPerm && i.State == Contracts.IssueState.Confirmed, ct)) doc["closed"] = true;
+        return doc;
     }
 }

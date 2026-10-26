@@ -58,6 +58,7 @@ interface GimanoApi {
         @Query("category") category: String? = null,
         @Query("exact") exact: Boolean? = null,
         @Query("near") near: String? = null,
+        @Query("viewport") viewport: String? = null,
     ): SearchResponse
 
     @GET("search/nearby")

@@ -35,7 +35,7 @@ public static class PlaceEndpoints
     }
 
     private static async Task<Results<Ok<SearchResponse>, ValidationProblem>> Search(
-        string? q, double? lat, double? lng, int? limit, string? category, string? country, string? near, string? sort, bool? exact,
+        string? q, double? lat, double? lng, int? limit, string? category, string? country, string? near, string? sort, bool? exact, string? viewport,
         HttpContext http, SearchService search, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(q)) return Validation.Problem("q", "q is required.");
@@ -63,8 +63,12 @@ public static class PlaceEndpoints
         }
         if (sort is not (null or "" or "relevance" or "nearest")) return Validation.Problem("sort", "sort must be relevance or nearest.");
 
+        SearchViewport? footprint = null;
+        if (viewport is not null && !SearchViewport.TryParse(viewport, out footprint))
+            return Validation.Problem("viewport", "viewport must be a valid polygon of 3–8 lon,lat pairs separated by semicolons.");
+        http.Response.Headers.CacheControl = "no-store";
         var response = await search.SearchAsync(new SearchRequest(q, lat, lng, nearLat, nearLng, limit ?? 10, cat, country?.ToUpperInvariant(),
-            http.User.UserId(), sort == "nearest", http.Lang(), exact ?? false), ct);
+            http.User.UserId(), sort == "nearest", http.Lang(), exact ?? false, footprint), ct);
         return TypedResults.Ok(response);
     }
 

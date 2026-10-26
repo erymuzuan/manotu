@@ -48,7 +48,7 @@ builder.Services.AddHttpClient<ValhallaClient>(c =>
     c.Timeout = TimeSpan.FromSeconds(20);
 });
 builder.Services.AddScoped<GeoLookup>().AddScoped<ReportService>().AddScoped<RouteService>().AddScoped<RouteMatchService>().AddScoped<PlaceService>()
-    .AddScoped<CommunityService>().AddScoped<ReviewService>().AddScoped<PhotoService>()
+    .AddScoped<PlaceCorrectionService>().AddScoped<CommunityService>().AddScoped<ReviewService>().AddScoped<PhotoService>()
     .AddScoped<SearchService>().AddScoped<SearchMissRecorder>().AddScoped<IssueService>().AddScoped<Moderation>()
     .AddScoped<RestrictedAreaService>();
 builder.Services.AddSingleton<RestrictedAreaMetrics>().AddSingleton<RestrictedAreaSnapshot>();

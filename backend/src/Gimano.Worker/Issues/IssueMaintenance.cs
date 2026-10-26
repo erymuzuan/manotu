@@ -88,8 +88,7 @@ public sealed class IssueMaintenance(IServiceScopeFactory scopes, IEventPublishe
                 _ => false,
             };
         }
-        if (i.Kind == IssueKind.PlaceClosedPerm && i.PlaceId is { } pid && !CommunityPlace.IsCommunityId(pid) && await db.Places.AnyAsync(ct))
-            return !await db.Places.AnyAsync(p => p.Id == pid, ct);
+        // A missing OSM record is not evidence of reopening. Keep confirmed closure until explicitly refuted.
         return false;
     }
 }

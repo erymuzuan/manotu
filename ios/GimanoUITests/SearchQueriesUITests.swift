@@ -17,9 +17,13 @@ final class SearchQueriesUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = true
         app = XCUIApplication()
-        var args = ["-GimanoDataMode", "live", "-GimanoFreshDevice", "YES", "-GimanoSkipOnboarding", "YES",
+        var args = ["-GimanoDataMode", "live", "-GimanoSkipOnboarding", "YES",
                     "-GimanoFakeLocation", "3.1178,101.6213", "-AppleLanguages", "(\(lang))",
                     "-AppleLocale", lang == "ms" ? "ms_MY" : "en_MY"]
+        // A real attached phone keeps its favourites, drafts, identity and other personal data.
+        #if targetEnvironment(simulator)
+        args += ["-GimanoFreshDevice", "YES"]
+        #endif
         if let api = ProcessInfo.processInfo.environment["GIMANO_API"] { args += ["-GimanoAPIBaseURL", api] }
         app.launchArguments = args
         app.launch()
@@ -68,6 +72,35 @@ final class SearchQueriesUITests: XCTestCase {
             app.buttons["searchClear"].firstMatch.tap()
         }
         attach("report", report.joined(separator: "\n"))
+    }
+
+    func test_PetronasLocalityAndMapScope() throws {
+        guard let api = ProcessInfo.processInfo.environment["GIMANO_API"] else {
+            throw XCTSkip("Set GIMANO_API to the updated development API")
+        }
+        app.terminate()
+        app.launchArguments += ["-GimanoAPIBaseURL", api]
+        app.launch()
+        XCTAssertTrue(app.buttons["whereTo"].waitForExistence(timeout: 30))
+        app.buttons["whereTo"].tap()
+        let field = app.textFields["searchField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText("Petronas di Bukit Bunga")
+        XCTAssertTrue(app.buttons.matching(identifier: "searchResult").firstMatch.waitForExistence(timeout: 20))
+        attach("petronas-locality")
+        app.terminate()
+        app.launch()
+        let area = app.buttons["searchThisArea"]
+        XCTAssertTrue(area.waitForExistence(timeout: 30))
+        area.tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText("Petronas Bukit Bunga")
+        let none = app.staticTexts["noResultsTitle"]
+        XCTAssertTrue(none.waitForExistence(timeout: 20))
+        XCTAssertEqual(none.label, "No matching places in this area")
+        attach("petronas-outside-map-area")
     }
 
     func test_ChooseOnMapLabelAndNearby() {

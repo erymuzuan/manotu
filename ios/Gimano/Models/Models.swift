@@ -1220,3 +1220,21 @@ enum MediaURL {
         return URL(string: raw, relativeTo: apiBase)?.absoluteURL
     }
 }
+
+/// A snapshot of visible ground. Kept in memory only, never saved with recents.
+enum SearchArea {
+    static func contains(_ wire: String, _ p: LatLng) -> Bool {
+        let points = wire.split(separator: ";").compactMap { pair -> (Double, Double)? in
+            let v = pair.split(separator: ","); guard v.count == 2, let x = Double(v[0]), let y = Double(v[1]) else { return nil }; return (x,y)
+        }
+        guard points.count >= 3 else { return false }
+        var inside = false
+        for i in points.indices {
+            let (x,y) = points[i], (px,py) = points[(i + points.count - 1) % points.count]
+            let cross = (p.lng-px)*(y-py)-(p.lat-py)*(x-px)
+            if abs(cross) < 1e-10 && p.lng >= min(x,px) && p.lng <= max(x,px) && p.lat >= min(y,py) && p.lat <= max(y,py) { return true }
+            if (y > p.lat) != (py > p.lat) && p.lng < (px-x)*(p.lat-y)/(py-y)+x { inside.toggle() }
+        }
+        return inside
+    }
+}

@@ -89,6 +89,20 @@ Parameters: `q` (≤ 100 chars), `lat`/`lng` = the user (distances are measured 
 centre (ranking origin when given), `limit` (≤ 50), `category`, `country` (MY/SG/BN), `sort=relevance` (default) or
 `nearest`, `exact=true` (no spelling correction).
 
+`viewport=lon,lat;lon,lat;lon,lat;lon,lat` is an optional captured visible-ground polygon (3–8
+vertices; the server closes the ring). Invalid/self-intersecting polygons return 400. When supplied,
+**every retrieval path is clipped to that polygon**, including coordinates, postcodes, streets, categories
+and the Postgres fallback. The polygon centre is the ranking origin; `lat/lng` still supplies displayed
+user distances. There is no radius expansion, out-of-area suggestion or chain count. Empty means no
+matching places in this area. The apps capture the map above the bottom sheet and account for rotation;
+on-device recents/favourites/private places are clipped locally too. The footprint is transient, never
+saved to preferences or server logs. Search responses use `Cache-Control: no-store`.
+
+Public community places that pass screening are included while unverified; held/checking places do
+not become public merely because somebody submitted them. Verified community results and accepted
+corrections receive a relevance boost. Confirmed permanent closures are excluded during retrieval,
+including after their original report expiry; an accepted reopening or refutation restores eligibility.
+
 Steps, in order:
 1. **Normalise**: case, accents, apostrophes, punctuation/hyphens/slashes → space, `&` = "dan". Names are also compared
    without spaces: "Family Mart" = "FamilyMart", "7 eleven" = "7-Eleven" = "7eleven".
@@ -104,7 +118,7 @@ Steps, in order:
    "7VP3+PR" + optional locality, recovered near `near`/the user) → one result, `category: "point"`, `id: "pt-lat,lng"`,
    `address` = the reverse-geocode label.
 5. **Postcodes** ("47300") → `category: "postcode"` (centroid of the addresses carrying it).
-   **Street addresses**: "12 Jalan SS2/24" → the OSM house address (`category: "address"`) when mapped, then the street;
+   **Street addresses**: "12 Jalan SS2/24" → a named public-business address (`category: "address"`) when mapped, then the street; individual dwelling/unit addresses are excluded;
    "Jalan SS2/24" → `category: "street"` (one result per street name per ~20–40 km, on the road), nearest first.
 6. **Category words** (the whole query): minyak / stesen minyak / petrol → fuel; surau / masjid → surau+mosque;
    tandas / toilet → toilets; atm; parkir / parking; klinik; farmasi; kedai runcit; … (the `category` rows of aliases.csv).
@@ -115,16 +129,21 @@ Steps, in order:
    ("Hospital Putrajaya"). These results are ordered by distance from that area's centre: `distanceM` stays the
    distance from the user, `anchorDistanceM` is the distance from the area centre, and `interpretation.area/areaLat/areaLng`
    name the anchor, so the app can say "berhampiran SS2" (and sort/label by `anchorDistanceM`).
+   The selected category does not disable locality parsing. Leading/trailing locality phrases, connectors
+   (`di`, `in`, `near`, `at`), bounded locality typos and a trailing parent locality are supported:
+   `Petronas di Bukit Bunga`, `Petronas Bukit Bnga`, `Petronas Bukit Bunga Kelantan`.
+   Corrected locality spellings populate `correctedQuery`. In viewport mode, the captured polygon and
+   its centre remain authoritative even when the query contains another locality.
 8. **Ranking**: a whole-name or brand match and areas beat names that merely contain the word; distance (from `near`, else
    the user) and popularity add to that. **Chains are always nearest-first**: results with the same spacing-free name keep
    the positions ranking gave them but are re-ordered by distance, and get `chainGroup: {key, name, countNearby}`
    (outlets within 10 km), so the app can show "FamilyMart · 12 berdekatan". Same name within 50 m → one result.
-9. **Never empty**: when nothing matches, `noMatch: true` and `suggestions` (a category word inside the query, e.g.
+9. **Suggestions outside viewport mode**: when nothing matches, `noMatch: true` and `suggestions` (a category word inside the query, e.g.
    "kedai runcit pak ali" → nearby convenience stores). A did-you-mean place is only offered for a close spelling (same rule
    as 3, word by word) **and** within 3 km of the origin, unless it is a chain (then its nearest outlet); a different single
    shop farther away is never a correction. Unless `exact=true` it is searched instead and returned with `correctedQuery`
    (then `noMatch: false`). Nothing is ever substituted silently. When nothing else applies, `suggestions` falls back to
-   popular categories nearby (kedai makan, stesen minyak, kedai runcit, with counts), so it is never empty.
+   popular categories nearby (kedai makan, stesen minyak, kedai runcit, with counts), unless an explicit viewport is present.
    Category `count`s are places within 5 km with an OSM node and its building counted once.
 
 `Suggestion = {label, query?, category?, placeId?, lat?, lng?, distanceM?, count?}`: a did-you-mean place
@@ -183,7 +202,7 @@ Clean-room flow, modelled on how big map apps let people add missing places:
      "Not verified yet" badge, and nearby users can confirm it ("Is this place here?"). After the required
      confirmations (**1 in launch mode**, otherwise 3, 2 for Perak), or a moderator approval, it becomes `published`.
      **3 "Doesn't exist / Wrong location" votes** hide it for moderator review.
-3. Anyone can then **suggest an edit** (hours, phone, category, location); owner edits apply directly,
+3. Anyone can then **suggest an edit** (hours, phone, category, location); owner edits apply through screening (closure/reopening suggestions always require acceptance),
    other users' edits need 2 confirmations.
 
 ```
@@ -206,6 +225,19 @@ POST   /places/{id}/verify  (signed)  {answer: yes|no|unsure, nameCorrect?, loca
 GET    /places/pending-nearby?cell=<geohash6>   → PlaceSummary[] (pending, excludes own)
 GET    /me/places/contributed         → PlaceSummary[]
 ```
+
+Maintainer acceptance: `GET /admin/place-suggestions` lists pending edits;
+`POST /admin/place-suggestions/{id}/accept` applies an edit, guarded by `X-Admin-Key`.
+Applied suggestions retain `AppliedAt` and are replayed over refreshed OSM facts before indexing.
+Reaccepting is retry-safe. OSM updates cannot erase an accepted correction. Renames retain historical
+names as aliases. `Closed: false` explicitly resolves confirmed permanent-closure reports.
+
+`st-…` street results now have a place detail endpoint and support `suggest-edit` with **name and
+comment only**. The server captures the specific OSM way IDs for review; acceptance changes the street
+search document while retaining its stable ID and old-name aliases. Rebuilds use those way IDs even
+if the upstream name changes. This changes search/place-card naming; routing-tile instructions and
+base-map vector labels still follow their separately rebuilt OSM datasets.
+
 
 **AI check (Claude Haiku 5.5; design: canvas page "Add a place with an AI gate").** It sees only the public fields
 (name, category, description, opening hours, phone, website) and the names of public places within 150 m, never the

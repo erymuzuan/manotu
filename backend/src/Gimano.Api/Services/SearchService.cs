@@ -13,7 +13,7 @@ namespace Gimano.Api.Services;
 /// <param name="NearLat">Map centre (<c>near=</c>): ranking origin when given.</param>
 public sealed record SearchRequest(string Q, double? Lat, double? Lng, double? NearLat = null, double? NearLng = null, int Limit = 10,
     PlaceCategory? Category = null, string? Country = null, Guid? Viewer = null, bool SortNearest = false, string Lang = L10n.En,
-    bool Exact = false);
+    bool Exact = false, SearchViewport? Viewport = null);
 
 /// <summary>
 /// The index-only part of "Finding places" (docs/api.md): postcode / street address → category words → text (+ brand near an
@@ -29,18 +29,19 @@ public sealed class SearchPipeline(PlaceSearchIndex index, Func<AliasTable> alia
     /// <param name="LiteralTexts">For text searches: the normalised query (and alias rewrites) that results must literally contain
     /// to count as "as typed"; otherwise the response carries correctedQuery.</param>
     public sealed record Ranked(IReadOnlyList<PlaceHit> Hits, SearchInterpretation Interpretation, double? OriginLat, double? OriginLng, bool KeepOrder = false,
-        IReadOnlyList<string>? LiteralTexts = null);
+        IReadOnlyList<string>? LiteralTexts = null, string? AreaCorrection = null);
 
     /// <summary>Runs the steps and returns finished summaries (distances from the user).</summary>
     public async Task<(List<PlaceSummary> Results, SearchInterpretation Interpretation, string? CorrectedQuery)> RunAsync(
         SearchRequest r, ParsedQuery? parsed, AreaLocator areas, CancellationToken ct)
     {
         var (oLat, oLng) = r.NearLat is not null && r.NearLng is not null ? (r.NearLat, r.NearLng) : (r.Lat, r.Lng);
+        if (r.Viewport is { } viewport) (oLat, oLng) = (viewport.Center.Lat, viewport.Center.Lng);
         var (uLat, uLng) = r.Lat is not null ? (r.Lat, r.Lng) : (oLat, oLng);
         var limit = Math.Clamp(r.Limit, 1, SearchQueryBuilder.MaxLimit);
         var ranked = await ResolveAsync(r, parsed, areas, oLat, oLng, limit, ct);
         var results = await FinishAsync(ranked, r, uLat, uLng, limit, ct);
-        return (results, ranked.Interpretation, CorrectedFor(ranked.LiteralTexts, results));
+        return (results, ranked.Interpretation, results.Count > 0 ? ranked.AreaCorrection ?? CorrectedFor(ranked.LiteralTexts, results) : null);
     }
 
     public const double MaxCorrectionDistanceM = 3_000;
@@ -81,6 +82,23 @@ public sealed class SearchPipeline(PlaceSearchIndex index, Func<AliasTable> alia
         return TextNormalizer.Tokens(text).All(t => hay.Any(h => h.StartsWith(t, StringComparison.Ordinal)));
     }
 
+    private Task<IReadOnlyList<PlaceHit>> QueryAsync(SearchRequest r, SearchQuery q, CancellationToken ct) =>
+        QueryAsync(r, SearchQueryBuilder.Build(q), ct);
+
+    private Task<IReadOnlyList<PlaceHit>> QueryAsync(SearchRequest r, JsonObject body, CancellationToken ct, AreaRef? area = null)
+    {
+        if (area is not null)
+            body["query"] = new JsonObject { ["bool"] = new JsonObject
+            {
+                ["must"] = new JsonArray(body["query"]!.DeepClone()),
+                ["filter"] = new JsonArray(new JsonObject { ["geo_distance"] = new JsonObject
+                {
+                    ["distance"] = "10000m", ["location"] = new JsonObject { ["lat"] = area.Lat, ["lon"] = area.Lng }
+                } })
+            } };
+        return index.SearchAsync(r.Viewport?.Constrain(body) ?? body, ct);
+    }
+
     private async Task<Ranked> ResolveAsync(SearchRequest r, ParsedQuery? parsed, AreaLocator areas, double? oLat, double? oLng, int limit, CancellationToken ct)
     {
         var norm = TextNormalizer.Normalize(r.Q);
@@ -90,7 +108,7 @@ public sealed class SearchPipeline(PlaceSearchIndex index, Func<AliasTable> alia
         {
             case PostcodeQuery pc:
             {
-                var hits = await index.SearchAsync(SearchQueryBuilder.BuildPostcode(pc.Postcode), ct);
+                var hits = await QueryAsync(r, SearchQueryBuilder.BuildPostcode(pc.Postcode), ct);
                 if (hits.Count > 0) return new Ranked(hits, new SearchInterpretation("postcode", norm), oLat, oLng);
                 break;
             }
@@ -100,8 +118,8 @@ public sealed class SearchPipeline(PlaceSearchIndex index, Func<AliasTable> alia
                 var baseQ = new SearchQuery(r.Q, oLat, oLng, limit, Country: r.Country);
                 var found = new List<PlaceHit>();
                 if (sq.HouseNumber is { } hn)
-                    found.AddRange(await index.SearchAsync(SearchQueryBuilder.BuildStreet(baseQ with { Scope = SearchScope.Addresses, HouseNumber = hn }, key), ct));
-                var streets = await index.SearchAsync(SearchQueryBuilder.BuildStreet(baseQ with { Scope = SearchScope.Streets }, key), ct);
+                    found.AddRange(await QueryAsync(r, SearchQueryBuilder.BuildStreet(baseQ with { Scope = SearchScope.Addresses, HouseNumber = hn }, key), ct));
+                var streets = await QueryAsync(r, SearchQueryBuilder.BuildStreet(baseQ with { Scope = SearchScope.Streets }, key), ct);
                 var kind = found.Count > 0 ? "address" : "street";
                 found.AddRange(streets);
                 if (found.Count > 0) return new Ranked(found, new SearchInterpretation(kind, norm), oLat, oLng, KeepOrder: true);
@@ -113,57 +131,78 @@ public sealed class SearchPipeline(PlaceSearchIndex index, Func<AliasTable> alia
         if (r.Category is null && table.Category(norm) is { Length: > 0 } cats)
             return new Ranked(await NearestOfAsync(cats, oLat, oLng, r, limit, ct), new SearchInterpretation("category", norm, cats), oLat, oLng);
 
+        if (r.Category is { } selectedCategory && norm == GimanoJson.ToWire(selectedCategory))
+            return new Ranked(await NearestOfAsync([selectedCategory], oLat, oLng, r, limit, ct), new SearchInterpretation("category", norm, [selectedCategory]), oLat, oLng);
+
         var variants = table.Rewrites(norm);
         var textQ = new SearchQuery(r.Q, oLat, oLng, limit, r.Category, r.Country, r.Viewer, variants, SortNearest: r.SortNearest);
-        var general = await index.SearchAsync(textQ, ct);
+        var general = await QueryAsync(r, textQ, ct);
         var keys = variants.Append(norm).Select(TextNormalizer.Compact).ToHashSet();
+        if (oLat is not null && oLng is not null && general.Any(h => h.Brand is { } brand && keys.Contains(TextNormalizer.Compact(brand))))
+            general = (await QueryAsync(r, SearchQueryBuilder.BuildChainSearch(textQ, keys), ct)).Concat(general).DistinctBy(h => h.Id).ToList();
         var exact = general.Any(h => keys.Contains(TextNormalizer.Compact(h.Name)) || (h.Brand is { } b && keys.Contains(TextNormalizer.Compact(b))));
 
         // Step 4: brand (or category) + area — "kfc ss2", "mydin shah alam", "minyak shah alam".
-        if (!exact && r.Category is null && SplitArea(norm, areas, oLat, oLng) is { } split)
+        if (!exact && SplitArea(norm, areas, oLat, oLng, !r.Exact) is { } split)
         {
             var (area, rest) = split;
-            var restCats = table.Category(rest);
+            var anchorLat = r.Viewport is null ? area.Lat : oLat;
+            var anchorLng = r.Viewport is null ? area.Lng : oLng;
+            var areaCorrection = SplitArea(norm, areas, oLat, oLng, false) is null ? $"{rest} {area.Name}" : null;
+            var restCats = r.Category is { } selected ? new[] { selected } : table.Category(rest);
+            if (r.Category is not null && table.Category(rest) is null) restCats = null;
             IReadOnlyList<PlaceHit> hits;
             string kind;
             if (restCats is { Length: > 0 })
             {
-                hits = await NearestOfAsync(restCats, area.Lat, area.Lng, r, limit, ct);
+                hits = await NearestOfAsync(restCats, anchorLat, anchorLng, r, limit, ct, r.Viewport is null ? null : area);
                 kind = "category_area";
             }
             else
             {
                 var restVariants = table.Rewrites(rest);
-                hits = await index.SearchAsync(new SearchQuery(rest, area.Lat, area.Lng, limit, null, r.Country, r.Viewer, restVariants, RadiusM: 10_000), ct);
+                hits = await QueryAsync(r, SearchQueryBuilder.Build(new SearchQuery(rest, anchorLat, anchorLng, limit, r.Category, r.Country, r.Viewer, restVariants, RadiusM: r.Viewport is null ? 10_000 : null)), ct, r.Viewport is null ? null : area);
                 kind = "brand_area";
             }
-            if (hits.Count > 0)
-                return new Ranked(hits, new SearchInterpretation(kind, norm, restCats, area.Name, area.Lat, area.Lng), area.Lat, area.Lng,
-                    LiteralTexts: restCats is { Length: > 0 } ? null : table.Rewrites(rest).Prepend(rest).ToList());
+            if (hits.Count > 0 || r.Viewport is not null)
+                return new Ranked(hits, new SearchInterpretation(kind, norm, restCats, area.Name, area.Lat, area.Lng), anchorLat, anchorLng,
+                    LiteralTexts: restCats is { Length: > 0 } ? null : table.Rewrites(rest).Prepend(rest).ToList(), AreaCorrection: areaCorrection);
         }
 
         return new Ranked(general, new SearchInterpretation("text", norm), oLat, oLng, LiteralTexts: variants.Prepend(norm).ToList());
     }
 
     /// <summary>Longest area phrase at the end (or start) of the query, leaving at least one word: "kfc ss2" → (SS2, "kfc").</summary>
-    internal static (AreaRef Area, string Remainder)? SplitArea(string norm, AreaLocator areas, double? lat, double? lng)
+    internal static (AreaRef Area, string Remainder)? SplitArea(string norm, AreaLocator areas, double? lat, double? lng, bool fuzzy = true)
     {
         var t = norm.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        for (var k = Math.Min(3, t.Length - 1); k >= 1; k--)
+        // Literal area phrases win over fuzzy ones. Trim connectors only next to a resolved area.
+        foreach (var allowFuzzy in fuzzy ? new[] { false, true } : new[] { false })
+        for (var k = Math.Min(8, t.Length - 1); k >= 1; k--)
         {
-            if (areas.Find(string.Join(' ', t[^k..]), lat, lng) is { } tail) return (tail, string.Join(' ', t[..^k]));
-            if (areas.Find(string.Join(' ', t[..k]), lat, lng) is { } head) return (head, string.Join(' ', t[k..]));
+            if (areas.Resolve(string.Join(' ', t[^k..]), lat, lng, allowFuzzy) is { } tail)
+            {
+                var rest = t[..^k].ToList();
+                while (rest.Count > 0 && rest[^1] is "di" or "in" or "near" or "at") rest.RemoveAt(rest.Count - 1);
+                if (rest.Count > 0) return (tail, string.Join(' ', rest));
+            }
+            if (areas.Resolve(string.Join(' ', t[..k]), lat, lng, allowFuzzy) is { } head)
+            {
+                var rest = t[k..].ToList();
+                while (rest.Count > 0 && rest[0] is "di" or "in" or "near" or "at") rest.RemoveAt(0);
+                if (rest.Count > 0) return (head, string.Join(' ', rest));
+            }
         }
         return null;
     }
 
-    private async Task<IReadOnlyList<PlaceHit>> NearestOfAsync(PlaceCategory[] cats, double? lat, double? lng, SearchRequest r, int limit, CancellationToken ct)
+    private async Task<IReadOnlyList<PlaceHit>> NearestOfAsync(PlaceCategory[] cats, double? lat, double? lng, SearchRequest r, int limit, CancellationToken ct, AreaRef? area = null)
     {
         IReadOnlyList<PlaceHit> hits = [];
-        foreach (var radius in lat is null ? [double.NaN] : CategoryRadiiM)
+        foreach (var radius in lat is null || r.Viewport is not null ? [double.NaN] : CategoryRadiiM)
         {
             var q = new SearchQuery(r.Q, lat, lng, limit, null, r.Country, r.Viewer, Categories: cats, RadiusM: double.IsNaN(radius) ? null : radius, SortNearest: true);
-            hits = await index.SearchAsync(SearchQueryBuilder.BuildCategory(q), ct);
+            hits = await QueryAsync(r, SearchQueryBuilder.BuildCategory(q), ct, area);
             if (hits.Count >= Math.Min(3, limit)) break;
         }
         return hits;
@@ -190,7 +229,7 @@ public sealed class SearchPipeline(PlaceSearchIndex index, Func<AliasTable> alia
             AnchorDistanceM: ranked.Interpretation.Kind is "brand_area" or "category_area" && FromOrigin(h) is { } ad ? Math.Round(ad) : null)).ToList();
 
         // Chain groups: "FamilyMart · 12 berdekatan".
-        if (ranked.OriginLat is { } oa && ranked.OriginLng is { } ob)
+        if (r.Viewport is null && ranked.OriginLat is { } oa && ranked.OriginLng is { } ob)
         {
             var groups = summaries.Where(s => s.Category is not (PlaceCategory.Street or PlaceCategory.Address or PlaceCategory.Area))
                 .GroupBy(s => SearchResults.ChainKey(s.Name, s.Brand)).Where(g => g.Count() >= 2 && g.Key.Length > 0).Take(3).ToList();
@@ -359,20 +398,24 @@ public sealed class SearchPipeline(PlaceSearchIndex index, Func<AliasTable> alia
 /// anonymous miss counting; plus reverse geocoding for "Pilih pada peta".
 /// </summary>
 public sealed class SearchService(PlaceSearchIndex index, AliasStore aliases, AreaDirectory areaDirectory, PlaceService places,
-    GimanoDbContext db, SearchMissRecorder misses, GeoLookup geo, TimeProvider clock, ILogger<SearchService> logger)
+    GimanoDbContext db, GeoLookup geo, TimeProvider clock, ILogger<SearchService> logger)
 {
     private readonly SearchPipeline pipeline = new(index, () => aliases.Current, clock);
 
     public async Task<SearchResponse> SearchAsync(SearchRequest r, CancellationToken ct)
     {
         var (oLat, oLng) = r.NearLat is not null && r.NearLng is not null ? (r.NearLat, r.NearLng) : (r.Lat, r.Lng);
+        if (r.Viewport is { } viewport) (oLat, oLng) = (viewport.Center.Lat, viewport.Center.Lng);
         var (uLat, uLng) = r.Lat is not null ? (r.Lat, r.Lng) : (oLat, oLng);
 
         // Point results (coordinates, Plus Codes) don't need the index.
         var areas = await areaDirectory.GetAsync(ct);
         var parsed = QueryParser.Parse(r.Q, oLat, oLng, s => areas.Find(s, oLat, oLng) is { } a ? (a.Lat, a.Lng) : null);
         if (parsed is CoordinateQuery or PlusCodeQuery)
-            return await PointAsync(parsed, r, uLat, uLng, ct);
+        {
+            var point = await PointAsync(parsed, r, uLat, uLng, ct);
+            return r.Viewport is null ? point : point with { Results = point.Results.Where(p => r.Viewport.Contains(p.Lat, p.Lng)).ToList(), NoMatch = !point.Results.Any(p => r.Viewport.Contains(p.Lat, p.Lng)) };
+        }
 
         List<PlaceSummary> results;
         SearchInterpretation interpretation;
@@ -386,7 +429,7 @@ public sealed class SearchService(PlaceSearchIndex index, AliasStore aliases, Ar
             logger.LogWarning("OpenSearch unavailable ({Message}); falling back to Postgres search", ex.Message);
             // Same complaint rules as the index path: confirmed permanently closed places stay hidden.
             var fallback = await places.ApplyIssuesAsync(
-                await places.SearchAsync(new SearchQuery(r.Q, oLat, oLng, r.Limit, r.Category, r.Country, r.Viewer), ct), r.Lang, ct);
+                await places.SearchAsync(new SearchQuery(r.Q, oLat, oLng, r.Limit, r.Category, r.Country, r.Viewer, Viewport: r.Viewport), ct), r.Lang, ct);
             return new SearchResponse(fallback, NoMatch: fallback.Count == 0);
         }
         results = await places.ApplyIssuesAsync(results, r.Lang, ct);
@@ -402,9 +445,12 @@ public sealed class SearchService(PlaceSearchIndex index, AliasStore aliases, Ar
             results = [];
         }
 
+        // Viewport misses never widen or suggest destinations outside the captured footprint.
+        if (r.Viewport is not null) return new SearchResponse(results, NoMatch: true, Interpretation: interpretation);
+
         // Never empty: did-you-mean / nearby-category suggestions, and (unless exact=true) results for the corrected spelling.
         var suggestions = await pipeline.SuggestAsync(r, ct);
-        await misses.RecordAsync(r.Q, oLat, oLng, ct);
+        // Search text and origins are private: never persist query history, even in coarse cells.
         if (!r.Exact && suggestions.FirstOrDefault(s => s.PlaceId is not null)?.Query is { } corrected)
         {
             var (fixedResults, fixedInterp, _) = await pipeline.RunAsync(r with { Q = corrected }, null, areas, ct);

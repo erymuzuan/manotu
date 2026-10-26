@@ -242,6 +242,15 @@ struct GimanoMapView: UIViewRepresentable {
             let now = CACurrentMediaTime()
             if isDrivenByMotion, now - lastRegionPublish < 1 { return }
             lastRegionPublish = now
+            let top = max(map.safeAreaInsets.top, 90)
+            let bottom = map.bounds.height - CGFloat(state.homeBottomInset)
+            if bottom > top && map.bounds.width > 0 {
+                let corners = [CGPoint(x: 0, y: top), CGPoint(x: map.bounds.width, y: top),
+                    CGPoint(x: map.bounds.width, y: bottom), CGPoint(x: 0, y: bottom)]
+                let wire = corners.map { map.convert($0, toCoordinateFrom: map) }
+                    .map { String(format: "%.7f,%.7f", locale: Locale(identifier: "en_US_POSIX"), $0.longitude, $0.latitude) }.joined(separator: ";")
+                if state.visibleSearchArea != wire { state.visibleSearchArea = wire }
+            }
             let b = map.visibleCoordinateBounds
             let bbox = BBox(minLng: b.sw.longitude, minLat: b.sw.latitude, maxLng: b.ne.longitude, maxLat: b.ne.latitude)
             if state.visibleBBox != bbox { state.visibleBBox = bbox }

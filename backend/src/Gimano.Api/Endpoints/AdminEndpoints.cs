@@ -50,6 +50,11 @@ public static class AdminEndpoints
         g.MapPost("/contacts/{subject}/{id:guid}/reveal", RevealContact);
         g.MapGet("/search-misses", SearchMissReport);
         g.MapGet("/osm-queue", OsmQueue);
+        g.MapGet("/place-suggestions", async (GimanoDbContext db, CancellationToken ct) =>
+            await db.PlaceSuggestions.AsNoTracking().Where(s => s.Status == SuggestionStatus.Pending).OrderBy(s => s.CreatedAt)
+                .Take(100).Select(s => new { s.Id, s.PlaceId, s.Changes, s.Status, s.CreatedAt, s.StreetOriginalName, s.StreetWayIds }).ToListAsync(ct));
+        g.MapPost("/place-suggestions/{id:guid}/accept", async (Guid id, Services.PlaceCorrectionService service, CancellationToken ct) =>
+            await service.AcceptAsync(id, ct) ? Results.NoContent() : Results.NotFound());
         // Moderation queue (docs/back-office.md "Moderation"; act within 24 h): flagged reviews, photos and community places.
         var mod = g.MapGroup("/moderation");
         mod.MapGet("", (string? kind, string? state, Services.Moderation m, CancellationToken ct) => ModerationQueue(kind, state, m, ct));

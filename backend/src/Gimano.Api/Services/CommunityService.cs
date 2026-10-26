@@ -308,22 +308,27 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
     {
         await RequireUserAsync(userId, ct);
         var isCommunity = CommunityPlace.IsCommunityId(id);
-        var exists = isCommunity ? await db.CommunityPlaces.AnyAsync(p => p.Id == id, ct) : await db.Places.AnyAsync(p => p.Id == id, ct);
+        var street = id.StartsWith("st-", StringComparison.Ordinal) ? await Core.Search.StreetCorrections.CaptureAsync(db, id, ct) : null;
+        var exists = street is not null || (isCommunity ? await db.CommunityPlaces.AnyAsync(p => p.Id == id, ct) : await db.Places.AnyAsync(p => p.Id == id, ct));
+        if (street is not null && (req.Name is null || req.Category is not null || req.Lat is not null || req.Lng is not null || req.Address is not null || req.Phone is not null || req.Website is not null || req.OpeningHours is not null || req.Description is not null || req.Closed is not null))
+            throw new ValidationException("name", "A street suggestion supports a new name and comment only.");
         if (!exists) throw new NotFoundException($"Place {id} not found.");
         if (req.Name is not null) CheckName(req.Name);
         CheckOptional(req.Description, req.Phone, req.Website, req.OpeningHours, req.Address);
         if (Filter.Check(req.Comment, rejectLinks: false) != TextVerdict.Ok) throw new ValidationException("comment", "Please keep it friendly.");
-        if (req.Lat is { } la && req.Lng is { } lo && !CommunityRules.InServiceArea(la, lo)) throw new ValidationException("lat", "Location must be in Malaysia, Singapore or Brunei.");
+        if ((req.Lat is null) != (req.Lng is null)) throw new ValidationException("lat", "Both coordinates are required.");
+        if (req.Lat is { } la && req.Lng is { } lo && (!double.IsFinite(la) || !double.IsFinite(lo) || !CommunityRules.InServiceArea(la, lo))) throw new ValidationException("lat", "Location must be in Malaysia, Singapore or Brunei.");
         if (req.Lat is { } la2 && req.Lng is { } lo2) await restricted.EnsureAllowedAsync(new GeoPoint(la2, lo2), ct);
 
-        var suggestion = new PlaceSuggestion { PlaceId = id, UserId = userId, Changes = req, CreatedAt = clock.GetUtcNow() };
+        var suggestion = new PlaceSuggestion { PlaceId = id, UserId = userId, Changes = req, CreatedAt = clock.GetUtcNow(), StreetWayIds = street?.WayIds ?? [], StreetOriginalName = street?.Name };
         db.PlaceSuggestions.Add(suggestion);
-        if (isCommunity && await db.CommunityPlaces.AnyAsync(p => p.Id == id && p.OwnerId == userId, ct))
+        if (req.Closed is null && isCommunity && await db.CommunityPlaces.AnyAsync(p => p.Id == id && p.OwnerId == userId, ct))
         {
             await db.SaveChangesAsync(ct);
             await PatchAsync(userId, id, new PatchCommunityPlaceRequest(req.Name, req.Category, req.Lat, req.Lng, req.Address, req.Description,
                 req.Phone, req.Website, req.OpeningHours, null), ct);
             suggestion.Status = SuggestionStatus.Applied;
+            suggestion.AppliedAt = clock.GetUtcNow();
         }
         await db.SaveChangesAsync(ct);
         return suggestion.Id;

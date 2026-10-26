@@ -16,3 +16,7 @@ Viewport recommendation: when the map is open, Search this area uses captured vi
 Community recommendation update: public contributed places participate in normal and viewport search; accepted corrections override imported fields through one canonical effective record. Verified community results receive priority among comparably relevant matches. Confirmed closures remain suppressed through imports/report expiry; street renames retain old public aliases. Includes SVG merge flow and regression criteria. The original Downloads PDF was inaccessible; the subsequently supplied repository-root `add-place.pdf` has now been reviewed (all 15 pages extracted, key screens visually inspected).
 
 Design alignment: live unverified places are publicly searchable immediately after screening; My places also lists non-public states, which must not leak into public search. Duplicate suggestions link to existing entities; legitimate home businesses can be reviewed separately from personal residences. PDF page references are in the report. The PDF mentions Thailand, but the owner-requested MY/SG/BN scope is retained.
+
+## Implementation
+
+See [implementation.md](implementation.md) for delivered behavior, test results, the development test API, rollout steps and remaining device checks.

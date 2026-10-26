@@ -1,6 +1,56 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Search this area" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cari kawasan ini"
+          }
+        }
+      }
+    },
+    "Searching only the selected map area. Move the map to choose another area." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cari dalam kawasan peta yang dipilih sahaja. Gerakkan peta untuk memilih kawasan lain."
+          }
+        }
+      }
+    },
+    "No matching places in this area" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiada tempat sepadan di kawasan ini"
+          }
+        }
+      }
+    },
+    "Search is unavailable. Try again." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carian tidak tersedia. Cuba lagi."
+          }
+        }
+      }
+    },
+    "Move or zoom the map, then choose Search this area again." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerakkan atau zum peta, kemudian pilih Cari kawasan ini semula."
+          }
+        }
+      }
+    },
     "\"Different place\" sends it on with that answer. If the check still thinks it's the same, a person decides. Nothing is lost either way." : {
       "localizations" : {
         "ms" : {

@@ -417,6 +417,9 @@ struct PlaceCardView: View {
 
     /// The six "Suggest an edit" choices (complaints v1), shared by the ⋮ menu and the row in Full.
     @ViewBuilder private var suggestOptions: some View {
+        if summary.id.hasPrefix("st-") {
+            Button { showSuggest = true } label: { Label("Name", systemImage: "pencil") }
+        } else {
         Button { placeIssue = .placeClosedPerm } label: { Label("Permanently closed", systemImage: "xmark.octagon") }
         Button { placeIssue = .placeClosedTemp } label: { Label("Temporarily closed", systemImage: "clock.badge.xmark") }
         Button { placeIssue = .placeHoursWrong } label: { Label("Opening hours wrong", systemImage: "clock") }
@@ -426,6 +429,7 @@ struct PlaceCardView: View {
         } label: { Label("Entrance or parking wrong", systemImage: "door.left.hand.open") }
         Button { showSuggest = true } label: { Label("Name, type, phone", systemImage: "pencil") }
         Button { placeIssue = .placeDuplicate } label: { Label("Duplicate", systemImage: "square.on.square") }
+        }
     }
 
     private var routesButton: some View {
@@ -864,6 +868,7 @@ struct SuggestEditSheet: View {
         NavigationStack {
             Form {
                 Section("Name") { TextField("Name", text: $name).accessibilityIdentifier("suggestName") }
+                if !placeId.hasPrefix("st-") {
                 Section("Category") {
                     Picker("Category", selection: $category) {
                         ForEach(AddPlaceCategories.all, id: \.0) { c, t in Text(t).tag(c) }
@@ -876,6 +881,7 @@ struct SuggestEditSheet: View {
                 Section {
                     Toggle("Change opening hours", isOn: $editHours)
                     if editHours { OpeningHoursEditor(hours: $hours) }
+                }
                 }
                 Section("Anything else?") {
                     TextField("e.g. moved to the next shoplot", text: $comment, axis: .vertical).lineLimit(2...4)

@@ -35,19 +35,37 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
 
     private async Task<IReadOnlyList<PlaceHit>> FallbackSearchAsync(SearchQuery q, CancellationToken ct)
     {
-        var pattern = "%" + q.Q.Trim().Replace("%", "").Replace("_", "") + "%";
+        var terms = TextNormalizer.Tokens(q.Q).Where(t => t is not ("di" or "in" or "near" or "at")).ToArray();
+        if (q.Category is { } selected && TextNormalizer.Normalize(q.Q) == GimanoJson.ToWire(selected)) terms = [];
         var limit = Math.Clamp(q.Limit, 1, SearchQueryBuilder.MaxLimit);
-        var query = db.Places.AsNoTracking().Where(p => EF.Functions.ILike(p.Name, pattern) || (p.Brand != null && EF.Functions.ILike(p.Brand, pattern)));
+        var query = db.Places.AsNoTracking().Where(p => !p.Tags.ContainsKey("manotu:closed") || p.Tags["manotu:closed"] != "yes");
+        if (q.Viewport is { } viewport) query = query.Where(p => viewport.Polygon.Covers(p.Location));
         if (q.Category is { } cat) query = query.Where(p => p.Category == cat);
         if (q.Country is { } c) query = query.Where(p => p.Country == c);
 
-        var community = db.CommunityPlaces.AsNoTracking().Where(p => EF.Functions.ILike(p.Name, pattern)
-            && (p.Status == PlaceStatus.Published || (p.Status == PlaceStatus.Pending && (p.Listed || (q.Viewer != null && p.OwnerId == q.Viewer)))));
+        var community = db.CommunityPlaces.AsNoTracking().Where(p => !p.HeldForReview && (p.Status == PlaceStatus.Published || (p.Status == PlaceStatus.Pending && (p.Listed || (q.Viewer != null && p.OwnerId == q.Viewer)))));
+        foreach (var term in terms)
+        {
+            var pattern = "%" + term.Replace("%", "").Replace("_", "") + "%";
+            query = query.Where(p => EF.Functions.ILike(p.Name, pattern) || (p.Brand != null && EF.Functions.ILike(p.Brand, pattern))
+                || EF.Functions.ILike(p.Address, pattern)
+                || (p.Tags.ContainsKey("manotu:locality") && EF.Functions.ILike(p.Tags["manotu:locality"], pattern))
+                || (p.Tags.ContainsKey("manotu:admin_names") && EF.Functions.ILike(p.Tags["manotu:admin_names"], pattern))
+                || (p.Tags.ContainsKey("old_name") && EF.Functions.ILike(p.Tags["old_name"], pattern)));
+            community = community.Where(p => EF.Functions.ILike(p.Name, pattern) || EF.Functions.ILike(p.Address, pattern));
+        }
+        if (q.Viewport is { } view) community = community.Where(p => view.Polygon.Covers(p.Location));
+        if (q.Country is { } country) community = community.Where(p => p.Country == country);
         if (q.Category is { } cat2) community = community.Where(p => p.Category == cat2);
 
         if (q.Lat is { } lat && q.Lng is { } lng)
         {
-            var pt = new GeoPoint(lat, lng).ToPoint();
+            var pt = (q.Viewport?.Center ?? new GeoPoint(lat, lng)).ToPoint();
+            if (q.Viewport is null && q.RadiusM is { } radius)
+            {
+                query = query.Where(p => p.Location.IsWithinDistance(pt, radius));
+                community = community.Where(p => p.Location.IsWithinDistance(pt, radius));
+            }
             query = query.OrderBy(p => p.Location.Distance(pt));
             community = community.OrderBy(p => p.Location.Distance(pt));
         }
@@ -86,13 +104,13 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
     public async Task<IReadOnlyList<PlaceSummary>> NearbyAsync(GeoPoint at, PlaceCategory? category, double radiusM, int limit, Guid? viewer, CancellationToken ct, string lang = "en")
     {
         var pt = at.ToPoint();
-        var query = db.Places.AsNoTracking().Where(p => p.Location.IsWithinDistance(pt, radiusM));
+        var query = db.Places.AsNoTracking().Where(p => !p.Tags.ContainsKey("manotu:closed") || p.Tags["manotu:closed"] != "yes").Where(p => p.Location.IsWithinDistance(pt, radiusM));
         if (category is { } c) query = query.Where(p => p.Category == c);
         var rows = await query.OrderBy(p => p.Location.Distance(pt)).Take(limit).ToListAsync(ct);
 
         // Pending places are shown nearby so that people there can verify them ("Is this place here?").
         var cq = db.CommunityPlaces.AsNoTracking().Where(p => p.Location.IsWithinDistance(pt, radiusM)
-            && (p.Status == PlaceStatus.Published || (p.Status == PlaceStatus.Pending && p.ScreeningState != ScreeningState.Checking)));
+            && (p.Status == PlaceStatus.Published || (p.Status == PlaceStatus.Pending && p.Listed && !p.HeldForReview)));
         if (category is { } c2) cq = cq.Where(p => p.Category == c2);
         var crow = await cq.OrderBy(p => p.Location.Distance(pt)).Take(limit).ToListAsync(ct);
 
@@ -130,6 +148,12 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
 
     private async Task<PlaceDto?> GetRawAsync(string id, double? lat, double? lng, Guid? viewer, CancellationToken ct)
     {
+        if (id.StartsWith("st-", StringComparison.Ordinal))
+        {
+            var street = await StreetCorrections.CaptureAsync(db, id, ct);
+            return street is null ? null : new PlaceDto(id, street.Name, PlaceCategory.Street, "", street.Lat, street.Lng,
+                Distance(lat, lng, street.Lat, street.Lng), null, null, null, null, null, [], new Dictionary<string, string>(), null, null);
+        }
         var local = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), ValhallaMapper.MalaysiaTime).DateTime;
         var agg = (await PlaceDocuments.AggregatesAsync(db, [id], ct)).GetValueOrDefault(id);
         var photos = await RecentPhotosAsync(id, ct);
@@ -144,8 +168,8 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
         var p = await db.Places.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p is null) return null;
         return new PlaceDto(p.Id, p.Name, p.Category, p.Address, p.Location.Y, p.Location.X, Distance(lat, lng, p.Location.Y, p.Location.X), p.Brand,
-            p.Phone, p.Website, p.OpeningHours, OpeningHours.IsOpen(p.OpeningHours, local), p.Amenities, p.Tags, p.OsmType, p.OsmId,
-            PlaceSource.Osm, null, agg?.Rating, agg?.ReviewCount ?? 0, MediaKeys.Url(agg?.ThumbKey), null, null, 0, photos);
+            p.Phone, p.Website, p.OpeningHours, p.Tags.GetValueOrDefault("manotu:closed") == "yes" ? false : OpeningHours.IsOpen(p.OpeningHours, local), p.Amenities, p.Tags, p.OsmType, p.OsmId,
+            PlaceSource.Osm, null, agg?.Rating, agg?.ReviewCount ?? 0, MediaKeys.Url(agg?.ThumbKey), p.Tags.GetValueOrDefault("manotu:description"), null, 0, photos);
     }
 
     internal static PlaceDto ToDto(CommunityPlace c, double? lat, double? lng, PlaceAggregates? agg, IReadOnlyList<PhotoDto> photos, DateTime local, string? ownerHandle = null) =>

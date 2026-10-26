@@ -178,6 +178,7 @@ final class AppModel {
     /// The scheme actually on screen (reported by the root view), drives the map style.
     private(set) var effectiveScheme: ColorScheme = .light
     /// Category pre-selected when opening search from a home shortcut tile.
+    var searchViewport: String?
     var searchCategory: PlaceCategory?
     /// Place being saved from the place card ("Save" sheet).
     var savingPlace: PlaceSummary?

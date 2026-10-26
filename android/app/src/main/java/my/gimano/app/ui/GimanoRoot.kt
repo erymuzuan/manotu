@@ -307,6 +307,10 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
                 Screen.Home -> {
                     MapTopControls(ui, settings, vm, vm.isDemo || fallback, showMenu = true, onMenu = { scope.launch { drawer.open() } }, showRecenter = false)
                     HomeOverlay(ui, settings, vm, onMic)
+                    if (handle.ready) androidx.compose.material3.FilledTonalButton(
+                        onClick = { handle.captureSearchArea?.invoke()?.let(vm::searchThisArea) },
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 104.dp)
+                    ) { Text(stringResource(R.string.search_this_area)) }
                 }
                 is Screen.PickOnMap -> ui.pick?.let { my.gimano.app.ui.pick.PickOnMapOverlay(it, vm, (ui.screen as Screen.PickOnMap).purpose) }
                 Screen.PinActions -> {

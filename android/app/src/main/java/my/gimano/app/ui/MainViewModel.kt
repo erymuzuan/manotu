@@ -161,6 +161,7 @@ data class UiState(
     val saved: List<SavedPlace> = emptyList(),
     val recents: List<Recent> = emptyList(),
     val query: String = "",
+    val searchViewport: String? = null,
     val results: List<PlaceSummary> = emptyList(),
     val localHits: List<LocalHit> = emptyList(),
     val searching: Boolean = false,
@@ -965,7 +966,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
     // --- Search -----------------------------------------------------------------------------
 
     fun openSearch(purpose: SearchPurpose = SearchPurpose.NAVIGATE, initial: String = "") {
-        _ui.update { it.copy(screen = Screen.Search(purpose), query = initial, results = emptyList(), localHits = emptyList(), activeCategory = null, searchedOnce = false,
+        _ui.update { it.copy(screen = Screen.Search(purpose), query = initial, searchViewport = null, results = emptyList(), localHits = emptyList(), activeCategory = null, searchedOnce = false,
             correctedQuery = null, suggestions = emptyList(), exactSearch = false) }
         queryFlow.value = initial
     }
@@ -973,6 +974,13 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
     fun onQuery(q: String) {
         _ui.update { it.copy(query = q, activeCategory = null, exactSearch = false) }
         queryFlow.value = q
+    }
+
+    fun searchThisArea(viewport: String) {
+        val query = _ui.value.query
+        openSearch(initial = query)
+        _ui.update { it.copy(searchViewport = viewport) }
+        if (query.isNotBlank()) viewModelScope.launch { runSearch(query) }
     }
 
     private suspend fun runSearch(q: String) {
@@ -987,17 +995,23 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         // Ranking origin = the user. (Sending the map centre as `near` ranked results around wherever an earlier
         // search or the picker had left the map, which the search screen doesn't even show.)
         val near: my.gimano.app.data.repo.GeoPointLite? = null
-        val got = runCatching { repo.searchFull(q, me.lat, me.lng, 20, exact = _ui.value.exactSearch, near = near) }
+        val viewport = _ui.value.searchViewport
+        val got = runCatching { repo.searchFull(q, me.lat, me.lng, 20, exact = _ui.value.exactSearch, near = near, viewport = viewport, category = _ui.value.activeCategory) }
         (got.exceptionOrNull() as? kotlinx.coroutines.CancellationException)?.let { throw it }   // superseded by a newer query
         val full = got.getOrDefault(SearchResponse())
-        if (_ui.value.query == q) _ui.update {
-            it.copy(results = full.results.withDistanceFrom(me), localHits = localHits, searching = false, searchedOnce = true, searchFailed = got.isFailure,
-                correctedQuery = full.correctedQuery?.takeIf { c -> !c.equals(q.trim(), ignoreCase = true) }, suggestions = full.suggestions)
+        if (_ui.value.query == q && _ui.value.searchViewport == viewport) _ui.update {
+            it.copy(results = full.results.filter { p -> viewport == null || my.gimano.app.core.geo.SearchArea.contains(viewport, p.lat, p.lng) }.withDistanceFrom(me), localHits = localHits.filter { h -> viewport == null || my.gimano.app.core.geo.SearchArea.contains(viewport, h.lat, h.lng) }, searching = false, searchedOnce = true, searchFailed = got.isFailure,
+                correctedQuery = full.correctedQuery?.takeIf { c -> !c.equals(q.trim(), ignoreCase = true) }, suggestions = if (viewport == null) full.suggestions else emptyList())
         }
     }
 
     /** Quick category chips (GET /search/nearby). Surau also includes mosques and vice versa. */
     fun searchCategory(cat: String) {
+        if (_ui.value.searchViewport != null) {
+            _ui.update { it.copy(query = cat, activeCategory = cat, searching = true) }
+            viewModelScope.launch { runSearch(cat) }
+            return
+        }
         _ui.update { it.copy(activeCategory = cat, query = "", searching = true, localHits = emptyList()) }
         queryFlow.value = ""
         viewModelScope.launch {
@@ -1176,7 +1190,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
 
     private fun pickResultFor(purpose: SearchPurpose, p: PlaceSummary, fromMap: Boolean = false) {
         when (purpose) {
-            SearchPurpose.NAVIGATE -> if (fromMap || p.id.startsWith("pin:") || my.gimano.app.core.search.ResultGrouping.isSearchOnly(p.id)) showPin(p) else showPlace(p)
+            SearchPurpose.NAVIGATE -> if (fromMap || p.id.startsWith("pin:") || (my.gimano.app.core.search.ResultGrouping.isSearchOnly(p.id) && !p.id.startsWith("st-"))) showPin(p) else showPlace(p)
             SearchPurpose.SET_HOME -> setHomeWork("home", p, R.string.home_set)
             SearchPurpose.SET_WORK -> setHomeWork("work", p, R.string.work_set)
             SearchPurpose.ADD_FAVORITE -> {

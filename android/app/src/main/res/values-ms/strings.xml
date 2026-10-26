@@ -1345,4 +1345,7 @@
     <string name="show_anyway">Tunjuk juga</string>
     <string name="start_route">Mula · %1$s melalui %2$s</string>
     <string name="start_route_short">Mula · %1$s</string>
+    <string name="search_this_area">Cari kawasan ini</string>
+    <string name="search_area_scope">Carian hanya dalam kawasan peta dipilih. Gerakkan peta untuk memilih kawasan lain.</string>
+    <string name="no_results_area">Tiada tempat sepadan dalam kawasan ini</string>
 </resources>

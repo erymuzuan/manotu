@@ -16,8 +16,8 @@ interface GimanoRepository : my.gimano.app.data.share.ShareApi {
 
     suspend fun search(q: String, lat: Double?, lng: Double?, limit: Int = 10, category: String? = null): List<PlaceSummary>
     /** Full response: results plus spelling correction and suggestions. [exact] = don't correct ("cari 'x' sahaja"). */
-    suspend fun searchFull(q: String, lat: Double?, lng: Double?, limit: Int = 20, exact: Boolean = false, near: GeoPointLite? = null): SearchResponse =
-        SearchResponse(search(q, lat, lng, limit, null))
+    suspend fun searchFull(q: String, lat: Double?, lng: Double?, limit: Int = 20, exact: Boolean = false, near: GeoPointLite? = null, viewport: String? = null, category: String? = null): SearchResponse =
+        SearchResponse(search(q, lat, lng, limit, category).filter { viewport == null || my.gimano.app.core.geo.SearchArea.contains(viewport, it.lat, it.lng) })
     suspend fun nearby(lat: Double, lng: Double, category: String, radius: Int = 5000): List<PlaceSummary>
     /** Place detail. Never carries the user's position (distance is computed on the device, PlaceDistance). */
     suspend fun place(id: String): Place

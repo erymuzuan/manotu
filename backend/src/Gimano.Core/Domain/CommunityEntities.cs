@@ -128,6 +128,9 @@ public sealed class PlaceSuggestion
     public Guid? UserId { get; set; }
     public required SuggestEditRequest Changes { get; set; }
     public SuggestionStatus Status { get; set; } = SuggestionStatus.Pending;
+    public DateTimeOffset? AppliedAt { get; set; }
+    public long[] StreetWayIds { get; set; } = [];
+    public string? StreetOriginalName { get; set; }
     public int Confirmations { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -135,3 +135,12 @@ dotnet ef migrations add <Name> -p src/Gimano.BackOffice -s src/Gimano.BackOffic
 - **Alerts**: TTLs, “still there” extension (+50 % of base, max 3×), “not there” expiry (reputation-weighted ×2),
   150 m same-heading de-duplication — see `Gimano.Core/Alerts/AlertRules.cs`.
 - **Countries** (MY/SG/BN) are resolved with simplified border polygons (`CountryResolver`), not admin relations.
+
+## Place-search coverage and corrections
+
+The October 2026 search update adds strict `viewport` polygons, category-aware locality parsing, durable
+accepted corrections and permanent-closure indexing. See [the API contract](../docs/api.md#finding-places-get-search),
+[import/reindex rollout notes](../data/README.md#public-destination-coverage) and
+[validation evidence](../docs/research/place-search-2026-10-26/implementation.md). Deploy the API and worker together,
+apply `AcceptedPlaceCorrections` and `StreetSearchCorrections`, then recreate the search index through the importer.
+Never promote a stale retained index without replaying current corrections and closures.

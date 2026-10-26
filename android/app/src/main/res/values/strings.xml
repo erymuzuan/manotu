@@ -1354,4 +1354,7 @@
     <string name="show_anyway">Show anyway</string>
     <string name="start_route">Start · %1$s via %2$s</string>
     <string name="start_route_short">Start · %1$s</string>
+    <string name="search_this_area">Search this area</string>
+    <string name="search_area_scope">Searching only the selected map area. Move the map to choose another area.</string>
+    <string name="no_results_area">No matching places in this area</string>
 </resources>

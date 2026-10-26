@@ -87,6 +87,8 @@ class MapHandle {
         return VisibleBounds(b.longitudeWest, b.latitudeSouth, b.longitudeEast, b.latitudeNorth)
     }
 
+    var captureSearchArea: (() -> String?)? = null
+
     fun clearUserMoved() { userMovedCamera = false }
 
     /** Screen pixel to map position (route builder drag and draw). */
@@ -206,6 +208,18 @@ fun GimanoMap(
     var style by remember { mutableStateOf<Style?>(null) }
     var loadedStyleUrl by remember { mutableStateOf<String?>(null) }
 
+    androidx.compose.runtime.SideEffect {
+        handle.captureSearchArea = capture@{
+            val map = handle.map ?: return@capture null
+            val top = ((topInsetDp + 90) * density.density).coerceAtMost(mapView.height.toFloat())
+            val bottom = mapView.height - bottomInsetDp * density.density
+            if (mapView.width <= 0 || bottom <= top) return@capture null
+            listOf(android.graphics.PointF(0f, top), android.graphics.PointF(mapView.width.toFloat(), top),
+                android.graphics.PointF(mapView.width.toFloat(), bottom), android.graphics.PointF(0f, bottom))
+                .map { map.projection.fromScreenLocation(it) }
+                .joinToString(";") { java.lang.String.format(java.util.Locale.US, "%.7f,%.7f", it.longitude, it.latitude) }
+        }
+    }
     val idleCb by rememberUpdatedState(onCameraIdle)
     val clickCb by rememberUpdatedState(onMapClick)
     val longClickCb by rememberUpdatedState(onMapLongClick)

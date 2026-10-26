@@ -4,6 +4,15 @@ import Testing
 
 @Suite("Finding places: result logic")
 struct SearchLogicTests {
+    @Test("Map scope follows the rotated footprint, including its edge")
+    func viewport() {
+        let area = "101,3;102,4;101,5;100,4"
+        #expect(SearchArea.contains(area, .init(lat: 4, lng: 101)))
+        #expect(SearchArea.contains(area, .init(lat: 3.5, lng: 101.5)))
+        #expect(!SearchArea.contains(area, .init(lat: 3.1, lng: 101.9)))
+        #expect(!SearchArea.contains("bad", .init(lat: 4, lng: 101)))
+    }
+
     private func p(_ id: String, _ name: String, _ d: Double, brand: String? = nil, chain: String? = nil, open: Bool? = nil) -> PlaceSummary {
         PlaceSummary(id: id, name: name, category: .convenience, address: "", lat: 3.1, lng: 101.6, distanceM: d, brand: brand,
                      chainGroup: chain.map { ChainGroup(key: $0.lowercased(), name: $0, countNearby: 12) }, openNow: open)

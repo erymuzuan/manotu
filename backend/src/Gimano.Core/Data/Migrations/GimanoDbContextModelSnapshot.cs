@@ -1643,6 +1643,10 @@ namespace Gimano.Core.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("applied_at");
+
                     b.Property<int>("Confirmations")
                         .HasColumnType("integer")
                         .HasColumnName("confirmations");
@@ -1662,6 +1666,15 @@ namespace Gimano.Core.Data.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
                         .HasColumnName("status");
+
+                    b.Property<string>("StreetOriginalName")
+                        .HasColumnType("text")
+                        .HasColumnName("street_original_name");
+
+                    b.PrimitiveCollection<long[]>("StreetWayIds")
+                        .IsRequired()
+                        .HasColumnType("bigint[]")
+                        .HasColumnName("street_way_ids");
 
                     b.Property<Guid?>("UserId")
                         .HasColumnType("uuid")

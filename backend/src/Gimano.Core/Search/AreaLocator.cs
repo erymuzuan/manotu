@@ -3,7 +3,7 @@ using Gimano.Core.Geo;
 namespace Gimano.Core.Search;
 
 /// <summary>An imported area (OSM place=* or admin boundary): kind is the OSM place value or "admin".</summary>
-public sealed record AreaRef(string Id, string Name, string Kind, double Lat, double Lng, double Popularity);
+public sealed record AreaRef(string Id, string Name, string Kind, double Lat, double Lng, double Popularity, string Country = "MY", IReadOnlyList<string>? Aliases = null);
 
 /// <summary>
 /// In-memory area lookups: "which suburb/city is this point in" (labels, reverse geocoding) and "is this phrase an area"
@@ -26,10 +26,11 @@ public sealed class AreaLocator
             var key = Cell(a.Lat, a.Lng);
             if (!_grid.TryGetValue(key, out var list)) _grid[key] = list = [];
             list.Add(a);
-            var n = TextNormalizer.Compact(a.Name);
-            if (n.Length == 0) continue;
-            if (!_byName.TryGetValue(n, out var named)) _byName[n] = named = [];
-            named.Add(a);
+            foreach (var n in (a.Aliases ?? []).Prepend(a.Name).Select(TextNormalizer.Compact).Where(n => n.Length > 0).Distinct())
+            {
+                if (!_byName.TryGetValue(n, out var named)) _byName[n] = named = [];
+                named.Add(a);
+            }
         }
     }
 
@@ -62,6 +63,52 @@ public sealed class AreaLocator
     }
 
     /// <summary>The area a phrase names (exact, spacing-insensitive), preferring the one nearest to the origin, else the most popular.</summary>
+    /// <summary>Resolve a named locality, optionally qualified by a parent area. Fuzzy candidates must have a unique spelling.</summary>
+    public AreaRef? Resolve(string phrase, double? lat, double? lng, bool fuzzy = true)
+    {
+        if (Find(phrase, lat, lng) is { } exact) return exact;
+        var words = phrase.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (var split = words.Length - 1; split >= 1; split--)
+        {
+            var parent = Find(string.Join(' ', words[split..]), lat, lng);
+            if (parent is null) continue;
+            var local = Find(string.Join(' ', words[..split]), parent.Lat, parent.Lng)
+                ?? (fuzzy ? FuzzyFind(string.Join(' ', words[..split]), parent.Lat, parent.Lng) : null);
+            if (local is not null && local.Id != parent.Id && local.Country == parent.Country
+                && GeoMath.HaversineM(local.Lat, local.Lng, parent.Lat, parent.Lng) < 250_000) return local;
+        }
+        return fuzzy ? FuzzyFind(phrase, lat, lng) : null;
+    }
+
+    private AreaRef? FuzzyFind(string phrase, double? lat, double? lng)
+    {
+        var key = TextNormalizer.Compact(phrase);
+        if (key.Length < 5) return null;
+        var budget = key.Length >= 10 ? 2 : 1;
+        var matches = _byName.Keys.Where(k => Math.Abs(k.Length - key.Length) <= budget)
+            .Select(k => (Key: k, Distance: EditDistance(key, k))).Where(x => x.Distance <= budget).ToList();
+        if (matches.Count == 0) return null;
+        var best = matches.Min(x => x.Distance);
+        var winners = matches.Where(x => x.Distance == best).Select(x => x.Key).Distinct().ToList();
+        return winners.Count == 1 ? Find(winners[0], lat, lng) : null;
+    }
+
+    private static int EditDistance(string a, string b)
+    {
+        var row = Enumerable.Range(0, b.Length + 1).ToArray();
+        for (var i = 1; i <= a.Length; i++)
+        {
+            var previous = row[0]; row[0] = i;
+            for (var j = 1; j <= b.Length; j++)
+            {
+                var old = row[j];
+                row[j] = Math.Min(Math.Min(row[j] + 1, row[j - 1] + 1), previous + (a[i - 1] == b[j - 1] ? 0 : 1));
+                previous = old;
+            }
+        }
+        return row[^1];
+    }
+
     public AreaRef? Find(string phrase, double? lat, double? lng)
     {
         if (!_byName.TryGetValue(TextNormalizer.Compact(phrase), out var list)) return null;

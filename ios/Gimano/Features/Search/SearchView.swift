@@ -6,6 +6,8 @@ struct SearchView: View {
     let purpose: SearchPurpose
 
     @State private var query = ""
+    @State private var viewport: String?
+    @State private var searchFailed = false
     @State private var results: [PlaceSummary] = []
     @State private var corrected: String?
     @State private var didYouMean: [SearchSuggestion] = []
@@ -60,6 +62,10 @@ struct SearchView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
+            if viewport != nil {
+                Text("Searching only the selected map area. Move the map to choose another area.")
+                    .font(Tokens.Font.body).padding(.horizontal, 16).padding(.vertical, 8)
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(Self.quickCategories, id: \.0) { cat, title in
@@ -92,11 +98,11 @@ struct SearchView: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if query.isEmpty && category == nil {
                         suggestions
-                    } else if results.isEmpty && !isSearching && searchedOnce && model.localMatches(query).isEmpty && model.privateMatches(query).isEmpty {
+                    } else if results.isEmpty && !isSearching && searchedOnce && model.localMatches(query).filter { viewport == nil || SearchArea.contains(viewport!, $0.location) }.isEmpty && model.privateMatches(query).filter { viewport == nil || SearchArea.contains(viewport!, $0.location) }.isEmpty {
                         noResults
                     } else {
                         // On-device favourites first (they never leave the phone).
-                        ForEach(model.localMatches(query)) { f in
+                        ForEach(model.localMatches(query).filter { viewport == nil || SearchArea.contains(viewport!, $0.location) }) { f in
                             Button {
                                 pick(PlaceSummary(id: f.placeId ?? "local:\(f.id)", name: f.name, category: .other, address: f.address,
                                                   lat: f.lat, lng: f.lng, distanceM: Geo.distance(model.position, f.location), brand: nil))
@@ -107,7 +113,7 @@ struct SearchView: View {
                             .accessibilityIdentifier("localResult")
                             Divider().padding(.leading, 68)
                         }
-                        ForEach(model.privateMatches(query)) { p in
+                        ForEach(model.privateMatches(query).filter { viewport == nil || SearchArea.contains(viewport!, $0.location) }) { p in
                             Button { pick(p.summary) } label: {
                                 PlaceRow(gIcon: .heart, title: p.name, subtitle: p.address ?? String(localized: "Just for me"),
                                          distanceM: Geo.distance(model.position, p.location))
@@ -148,6 +154,8 @@ struct SearchView: View {
             if isSearching { ProgressView().padding(.top, 70) }
         }
         .onAppear {
+            viewport = model.searchViewport
+            model.searchViewport = nil
             #if DEBUG
             if let q = UserDefaults.standard.string(forKey: "GimanoDemoQuery"), query.isEmpty { query = q; return }
             #endif
@@ -158,7 +166,7 @@ struct SearchView: View {
                 focused = true
             }
         }
-        .task(id: "\(query)|\(category?.rawValue ?? "")|\(exact)|\(sort == .nearest)") { await runSearch() }
+        .task(id: "\(query)|\(category?.rawValue ?? "")|\(exact)|\(sort == .nearest)|\(viewport ?? "")") { await runSearch() }
         .onChange(of: query) { exact = false }
     }
 
@@ -278,9 +286,9 @@ struct SearchView: View {
         VStack(spacing: 16) {
             Image(systemName: "magnifyingglass").font(.system(size: 64, weight: .bold)).foregroundStyle(Color.brandTint)
                 .padding(.top, 24)
-            Text("Can't find “\(query)”").font(Tokens.Font.nunito(22, .black)).multilineTextAlignment(.center)
+            Text(searchFailed ? "Search is unavailable. Try again." : viewport != nil ? "No matching places in this area" : "Can't find “\(query)”").font(Tokens.Font.nunito(22, .black)).multilineTextAlignment(.center)
                 .accessibilityIdentifier("noResultsTitle")
-            Text("Small places are often not on the map yet. Know where it is? Show it on the map and go.")
+            Text(viewport != nil ? "Move or zoom the map, then choose Search this area again." : "Small places are often not on the map yet. Know where it is? Show it on the map and go.")
                 .font(Tokens.Font.body).foregroundStyle(Color.textMuted).multilineTextAlignment(.center)
             if !didYouMean.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
@@ -370,14 +378,14 @@ struct SearchView: View {
     }
 
     @ViewBuilder private var suggestions: some View {
-        if !model.recents.isEmpty {
+        if !model.recents.filter({ viewport == nil || SearchArea.contains(viewport!, $0.location) }).isEmpty {
             Text("Recent")
                 .font(Tokens.Font.label)
                 .foregroundStyle(Color.textMuted)
                 .textCase(.uppercase)
                 .padding(.horizontal, Tokens.Space.gutter)
                 .padding(.top, 12)
-            ForEach(model.recents) { r in
+            ForEach(model.recents.filter { viewport == nil || SearchArea.contains(viewport!, $0.location) }) { r in
                 Button {
                     pick(PlaceSummary(id: r.placeId ?? r.id, name: r.name, category: .other, address: r.address, lat: r.lat, lng: r.lng,
                                       distanceM: Geo.distance(model.position, r.location), brand: nil))
@@ -396,13 +404,19 @@ struct SearchView: View {
         try? await Task.sleep(for: .milliseconds(250)) // debounce
         guard !Task.isCancelled else { return }
         isSearching = true
+        searchFailed = false
         defer { isSearching = false }
         let repo = model.repo
         let near = model.position
         let exactNow = exact
         let sortNow = sort
         do {
-            if q.isEmpty, let category {
+            if let viewport {
+                let o = try await repo.searchInArea(query: q.isEmpty ? (category?.rawValue ?? "") : q, near: near,
+                    category: category, limit: 25, exact: exactNow, sort: sortNow, viewport: viewport)
+                guard !Task.isCancelled else { return }
+                results = o.results; corrected = o.correctedQuery; didYouMean = []
+            } else if q.isEmpty, let category {
                 let r = try await repo.nearby(near: near, category: category, radiusM: 5000)
                 guard !Task.isCancelled else { return }
                 results = r; corrected = nil; didYouMean = []
@@ -423,7 +437,7 @@ struct SearchView: View {
                 }
             }
         } catch {
-            if !Task.isCancelled { results = []; corrected = nil; didYouMean = [] }
+            if !Task.isCancelled { results = []; corrected = nil; didYouMean = []; searchFailed = true }
         }
         searchedOnce = true
     }
@@ -433,7 +447,7 @@ struct SearchView: View {
         switch purpose {
         case .destination:
             // Streets, addresses, postcodes and coordinates have no place page: go straight to the pin actions.
-            if p.isSearchOnly {
+            if p.isSearchOnly && !p.id.hasPrefix("st-") {
                 model.pinActions = PickedPoint(location: p.location, address: p.address.isEmpty ? nil : p.address, placeName: p.name)
             } else {
                 model.openPlace(p)

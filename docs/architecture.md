@@ -103,8 +103,18 @@ GPS pings don't use the durable `gimano.events` exchange. They go through a sepa
 ## Malaysia-first data
 
 - Extract: `https://download.geofabrik.de/asia/malaysia-singapore-brunei-latest.osm.pbf`
-- Places are tagged with `country` (MY/SG/BN) by point-in-polygon on admin
-  level 2; the default search scope is MY.
+- Places carry `country` (MY/SG/BN): an explicit supported country tag wins; simplified
+  country polygons are the current fallback. Search can explicitly filter one country.
+- Named public destinations are eligible even without a known presentation category (`Other`).
+  Sensitive sites and personal residential records are excluded before search indexing.
+- PostGIS enriches containing administrative names and bounded nearby locality context;
+  OpenSearch handles text/aliases and geographic retrieval. A captured viewport is a hard boundary.
+- Applied place suggestions are durable correction records replayed over refreshed OSM facts.
+  Street search renames retain captured source-way IDs and historical-name aliases. Confirmed
+  permanent closures remain effective until refuted or explicitly reopened.
+- Import/rebuild and live index writers coordinate through a Postgres advisory lock. Failed bulk
+  items block alias promotion; previous physical indices are retained for deliberate rollback.
+  See [import rollout](../data/README.md#public-destination-coverage).
 - POI categories in [api.md](api.md#place-categories).
 - Licence: OSM data © OpenStreetMap contributors, ODbL. Attribution is shown in
   the map view of both apps.

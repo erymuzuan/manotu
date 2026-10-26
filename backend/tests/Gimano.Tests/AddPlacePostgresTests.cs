@@ -98,6 +98,77 @@ public sealed class PostgresIntegrationAddPlaceTests : IAsyncLifetime
     private IEnumerable<PlaceScreenedEvent> Screened => _bus.Sent.Where(s => s.Key == RoutingKeys.PlaceScreened).Select(s => (PlaceScreenedEvent)s.Payload);
 
     [Fact]
+    public async Task Street_rename_and_locality_enrichment_survive_index_rebuild()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var prefix = "gimano-st" + Guid.NewGuid().ToString("N")[..12] + "-";
+        var index = OpenSearchIntegrationTests.Create(prefix, out var client);
+        if (index is null) { Assert.Skip("GIMANO_OS_URL not set"); return; }
+        await using var db = NewDb();
+        try
+        {
+            var id = await db.Database.SqlQuery<string>($"""
+                SELECT 'st-' || ST_GeoHash(ST_StartPoint(geom::geometry), 4) || '-' || left(md5(name), 10) AS "Value"
+                FROM road_segments WHERE osm_way_id = 4242
+                """).SingleAsync();
+            var source = await Core.Search.StreetCorrections.CaptureAsync(db, id, default);
+            Assert.NotNull(source);
+            Assert.Equal([4242L], source.WayIds);
+            var edit = new PlaceSuggestion { PlaceId = id, UserId = _regular, Status = SuggestionStatus.Applied, AppliedAt = T0,
+                StreetOriginalName = source.Name, StreetWayIds = source.WayIds,
+                Changes = new("Jalan Mawar Baru", null, null, null, null, null, null, null, null, null, null) };
+            db.PlaceSuggestions.Add(edit);
+            db.Places.Add(new Place { Id = "area-test", Name = "Petaling Jaya", Category = PlaceCategory.Area,
+                Location = new GeoPoint(Lat, Lng).ToPoint(), OsmType = "node", Tags = new() { ["place"] = "city" } });
+            await db.SaveChangesAsync();
+            var importer = new Gimano.Importer.OsmImporter(db, _ds, index, NullLogger<Gimano.Importer.OsmImporter>.Instance);
+            await importer.EnrichLocalitiesAsync(default);
+            db.ChangeTracker.Clear();
+            Assert.Equal("Petaling Jaya", (await db.Places.SingleAsync(p => p.Id == "n77")).Tags["manotu:locality"]);
+            await importer.IndexSearchAsync(true, default);
+            var query = new Core.Search.SearchQuery("Jalan Mawar Baru", Lat, Lng, Scope: Core.Search.SearchScope.Streets);
+            var hits = await index.SearchAsync(Core.Search.SearchQueryBuilder.BuildStreet(query, Core.Search.QueryParser.StreetKey(query.Q)));
+            Assert.Equal(id, Assert.Single(hits).Id);
+            var old = await index.SearchAsync(Core.Search.SearchQueryBuilder.BuildStreet(query, Core.Search.QueryParser.StreetKey(source.Name)));
+            Assert.Equal("Jalan Mawar Baru", Assert.Single(old).Name);
+            await db.RoadSegments.ExecuteUpdateAsync(s => s.SetProperty(r => r.Name, "Changed upstream name"));
+            await importer.IndexSearchAsync(true, default);
+            Assert.Equal(id, Assert.Single(await index.SearchAsync(Core.Search.SearchQueryBuilder.BuildStreet(query, Core.Search.QueryParser.StreetKey(query.Q)))).Id);
+        }
+        finally
+        {
+            var response = await client.Indices.GetAsync<OpenSearch.Net.StringResponse>(prefix + "*");
+            if (response.Success && System.Text.Json.Nodes.JsonNode.Parse(response.Body) is System.Text.Json.Nodes.JsonObject rows)
+                foreach (var (name, _) in rows) await client.Indices.DeleteAsync<OpenSearch.Net.StringResponse>(name);
+        }
+    }
+
+    [Fact]
+    public async Task Accepted_correction_survives_source_refresh_and_viewport_uses_postgis()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        await using var db = NewDb();
+        var place = await db.Places.SingleAsync(p => p.Id == "n77");
+        var edit = new SuggestEditRequest("Kedai Baru SS2", null, null, null, null, null, null, null, null, true, null);
+        db.PlaceSuggestions.Add(new PlaceSuggestion { PlaceId = place.Id, UserId = _regular, Changes = edit,
+            Status = SuggestionStatus.Applied, CreatedAt = T0, AppliedAt = T0.AddMinutes(1) });
+        await db.SaveChangesAsync();
+        await Gimano.Core.Search.PlaceCorrections.ReplayAsync(db, default);
+        var effective = await db.Places.SingleAsync(p => p.Id == "n77");
+        Assert.Equal("Kedai Baru SS2", effective.Name);
+        Assert.Equal("yes", effective.Tags["manotu:closed"]);
+        effective.Name = "Stale imported name";
+        effective.Tags = [];
+        await db.SaveChangesAsync();
+        await Gimano.Core.Search.PlaceCorrections.ReplayAsync(db, default);
+        Assert.Equal("Kedai Baru SS2", (await db.Places.SingleAsync(p => p.Id == "n77")).Name);
+        Assert.True(Gimano.Core.Search.SearchViewport.TryParse("101.60,3.10;101.65,3.10;101.65,3.15;101.60,3.15", out var viewport));
+        Assert.Single(await db.Places.Where(p => viewport!.Polygon.Covers(p.Location)).ToListAsync());
+        var doc = await Gimano.Core.Search.PlaceDocuments.ForIdAsync(db, "n77", default);
+        Assert.True(doc!["closed"]!.GetValue<bool>());
+    }
+
+    [Fact]
     public async Task Passed_place_is_live_listed_and_needs_one_confirmation()
     {
         if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }

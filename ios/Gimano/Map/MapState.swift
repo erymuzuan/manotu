@@ -74,6 +74,7 @@ final class MapState {
     var bubbleAnchors: [String: LatLng] = [:]
     /// Screen positions of `bubbleAnchors`, updated by the map as it moves.
     var bubblePoints: [String: CGPoint] = [:]
+    var visibleSearchArea: String?
     var visibleBBox: BBox?
     var zoom: Double = 14
 

@@ -43,6 +43,53 @@ public class OpenSearchIntegrationTests
     };
 
     [Fact]
+    public async Task Locality_viewport_and_closure_retrieval()
+    {
+        var prefix = $"gimano-cov{Guid.NewGuid():N}"[..22] + "-";
+        var index = Create(prefix, out var client);
+        if (index is null) { Assert.Skip("GIMANO_OS_URL not set"); return; }
+        try
+        {
+            await index.EnsureIndexAsync();
+            var station = Osm("nBB", "Petronas", 5.8355, 101.9018);
+            station.Tags["manotu:locality"] = "Bukit Bunga";
+            station.Tags["manotu:admin_names"] = "Kelantan";
+            var closed = SearchQueryBuilder.ToDocument(Osm("closed", "Petronas", 5.8356, 101.9019));
+            closed["closed"] = true;
+            await index.BulkIndexAsync([SearchQueryBuilder.ToDocument(station), closed,
+                SearchQueryBuilder.ToDocument(Osm("far", "Petronas", 3.14, 101.69)),
+                SearchQueryBuilder.ToDocument(new CommunityPlace { Id = "community", Name = "Petronas Kiosk", Category = PlaceCategory.Fuel,
+                    Status = PlaceStatus.Pending, Listed = true, Location = new GeoPoint(5.836, 101.902).ToPoint() })]);
+            await index.RefreshAsync();
+            var areas = new AreaLocator([new AreaRef("bb", "Bukit Bunga", "town", 5.83, 101.90, 6), new AreaRef("kel", "Kelantan", "admin", 5.3, 102, 8)]);
+            var pipeline = new Gimano.Api.Services.SearchPipeline(index, AliasTable.Embedded);
+            foreach (var query in new[] { "Petronas Bukit Bunga", "Petronas di Bukit Bunga", "Petronas Bukit Bnga", "Petronas Bukit Bunga Kelantan" })
+            {
+                var (results, _, correction) = await pipeline.RunAsync(new(query, 3.14, 101.69, Category: PlaceCategory.Fuel), null, areas, default);
+                Assert.Contains(results, r => r.Id == "nBB");
+                Assert.DoesNotContain(results, r => r.Id is "far" or "closed");
+                if (query.Contains("Bnga")) Assert.Contains("Bukit Bunga", correction);
+            }
+            Assert.True(SearchViewport.TryParse("101.89,5.82;101.92,5.82;101.92,5.85;101.89,5.85", out var viewport));
+            var (scoped, _, _) = await pipeline.RunAsync(new("Petronas", 3.14, 101.69, Viewport: viewport), null, areas, default);
+            Assert.Contains(scoped, r => r.Id == "community" && r.Status == PlaceStatus.Pending);
+            Assert.All(scoped, r => Assert.True(viewport!.Contains(r.Lat, r.Lng)));
+            Assert.DoesNotContain(scoped, r => r.Id == "closed");
+            Assert.True(SearchViewport.TryParse("101.68,3.13;101.70,3.13;101.70,3.15;101.68,3.15", out var klViewport));
+            var (outsideLocality, _, _) = await pipeline.RunAsync(new("Petronas Bukit Bunga", 3.14, 101.69, Viewport: klViewport), null, areas, default);
+            Assert.Empty(outsideLocality);
+            var malformed = SearchQueryBuilder.ToDocument(station); malformed["location"] = "invalid";
+            await Assert.ThrowsAsync<InvalidOperationException>(() => index.BulkIndexAsync([malformed]));
+        }
+        finally
+        {
+            var response = await client.Indices.GetAsync<StringResponse>(prefix + "*");
+            if (response.Success && System.Text.Json.Nodes.JsonNode.Parse(response.Body) is System.Text.Json.Nodes.JsonObject rows)
+                foreach (var (name, _) in rows) await client.Indices.DeleteAsync<StringResponse>(name);
+        }
+    }
+
+    [Fact]
     public async Task Prefixed_alias_bulk_search_visibility_and_rebuild_against_a_real_cluster()
     {
         var prefix = $"gimano-it{Guid.NewGuid():N}"[..20] + "-";

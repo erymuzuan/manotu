@@ -494,7 +494,7 @@ public sealed class IssueDirectory(IServiceScopeFactory scopes, TimeProvider clo
         var db = scope.ServiceProvider.GetRequiredService<GimanoDbContext>();
         var now = clock.GetUtcNow();
         var open = await db.Issues.AsNoTracking().Where(i => (i.State == IssueState.Suspected || i.State == IssueState.Confirmed)
-            && (i.ExpiresAt == null || i.ExpiresAt > now)).ToListAsync(ct);
+            && (i.ExpiresAt == null || i.ExpiresAt > now || (i.Kind == IssueKind.PlaceClosedPerm && i.State == IssueState.Confirmed))).ToListAsync(ct);
 
         var ways = open.Where(i => IssueRules.IsRoad(i.Kind) && i.WayId is not null).Select(i => i.WayId!.Value).Distinct().ToList();
         var segs = ways.Count == 0 ? [] : await db.RoadSegments.AsNoTracking().Where(s => ways.Contains(s.OsmWayId))
@@ -510,7 +510,7 @@ public sealed class IssueDirectory(IServiceScopeFactory scopes, TimeProvider clo
     /// </summary>
     internal static Snapshot Compose(IReadOnlyList<Issue> openIssues, IReadOnlyDictionary<(long, int), IReadOnlyList<GeoPoint>> lines, DateTimeOffset now)
     {
-        var open = openIssues.Where(i => i.State is IssueState.Suspected or IssueState.Confirmed && (i.ExpiresAt is not { } e || e > now)).ToList();
+        var open = openIssues.Where(i => i.State is IssueState.Suspected or IssueState.Confirmed && (i.ExpiresAt is not { } e || e > now || (i.Kind == IssueKind.PlaceClosedPerm && i.State == IssueState.Confirmed))).ToList();
         var road = open.Where(i => IssueRules.IsRoad(i.Kind) && i.WayId is not null).ToList();
 
         RoadIssue Road(Issue i)

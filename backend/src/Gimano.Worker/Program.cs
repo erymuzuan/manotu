@@ -26,6 +26,7 @@ builder.Services.AddHostedService<JamPublisher>();
 builder.Services.AddHostedService<AlertLifecycle>();
 builder.Services.AddHostedService<AlertExpirySweeper>();
 builder.Services.AddHostedService<SearchIndexer>();
+builder.Services.AddHostedService<IssueSearchIndexer>();
 builder.Services.AddGimanoMedia(builder.Configuration);
 builder.Services.AddHostedService<Gimano.Worker.Photos.PhotoProcessor>();
 builder.Services.AddHostedService<Gimano.Worker.Inbox.InboxGenerator>();

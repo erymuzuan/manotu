@@ -367,7 +367,7 @@ fun PlaceCard(sel: PlaceSel, vm: MainViewModel, cvm: ContributeViewModel, apiBas
     }
     // "Cadangkan suntingan": the six complaint options when the server has /issues; otherwise the classic edit form.
     var suggestForm by remember { mutableStateOf(false) }
-    val issuesOn = uiState.issuesAvailable
+    val issuesOn = uiState.issuesAvailable && d?.id?.startsWith("st-") != true
     if (suggest && d != null && issuesOn) my.gimano.app.ui.issues.PlaceSuggestSheet(
         onDismiss = { suggest = false },
         onClosedPerm = { suggest = false; vm.reportPlaceIssue(my.gimano.app.data.model.IssueKind.PLACE_CLOSED_PERM) },
@@ -715,8 +715,8 @@ private fun SuggestEditDialog(place: Place, onDismiss: () -> Unit, onSend: (Sugg
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(name, { name = it }, singleLine = true, label = { Text(stringResource(R.string.plan_name)) })
-                OutlinedTextField(phone, { phone = it }, singleLine = true, label = { Text(stringResource(R.string.phone)) })
-                OutlinedTextField(hours, { hours = it }, singleLine = true, label = { Text(stringResource(R.string.opening_hours)) })
+                if (!place.id.startsWith("st-")) OutlinedTextField(phone, { phone = it }, singleLine = true, label = { Text(stringResource(R.string.phone)) })
+                if (!place.id.startsWith("st-")) OutlinedTextField(hours, { hours = it }, singleLine = true, label = { Text(stringResource(R.string.opening_hours)) })
                 OutlinedTextField(comment, { comment = it }, minLines = 2, label = { Text(stringResource(R.string.comment_hint)) })
             }
         },

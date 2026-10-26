@@ -22,6 +22,7 @@ public sealed class SearchIndexer(RabbitMqConnection connection, IServiceScopeFa
             _indexReady = true;
         }
         await using var scope = scopes.CreateAsyncScope();
+        await using var rebuildLock = await SearchRebuildLock.AcquireAsync(scope.ServiceProvider.GetRequiredService<Npgsql.NpgsqlDataSource>(), false, ct);
         var db = scope.ServiceProvider.GetRequiredService<GimanoDbContext>();
         // OSM or community place, with its rating/review count/thumbnail.
         var doc = await PlaceDocuments.ForIdAsync(db, message.PlaceId, ct);

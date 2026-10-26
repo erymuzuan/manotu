@@ -137,7 +137,7 @@ public static class IssueRules
     public static IssueState Next(Issue i, IssueEvidence e, DateTimeOffset now)
     {
         if (!IsOpen(i.State)) return i.State;
-        if (i.ExpiresAt is { } exp && now >= exp) return IssueState.Expired;
+        if (i.ExpiresAt is { } exp && now >= exp && !(i.Kind == IssueKind.PlaceClosedPerm && i.State == IssueState.Confirmed)) return IssueState.Expired;
         if (IsFeedbackOnly(i.Kind)) return i.State;
         if (i.WeightedCleared >= ClearedToRefute && i.WeightedCleared >= i.WeightedStill) return IssueState.Refuted;
         if (PassiveRefutes(i, e)) return IssueState.Refuted;

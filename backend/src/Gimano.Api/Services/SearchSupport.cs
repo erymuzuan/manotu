@@ -78,8 +78,8 @@ public sealed class AreaDirectory(IServiceScopeFactory scopes, TimeProvider cloc
             await using var scope = scopes.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<GimanoDbContext>();
             var rows = await db.Places.AsNoTracking().Where(p => p.Category == Core.Contracts.PlaceCategory.Area)
-                .Select(p => new { p.Id, p.Name, p.Tags, p.Location, p.Popularity }).ToListAsync(ct);
-            _locator = new AreaLocator(rows.Select(r => new AreaRef(r.Id, r.Name, r.Tags.GetValueOrDefault("place") ?? "admin", r.Location.Y, r.Location.X, r.Popularity)));
+                .Select(p => new { p.Id, p.Name, p.Tags, p.Location, p.Popularity, p.Country }).ToListAsync(ct);
+            _locator = new AreaLocator(rows.Select(r => new AreaRef(r.Id, r.Name, r.Tags.GetValueOrDefault("place") ?? "admin", r.Location.Y, r.Location.X, r.Popularity, r.Country, SearchAliases.AreaNameTags.Where(r.Tags.ContainsKey).Select(t => r.Tags[t]).ToArray())));
             _loadedAt = clock.GetUtcNow();
             logger.LogInformation("Area directory: {Count} areas", _locator.Count);
             return _locator;
