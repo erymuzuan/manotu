@@ -17,7 +17,7 @@ using OsmSharp.Tags;
 
 namespace Gimano.Importer;
 
-public sealed record ImportOptions(string PbfPath, bool Places = true, bool Roads = true, bool Search = true, bool RecreateIndex = true, bool DryRun = false, string? TollsCsv = null);
+public sealed record ImportOptions(string PbfPath, bool Places = true, bool Roads = true, bool Search = true, bool RecreateIndex = true, bool DryRun = false, string? TollsCsv = null, bool EnrichOnly = false);
 
 /// <summary>
 /// Two-pass PBF import:
@@ -37,6 +37,8 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
 
     public async Task RunAsync(ImportOptions o, CancellationToken ct)
     {
+        if (o.EnrichOnly && (o.DryRun || !o.Search || !o.RecreateIndex))
+            throw new ArgumentException("Enrichment recovery requires a new search index and cannot be a dry run.");
         await using var rebuildLock = o.DryRun ? null : await SearchRebuildLock.AcquireAsync(dataSource, true, ct);
         var sw = Stopwatch.StartNew();
         if (!o.DryRun)
@@ -45,6 +47,14 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
             await db.Database.MigrateAsync(ct);
         }
 
+        if (o.EnrichOnly)
+        {
+            await PlaceCorrections.ReplayAsync(db, ct);
+            await this.EnrichLocalitiesAsync(ct);
+            await this.IndexSearchAsync(true, ct);
+            logger.LogInformation("Enrichment recovery finished in {Elapsed}", sw.Elapsed);
+            return;
+        }
         if (o.Places || o.Roads)
         {
             if (!File.Exists(o.PbfPath)) throw new FileNotFoundException($"OSM extract not found: {o.PbfPath}. Run data/download-osm.sh first.");
@@ -750,25 +760,8 @@ public sealed class OsmImporter(GimanoDbContext db, NpgsqlDataSource dataSource,
     /// <summary>Area context for every POI, independently of whether it already has a street address.</summary>
     internal async Task EnrichLocalitiesAsync(CancellationToken ct)
     {
-        const string sql = """
-            UPDATE places p SET tags = p.tags || jsonb_build_object('manotu:admin_names', areas.names)
-            FROM (SELECT p2.id, string_agg(DISTINCT a.name, ', ') AS names
-                  FROM places p2 JOIN admin_areas a ON ST_Covers(a.geom, p2.location)
-                  WHERE p2.category <> 'Area' GROUP BY p2.id) areas WHERE p.id = areas.id;
-            UPDATE places p SET tags = p.tags || jsonb_build_object(
-                'manotu:locality', a.name, 'manotu:locality_id', a.id, 'manotu:locality_method', 'nearest_place')
-            FROM (SELECT p2.id,
-                (SELECT a.id FROM places a WHERE a.category = 'Area' AND a.country = p2.country
-                    AND a.tags->>'place' IN ('city','town','village','suburb','neighbourhood','quarter')
-                    AND ST_DWithin(a.location, p2.location,
-                        CASE WHEN a.tags->>'place' IN ('city','town') THEN 20000 ELSE 2500 END)
-                    ORDER BY a.location <-> p2.location LIMIT 1) AS area_id
-                FROM places p2 WHERE p2.category <> 'Area') near
-            JOIN places a ON a.id = near.area_id WHERE p.id = near.id;
-            """;
         await using var conn = await dataSource.OpenConnectionAsync(ct);
-        await using var cmd = new NpgsqlCommand(sql, conn) { CommandTimeout = 1800 };
-        await cmd.ExecuteNonQueryAsync(ct);
+        await LocalityEnrichment.RunAsync(conn, logger, ct);
     }
 
     /// <summary>Loads data/tolls/my-toll-rates.csv, matches rows to OSM toll plazas, replaces toll_rates and writes a match report.</summary>

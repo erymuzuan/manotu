@@ -18,6 +18,7 @@ if (args.Contains("--help") || args.Contains("-h"))
           --dry-run        parse the extract and print counts only (no database / OpenSearch needed)
           --tolls <csv>    toll tariff table (default data/tolls/my-toll-rates.csv or $GIMANO_TOLLS)
           --skip-tolls     don't (re)load toll tariffs
+          --enrich-only    recover an already imported database: replay edits, enrich, rebuild search (no PBF/roads/tolls)
           --tolls-only     only (re)load toll tariffs and match them to the already-imported plazas
         """);
     return 0;
@@ -33,6 +34,12 @@ string? Arg(string name) => args.SkipWhile(a => a != name).Skip(1).FirstOrDefaul
 var tollsOnly = args.Contains("--tolls-only");
 var pbf = Arg("--pbf") ?? Environment.GetEnvironmentVariable("GIMANO_PBF") ?? FindDefault("data/osm/malaysia-singapore-brunei-latest.osm.pbf");
 
+var enrichOnly = args.Contains("--enrich-only");
+if (enrichOnly && args.Any(a => a is "--dry-run" or "--skip-search" or "--keep-index" or "--tolls-only"))
+{
+    Console.Error.WriteLine("--enrich-only requires index recreation; incompatible with --dry-run, --skip-search, --keep-index and --tolls-only.");
+    return 2;
+}
 var options = new ImportOptions(
     pbf,
     Places: !tollsOnly && !args.Contains("--skip-places"),
@@ -40,7 +47,8 @@ var options = new ImportOptions(
     Search: !tollsOnly && !args.Contains("--skip-search"),
     RecreateIndex: !args.Contains("--keep-index"),
     DryRun: args.Contains("--dry-run"),
-    TollsCsv: args.Contains("--skip-tolls") ? null : Arg("--tolls") ?? Environment.GetEnvironmentVariable("GIMANO_TOLLS") ?? FindDefault("data/tolls/my-toll-rates.csv"));
+    TollsCsv: args.Contains("--skip-tolls") ? null : Arg("--tolls") ?? Environment.GetEnvironmentVariable("GIMANO_TOLLS") ?? FindDefault("data/tolls/my-toll-rates.csv"),
+    EnrichOnly: enrichOnly);
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
