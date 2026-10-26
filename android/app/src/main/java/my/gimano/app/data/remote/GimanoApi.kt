@@ -215,6 +215,18 @@ interface GimanoApi {
     @POST("photos")
     suspend fun uploadPhoto(@Part file: MultipartBody.Part, @Part("placeId") placeId: RequestBody, @Part("caption") caption: RequestBody?): Photo
 
+    /** Poll after an upload: status processing → published | rejected (the uploader's own copy carries `moderation`). */
+    @GET("photos/{id}")
+    suspend fun photo(@Path("id") id: String): Photo
+
+    /** docs/content-safety.md: once per review, held for a maintainer → 202. */
+    @POST("reviews/{id}/appeal")
+    suspend fun appealReview(@Path("id") id: String, @Body body: AppealRequest): Response<ResponseBody>
+
+    /** docs/content-safety.md: once per photo → 202. */
+    @POST("photos/{id}/appeal")
+    suspend fun appealPhoto(@Path("id") id: String, @Body body: AppealRequest): Response<ResponseBody>
+
     @GET("places/{id}/photos")
     suspend fun photos(@Path("id") id: String, @Query("cursor") cursor: String? = null): PhotosPage
 

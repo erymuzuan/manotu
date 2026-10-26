@@ -22,3 +22,16 @@ public sealed class AddingPausedException(DateTimeOffset until, string message) 
 {
     public DateTimeOffset Until { get; } = until;
 }
+
+/// <summary>403 <c>posting_paused</c>: reviews, photos and notes are paused until <see cref="Until"/> (3 rejections in 24 h).</summary>
+public sealed class PostingPausedException(DateTimeOffset until, string message) : Exception(message)
+{
+    public DateTimeOffset Until { get; } = until;
+}
+
+/// <summary>422 <c>content_rejected</c>: the content check didn't accept the text. Nothing is stored; <see cref="SafeText"/> is the text without the offending part.</summary>
+public sealed class ContentRejectedException(IReadOnlyList<string> reasons, string? safeText) : Exception("This content isn't accepted.")
+{
+    public IReadOnlyList<string> Reasons { get; } = reasons;
+    public string? SafeText { get; } = safeText;
+}

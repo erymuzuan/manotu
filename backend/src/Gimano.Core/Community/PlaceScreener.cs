@@ -92,6 +92,7 @@ public sealed class HaikuPlaceScreener(GimanoDbContext db, IOptions<ScreeningOpt
                 openingHours = input.OpeningHours, phone = input.Phone, website = input.Website,
             },
             nearby = input.NearbyNames, saidDifferentFrom = input.SaidDifferentFrom, isEdit = input.IsEdit,
+            watchlist = input.Brands is { Count: > 0 } b ? b.Select(x => new { brand = x.Name, group = Contracts.GimanoJson.ToWire(x.Group) }) : null,
         });
         var parameters = new MessageCreateParams
         {
@@ -158,6 +159,17 @@ public static class ScreeningSetup
         Microsoft.Extensions.DependencyInjection.OptionsConfigurationServiceCollectionExtensions.Configure<Identity.VettingOptions>(services, config.GetSection(Identity.VettingOptions.Section));
         Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddScoped<IPlaceScreener, HaikuPlaceScreener>(services);
         Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddScoped<PlaceGate>(services);
+        AddGimanoContentScreening(services);
+        return services;
+    }
+
+    /// <summary>The content check (reviews, photos, notes) and the brand watchlist; needs only the database, so the back office can use it too.</summary>
+    public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddGimanoContentScreening(
+        this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+    {
+        Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddScoped<IContentScreener, HaikuContentScreener>(services);
+        Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddScoped<BrandWatchlistService>(services);
+        Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddScoped<ContentGate>(services);
         return services;
     }
 }

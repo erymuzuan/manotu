@@ -1,3 +1,4 @@
+using Gimano.Core.Community;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -10,7 +11,7 @@ namespace Gimano.Core.Search;
 
 public sealed record PlaceHit(string Id, string Name, PlaceCategory Category, string Address, double Lat, double Lng, string? Brand, double Score,
     PlaceSource Source = PlaceSource.Osm, PlaceStatus? Status = null, double? Rating = null, int ReviewCount = 0, string? ThumbKey = null,
-    string? OpeningHours = null);
+    string? OpeningHours = null, IReadOnlyList<string>? Warnings = null);
 
 /// <summary>Index naming: every index and alias goes through <c>OpenSearch:IndexPrefix</c> (e.g. "gimano-").</summary>
 public sealed record OpenSearchIndexOptions(string Prefix = "", int Replicas = 0)
@@ -174,7 +175,8 @@ public sealed class PlaceSearchIndex(IOpenSearchLowLevelClient client, OpenSearc
                 s["rating"]?.GetValue<double>(),
                 s["reviewCount"]?.GetValue<int>() ?? 0,
                 s["thumbKey"]?.GetValue<string>(),
-                s["openingHours"]?.GetValue<string>()));
+                s["openingHours"]?.GetValue<string>(),
+                PlaceWarnings.Normalize(s["warnings"]?.AsArray().Select(w => w?.GetValue<string>()))));
         }
         return result;
     }

@@ -59,6 +59,15 @@ public static class InboxRules
             InboxKind.PlaceLive => ms
                 ? ($"{s} kini di peta", "Belum disahkan: pemandu berdekatan akan diminta mengesahkannya.")
                 : ($"{s} is now on the map", "Not verified yet: drivers nearby will be asked to confirm it."),
+            InboxKind.ContentPublished => ms
+                ? ($"Catatan anda di {s} kini disiarkan", "Ia lulus semakan dan semua orang boleh melihatnya.")
+                : ($"Your post at {s} is now live", "It passed the check and everyone can see it."),
+            InboxKind.ContentHeld => ms
+                ? ($"Catatan anda di {s}: seorang penyelenggara akan menyemak", "Biasanya dalam 24 jam. Sehingga itu hanya anda yang nampak.")
+                : ($"Your post at {s}: a maintainer will check it", "Usually within 24 hours. Until then only you can see it."),
+            InboxKind.ContentRejected => ms
+                ? ($"Catatan anda di {s} tidak diterima", "Buka untuk melihat sebabnya. Anda boleh meminta semakan sekali.")
+                : ($"Your post at {s} was not accepted", "Open it to see why. You can ask for a review once."),
             InboxKind.EditAccepted => ms
                 ? ("Cadangan suntingan anda diterima", s)
                 : ("Your suggested edit was accepted", s),
@@ -83,6 +92,7 @@ public static class InboxRules
     /// <summary>Kinds whose text needs the subject (place name/status); legacy rows without one keep their stored text.</summary>
     private static bool NeedsSubject(InboxKind k) => k is InboxKind.ReviewHelpful or InboxKind.PlacePublished or InboxKind.PlaceRejected
         or InboxKind.PlaceHeld or InboxKind.PlaceNotAccepted or InboxKind.PlaceLive
+        or InboxKind.ContentPublished or InboxKind.ContentHeld or InboxKind.ContentRejected
         or InboxKind.PlaceExpired or InboxKind.EditAccepted or InboxKind.FeedbackStatus
         or InboxKind.IssueConfirmed or InboxKind.IssueRefuted or InboxKind.IssueResolved;
 

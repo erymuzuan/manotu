@@ -11,11 +11,15 @@ struct ProblemDetails: Codable, Sendable {
     var retryAfterSeconds: Int?
     /// 403 `adding_paused`: when adding places is allowed again (ISO-8601; kept as text so a bad date never hides the problem).
     var pausedUntil: String?
+    /// 422 `content_rejected` (docs/content-safety.md): fixed reason codes, and the review without the offending part.
+    var reasons: [String]?
+    var safeText: String?
 
     init(type: String? = nil, title: String? = nil, status: Int? = nil, detail: String? = nil, code: String? = nil,
-         retryAfterSeconds: Int? = nil, pausedUntil: String? = nil) {
+         retryAfterSeconds: Int? = nil, pausedUntil: String? = nil, reasons: [String]? = nil, safeText: String? = nil) {
         self.type = type; self.title = title; self.status = status; self.detail = detail; self.code = code
         self.retryAfterSeconds = retryAfterSeconds; self.pausedUntil = pausedUntil
+        self.reasons = reasons; self.safeText = safeText
     }
 
     /// Reads `Retry-After` as delta-seconds (the API never sends an HTTP date).
@@ -39,6 +43,8 @@ enum APIError: Error, LocalizedError, Sendable {
         case .http(403, let p) where p?.code == "adding_paused":
             String(localized: "Adding places is paused for now. It lifts by itself.")
         // 403 on a contribution: a moderator suspended this account (docs/api.md "Reporting and moderation").
+        case .http(403, let p) where p?.code == "posting_paused":
+            String(localized: "Posting is paused for now. It lifts by itself.")
         case .http(403, _): String(localized: "Your account can't post right now: it was suspended for breaking the community rules.")
         case .http(let status, let p): p?.detail ?? p?.title ?? String(localized: "Something went wrong on the server (\(status)).")
         case .conflict: String(localized: "This place may already exist.")

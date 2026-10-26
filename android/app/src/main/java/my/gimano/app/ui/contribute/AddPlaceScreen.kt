@@ -26,6 +26,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import my.gimano.app.ui.safety.icon
+import my.gimano.app.ui.safety.tileLabel
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -64,6 +67,7 @@ fun AddPlaceScreen(cvm: ContributeViewModel, handle: MapHandle, onBack: () -> Un
     when (s.step) {
         AddStep.PIN -> PinStep(s, cvm, handle, onBack)
         AddStep.DETAILS -> DetailsStep(s, cvm)
+        AddStep.WARNINGS -> WarningsStep(s, cvm)
         AddStep.VISIBILITY -> VisibilityStep(s, cvm)
     }
     // The AI gate (A1, A3, the answers, B1, B5, B6, C1) covers the form; the form stays behind it for "Edit and try again".
@@ -192,7 +196,7 @@ private fun DetailsStep(s: AddPlaceState, cvm: ContributeViewModel) {
             Spacer(Modifier.height(80.dp))
         }
         Surface(color = c.surface, shadowElevation = 8.dp) {
-            Button(onClick = { cvm.step(AddStep.VISIBILITY) }, enabled = s.canContinue,
+            Button(onClick = { cvm.step(AddStep.WARNINGS) }, enabled = s.canContinue,
                 modifier = Modifier.fillMaxWidth().padding(16.dp).windowInsetsPadding(WindowInsets.navigationBars).height(56.dp), shape = RoundedCornerShape(Radius.md),
                 colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn)) { Text(stringResource(R.string.next), style = GimanoType.button) }
         }
@@ -274,12 +278,60 @@ fun HoursFields(draft: HoursDraft, update: ((HoursDraft) -> HoursDraft) -> Unit)
     }
 }
 
-/** Step 3: "Just for me" or "Share with everyone". */
+/**
+ * Step 3: "Anything people should know?" Four big tiles (alcohol, gambling, cigarettes · vape, none) and a live preview of
+ * the warning the place page will show. Sent as `warnings[]` on POST /places; a private place never leaves the phone.
+ */
+@Composable
+private fun WarningsStep(s: AddPlaceState, cvm: ContributeViewModel) {
+    val c = Gimano.colors
+    Column(Modifier.fillMaxSize().background(c.background)) {
+        TopBar(stringResource(R.string.cs_know_title)) { cvm.step(AddStep.DETAILS) }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val tiles = my.gimano.app.core.safety.PlaceWarning.entries
+            (tiles.map<my.gimano.app.core.safety.PlaceWarning, my.gimano.app.core.safety.PlaceWarning?> { it } + null).chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEach { w ->
+                        val on = if (w == null) s.warnings.isEmpty() else w in s.warnings
+                        val label = stringResource(w?.tileLabel() ?: R.string.cs_know_none)
+                        Column(
+                            Modifier.weight(1f).heightIn(min = 132.dp).clip(RoundedCornerShape(Radius.lg))
+                                .background(if (on) (if (w == null) c.brandMist else my.gimano.app.ui.safety.warnTile()) else c.surface)
+                                .border(if (on) 3.dp else 1.dp, if (on) (if (w == null) c.brand else my.gimano.app.ui.safety.warnInk()) else c.outline, RoundedCornerShape(Radius.lg))
+                                .semantics(mergeDescendants = true) { selected = on }
+                                .clickable(onClickLabel = label) {
+                                    cvm.update { st -> st.copy(warnings = if (w == null) emptySet() else if (w in st.warnings) st.warnings - w else st.warnings + w) }
+                                }.padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                        ) {
+                            Icon(w?.icon() ?: Icons.Filled.CheckCircle, null, modifier = Modifier.size(56.dp),
+                                tint = if (on) (if (w == null) c.brand else my.gimano.app.ui.safety.warnInk()) else c.textMuted)
+                            Text(label, Modifier.padding(top = 8.dp), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = c.text,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        }
+                    }
+                }
+            }
+            // Live preview: what the place page will say.
+            val previewCd = stringResource(R.string.cs_know_preview_cd)
+            if (s.warnings.isNotEmpty()) Column(Modifier.semantics(mergeDescendants = true) { contentDescription = previewCd }) {
+                my.gimano.app.ui.safety.WarningBanner(my.gimano.app.core.safety.PlaceWarning.entries.filter { it in s.warnings })
+            }
+        }
+        Surface(color = c.surface, shadowElevation = 8.dp) {
+            Button(onClick = { cvm.step(AddStep.VISIBILITY) },
+                modifier = Modifier.fillMaxWidth().padding(16.dp).windowInsetsPadding(WindowInsets.navigationBars).height(56.dp), shape = RoundedCornerShape(Radius.md),
+                colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn)) { Text(stringResource(R.string.next), style = GimanoType.button) }
+        }
+    }
+}
+
+/** Step 4: "Just for me" or "Share with everyone". */
 @Composable
 private fun VisibilityStep(s: AddPlaceState, cvm: ContributeViewModel) {
     val c = Gimano.colors
     Column(Modifier.fillMaxSize().background(c.background)) {
-        TopBar(stringResource(R.string.who_can_see)) { cvm.step(AddStep.DETAILS) }
+        TopBar(stringResource(R.string.who_can_see)) { cvm.step(AddStep.WARNINGS) }
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(s.name, style = GimanoType.title, color = c.text)
             BigChoice(Icons.Filled.Lock, stringResource(R.string.just_for_me), stringResource(R.string.just_for_me_desc), enabled = !s.saving) { cvm.savePrivate() }

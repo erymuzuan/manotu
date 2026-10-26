@@ -11,6 +11,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import my.gimano.app.core.safety.ContentGate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -98,6 +100,23 @@ fun ReportSheet(
     }
 }
 
+/** One-line note with a counter and an OK tick that puts the keyboard away. */
+@Composable
+private fun NoteField(note: String, onNote: (String) -> Unit, modifier: Modifier = Modifier) {
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    OutlinedTextField(
+        note, onNote, modifier.fillMaxWidth(),
+        placeholder = { Text(stringResource(R.string.cs_note_hint)) }, minLines = 1, maxLines = 3,
+        shape = RoundedCornerShape(Radius.md),
+        supportingText = if (note.isNotEmpty()) ({ Text(stringResource(R.string.cs_note_count, note.length, ContentGate.NOTE_MAX), Modifier.fillMaxWidth(), textAlign = TextAlign.End) }) else null,
+        trailingIcon = {
+            IconButton(onClick = { focus.clearFocus() }, Modifier.size(48.dp)) { Icon(Icons.Filled.Check, stringResource(R.string.cs_note_ok_cd), tint = Gimano.colors.brand) }
+        },
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { focus.clearFocus() }),
+    )
+}
+
 /**
  * The sheet both doors end on (docs/driving.md §6.4, canvas RpDetail): the default subtype is picked, and Report sends
  * itself after [ReportDefaults.AUTO_SEND_MS] (the button fills as it runs). Touching an option or the comment stops the
@@ -135,13 +154,10 @@ private fun DetailBody(
                 ) { Text(stringResource(label), fontSize = 16.sp, fontWeight = if (on) FontWeight.Black else FontWeight.SemiBold, textAlign = TextAlign.Center) }
             }
         }
-    } else {
-        OutlinedTextField(
-            comment, { onComment(it); timerOn = false }, Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.comment_hint)) }, minLines = 2, maxLines = 4,
-            shape = RoundedCornerShape(Radius.md),
-        )
     }
+    // docs/content-safety.md "Report notes": at most 140 characters; the server may drop a note that fails the check
+    // (the report still goes out and a one-line note says so).
+    NoteField(comment, { onComment(it.take(ContentGate.NOTE_MAX)); timerOn = false }, Modifier.padding(top = if (subs.isNotEmpty()) 10.dp else 0.dp))
     if (timerOn) {
         val secs = (ReportDefaults.AUTO_SEND_MS / 1000 * (1f - fill.value)).let { kotlin.math.ceil(it).toInt().coerceAtLeast(1) }
         Text(stringResource(R.string.report_sends_in, secs), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.textMuted,

@@ -15783,6 +15783,696 @@
           }
         }
       }
+    },
+    "A person will check this" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seorang akan menyemaknya"
+          }
+        }
+      }
+    },
+    "A photo wasn't accepted" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satu foto tidak diterima"
+          }
+        }
+      }
+    },
+    "A vape shop is next door is fine. Offers, numbers and links are not." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menyebut kedai vape di sebelah tidak mengapa. Tawaran, nombor dan pautan tidak dibenarkan."
+          }
+        }
+      }
+    },
+    "About this warning" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tentang amaran ini"
+          }
+        }
+      }
+    },
+    "Adult" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dewasa"
+          }
+        }
+      }
+    },
+    "Adult content" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kandungan dewasa"
+          }
+        }
+      }
+    },
+    "Alcohol" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alkohol"
+          }
+        }
+      }
+    },
+    "Alcohol is sold here" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alkohol dijual di sini"
+          }
+        }
+      }
+    },
+    "Alcohol offer" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tawaran alkohol"
+          }
+        }
+      }
+    },
+    "Alcohol, gambling or tobacco here" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alkohol, perjudian atau tembakau di sini"
+          }
+        }
+      }
+    },
+    "Already sent for this one." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sudah dihantar untuk yang ini."
+          }
+        }
+      }
+    },
+    "Another photo" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto lain"
+          }
+        }
+      }
+    },
+    "Anything people should know?" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ada apa-apa yang orang patut tahu?"
+          }
+        }
+      }
+    },
+    "Anything we should know? (optional)" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ada apa-apa yang kami patut tahu? (pilihan)"
+          }
+        }
+      }
+    },
+    "Ask a person" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minta semakan manusia"
+          }
+        }
+      }
+    },
+    "Back in %lld h" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulih dalam %lld j"
+          }
+        }
+      }
+    },
+    "Brand promotion" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Promosi jenama"
+          }
+        }
+      }
+    },
+    "Can't post this" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak boleh diterbitkan"
+          }
+        }
+      }
+    },
+    "Cigarette or vape offer" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tawaran rokok atau vape"
+          }
+        }
+      }
+    },
+    "Cigarettes and vape" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rokok dan vape"
+          }
+        }
+      }
+    },
+    "Cigarettes or vape sold here" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rokok atau vape dijual di sini"
+          }
+        }
+      }
+    },
+    "Drivers will see" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pemandu akan nampak"
+          }
+        }
+      }
+    },
+    "Drugs" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dadah"
+          }
+        }
+      }
+    },
+    "Fake goods" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barang tiruan"
+          }
+        }
+      }
+    },
+    "Gambling" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perjudian"
+          }
+        }
+      }
+    },
+    "Gambling happens here" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perjudian berlaku di sini"
+          }
+        }
+      }
+    },
+    "Gambling offer" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tawaran judi"
+          }
+        }
+      }
+    },
+    "Gambling or drugs" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Judi atau dadah"
+          }
+        }
+      }
+    },
+    "Hard to read" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sukar dibaca"
+          }
+        }
+      }
+    },
+    "Hate or harassment" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kebencian atau gangguan"
+          }
+        }
+      }
+    },
+    "Illegal goods or services" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barang atau perkhidmatan haram"
+          }
+        }
+      }
+    },
+    "Link" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pautan"
+          }
+        }
+      }
+    },
+    "Loan offer" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tawaran pinjaman"
+          }
+        }
+      }
+    },
+    "Location and camera details are removed before upload." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Butiran lokasi dan kamera dibuang sebelum dimuat naik."
+          }
+        }
+      }
+    },
+    "Looks like a scam" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nampak seperti penipuan"
+          }
+        }
+      }
+    },
+    "Looks like an advert" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nampak seperti iklan"
+          }
+        }
+      }
+    },
+    "Medical claims" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dakwaan perubatan"
+          }
+        }
+      }
+    },
+    "Network marketing offer" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tawaran pemasaran berbilang peringkat"
+          }
+        }
+      }
+    },
+    "None" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiada"
+          }
+        }
+      }
+    },
+    "Not allowed" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak dibenarkan"
+          }
+        }
+      }
+    },
+    "Not right? Tell us" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tak betul? Beritahu kami"
+          }
+        }
+      }
+    },
+    "Offer" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tawaran"
+          }
+        }
+      }
+    },
+    "Opens the reasons" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buka sebab-sebabnya"
+          }
+        }
+      }
+    },
+    "Paused" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dijeda"
+          }
+        }
+      }
+    },
+    "Personal details" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Butiran peribadi"
+          }
+        }
+      }
+    },
+    "Phone number" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombor telefon"
+          }
+        }
+      }
+    },
+    "Phone number or link" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombor telefon atau pautan"
+          }
+        }
+      }
+    },
+    "Photo being checked" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto sedang disemak"
+          }
+        }
+      }
+    },
+    "Photo hidden" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto disembunyikan"
+          }
+        }
+      }
+    },
+    "Photo not accepted" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto tidak diterima"
+          }
+        }
+      }
+    },
+    "Photo published" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto diterbitkan"
+          }
+        }
+      }
+    },
+    "Plates or faces" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plat atau wajah"
+          }
+        }
+      }
+    },
+    "Post this part" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terbitkan bahagian ini"
+          }
+        }
+      }
+    },
+    "Posting is paused for now. It lifts by itself." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Penerbitan dijeda buat masa ini. Ia pulih dengan sendirinya."
+          }
+        }
+      }
+    },
+    "Race, religion or royalty" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaum, agama atau diraja"
+          }
+        }
+      }
+    },
+    "Report sent. We left out your note." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laporan dihantar. Nota anda tidak disertakan."
+          }
+        }
+      }
+    },
+    "Risky investment offer" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tawaran pelaburan berisiko"
+          }
+        }
+      }
+    },
+    "Security details" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Butiran keselamatan"
+          }
+        }
+      }
+    },
+    "Sent. A person will look within 24 hours." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dihantar. Seorang akan menyemak dalam 24 jam."
+          }
+        }
+      }
+    },
+    "Sent. We're still checking. The answer comes to your Inbox." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dihantar. Kami masih menyemak. Jawapan akan masuk ke Peti masuk anda."
+          }
+        }
+      }
+    },
+    "Someone's home" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rumah seseorang"
+          }
+        }
+      }
+    },
+    "Targets a person" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menyasarkan seseorang"
+          }
+        }
+      }
+    },
+    "Thanks! We're checking your photos." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terima kasih! Kami sedang menyemak foto anda."
+          }
+        }
+      }
+    },
+    "This part is fine" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bahagian ini tidak mengapa"
+          }
+        }
+      }
+    },
+    "This place sells or hosts this. It stays on the map and you can still drive there. The warning is only so you know." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat ini menjual atau menganjurkan perkara ini. Ia kekal di peta dan anda masih boleh memandu ke sana. Amaran ini hanya supaya anda tahu."
+          }
+        }
+      }
+    },
+    "Violence" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keganasan"
+          }
+        }
+      }
+    },
+    "We couldn't tell what this is" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kami tidak pasti apa ini"
+          }
+        }
+      }
+    },
+    "What does this mean?" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apakah maksudnya?"
+          }
+        }
+      }
+    },
+    "Your review is up" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ulasan anda sudah diterbitkan"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

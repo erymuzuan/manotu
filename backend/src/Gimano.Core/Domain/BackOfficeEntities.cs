@@ -84,3 +84,20 @@ public sealed class AppBuild
     public string? SymbolsUrl { get; set; }
     public DateTimeOffset ReleasedAt { get; set; }
 }
+
+/// <summary>
+/// A brand name on the content-safety watchlist (docs/content-safety.md "Brand watchlist"). Brand names only; nothing private.
+/// <see cref="Aliases"/> are other spellings, comma-separated.
+/// </summary>
+public sealed class WatchedBrand
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public required string Name { get; set; }
+    public string? Aliases { get; set; }
+    public Community.BrandGroup Group { get; set; }
+    public Community.BrandPlaceMode PlaceMode { get; set; } = Community.BrandPlaceMode.Warn;
+    public Community.BrandTextMode TextMode { get; set; } = Community.BrandTextMode.MentionOk;
+    public bool Enabled { get; set; } = true;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public string? UpdatedBy { get; set; }
+}

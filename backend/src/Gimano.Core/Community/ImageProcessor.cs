@@ -59,6 +59,29 @@ public static class ImageProcessor
         return new ProcessedImage(webp, w, h, thumb, tw, th);
     }
 
+    /// <summary>
+    /// The JPEG the content check sees: decoded, EXIF orientation baked in, ≤ 1024 px on the long edge. Re-encoding drops all
+    /// metadata (EXIF, GPS), and it is built from the already stripped WebP, never from the original upload.
+    /// </summary>
+    public static byte[] ToScreeningJpeg(byte[] data)
+    {
+        using var codec = SKCodec.Create(new SKMemoryStream(data)) ?? throw new ImageRejectedException("Unsupported or corrupt image.");
+        var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var decoded = new SKBitmap(info);
+        var result = codec.GetPixels(info, decoded.GetPixels());
+        if (result is not (SKCodecResult.Success or SKCodecResult.IncompleteInput)) throw new ImageRejectedException($"Could not decode image ({result}).");
+        using var upright = ApplyOrientation(decoded, codec.EncodedOrigin);
+        var scale = Math.Min(1.0, (double)ContentScreening.MaxImageEdge / Math.Max(upright.Width, upright.Height));
+        var w = Math.Max(1, (int)Math.Round(upright.Width * scale));
+        var h = Math.Max(1, (int)Math.Round(upright.Height * scale));
+        using var resized = scale < 1.0
+            ? upright.Resize(new SKImageInfo(w, h, upright.ColorType, upright.AlphaType), new SKSamplingOptions(SKCubicResampler.Mitchell))
+            : upright.Copy();
+        using var image = SKImage.FromBitmap(resized);
+        using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, 80) ?? throw new ImageRejectedException("JPEG encoding failed.");
+        return encoded.ToArray();
+    }
+
     public static string ContentKey(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes))[..32];
 
     private static (byte[] Bytes, int W, int H) Encode(SKBitmap src, int maxEdge, int quality)

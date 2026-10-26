@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -65,6 +66,12 @@ import my.gimano.app.R
 import my.gimano.app.core.format.Formatters
 import my.gimano.app.core.places.RatingSummary
 import my.gimano.app.core.places.Verification
+import my.gimano.app.core.safety.ContentGate
+import my.gimano.app.core.safety.ContentState
+import my.gimano.app.core.safety.PlaceWarning
+import my.gimano.app.core.safety.ReviewPrefilter
+import my.gimano.app.core.safety.ReviewState
+import my.gimano.app.ui.safety.*
 import my.gimano.app.data.model.Photo
 import my.gimano.app.data.model.Place
 import my.gimano.app.data.model.Review
@@ -260,6 +267,9 @@ fun PlaceCard(sel: PlaceSel, vm: MainViewModel, cvm: ContributeViewModel, apiBas
                         ) { GrabHandle(Modifier.padding(top = 8.dp)) }
                         PeekHeader(sel, vm, reviews, onSuggest = { suggest = true },
                             onReportPlace = if (d?.isCommunity == true) ({ reportPlace = true }) else null)
+                        // Content safety: the place is listed and routable; the banner only tells people before they go.
+                        val warnings = PlaceWarning.of(d?.warnings?.ifEmpty { null } ?: p.warnings)
+                        if (warnings.isNotEmpty()) WarningBanner(warnings, Modifier.padding(top = 8.dp), onTell = if (d != null) ({ cvm.flagWarning(d) }) else null)
                         if (p.id.startsWith("pin:")) {
                             OutlinedButton(onClick = { cvm.startAdd(my.gimano.app.core.geo.GeoPoint(p.lat, p.lng), ""); vm.startAddPlace(my.gimano.app.core.geo.GeoPoint(p.lat, p.lng), "") },
                                 Modifier.fillMaxWidth().padding(top = 10.dp).heightIn(min = 52.dp), shape = RoundedCornerShape(Radius.md)) {
@@ -291,7 +301,7 @@ fun PlaceCard(sel: PlaceSel, vm: MainViewModel, cvm: ContributeViewModel, apiBas
                                         viewer = if (priv != null) ViewerState(photoUrls, i, List(photoUrls.size) { null }) else ViewerState(placePhotos.map { mediaUrl(it.url, apiBase) }, i, placePhotos)
                                     }, contentScale = ContentScale.Crop)
                                 }
-                                items(pending) { u -> UploadTile(u, 96) }
+                                items(pending) { u -> UploadTile(u, 96, onRejected = { id -> cvm.showRejectedPhoto(id) }) }
                                 // docs/safety.md B: no public photos within reviewM of a restricted area (the server refuses them).
                                 val photosOn = d != null && cvm.photosAllowedAt(d.lat, d.lng)
                                 if (d != null && !photosOn) item {
@@ -381,6 +391,16 @@ fun PlaceCard(sel: PlaceSel, vm: MainViewModel, cvm: ContributeViewModel, apiBas
         suggest = false; suggestForm = false; cvm.suggestEdit(d.id, body)
     }
     reviews.draft?.let { if (d != null) WriteReviewSheet(d, it, cvm) }
+    // A rejected photo: why, "Another photo", "Ask a person". Shown over the place card or the write-review sheet.
+    reviews.rejectedPhotoId?.let { id ->
+        val item = (reviews.placeUploads + reviews.draft?.uploads.orEmpty()).firstOrNull { it.photo?.id == id }
+        val ph = item?.photo
+        if (ph != null && d != null) {
+            val pick = my.gimano.app.ui.common.rememberPhotoSource(5) { uris -> if (reviews.draft != null) cvm.addReviewPhotos(uris) else cvm.addPlacePhotos(d, uris) {} }
+            RejectedPhotoScreen(ph.moderation?.reasons.orEmpty(), canAppeal = ContentGate.canAppeal(ph),
+                onAnother = { cvm.dropPhoto(id); pick() }, onAsk = { cvm.appealPhoto(id) }, onClose = cvm::closeRejectedPhoto)
+        }
+    }
 }
 
 /** Icon tile, name, the one rating line, badges, and "category · address · open". */
@@ -564,13 +584,21 @@ private fun ReviewsSection(place: Place, reviews: List<Review>, summary: RatingS
     val shown = if (all) reviews.take(10) else reviews.take(1)
     shown.forEachIndexed { i, r ->
         Box(Modifier.padding(bottom = 8.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (i == 0) c.background else Color.Transparent).padding(horizontal = 12.dp)) {
-            ReviewRow(r, cvm, apiBase, onPhoto)
+            ReviewRow(r, place, cvm, apiBase, onPhoto)
         }
     }
     if (reviews.size > 1) TextButton(onClick = { all = !all }) {
         Text(if (all) stringResource(R.string.fewer_reviews) else stringResource(R.string.all_reviews, reviews.size.coerceAtMost(10)), fontWeight = FontWeight.ExtraBold)
     }
     val mine = reviews.firstOrNull { cvm.mine(it) }
+    // Tap a star to start a review with that rating (48 dp targets).
+    if (mine == null) Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        (1..5).forEach { n ->
+            Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClickLabel = stringResource(R.string.cs_rate_cd, n)) { cvm.openReview(null, n) }, contentAlignment = Alignment.Center) {
+                GIcon("star", stringResource(R.string.cs_rate_cd, n), size = 36.dp, stroke = c.outline, fill = Color.Transparent)
+            }
+        }
+    }
     OutlinedButton(
         onClick = { cvm.openReview(mine) }, Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(top = 4.dp),
         shape = RoundedCornerShape(14.dp), border = androidx.compose.foundation.BorderStroke(2.dp, c.outline),
@@ -581,18 +609,33 @@ private fun ReviewsSection(place: Place, reviews: List<Review>, summary: RatingS
 }
 
 
+/**
+ * A photo being attached: the picture, a round status badge (tick published, clock processing or checking, cross not
+ * accepted) and a spinner while it uploads. Tap a rejected one to see why ([onRejected] gets its photo id).
+ */
 @Composable
-fun UploadTile(u: UploadItem, sizeDp: Int) {
+fun UploadTile(u: UploadItem, sizeDp: Int, onRejected: ((String) -> Unit)? = null) {
     val c = Gimano.colors
-    Box(Modifier.size(sizeDp.dp).clip(RoundedCornerShape(Radius.md))) {
-        AsyncImage(u.uri, null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
-        Box(Modifier.matchParentSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
-            when {
-                u.failed -> Icon(Icons.Filled.ErrorOutline, stringResource(R.string.action_failed), tint = Color.White)
-                u.photo == null -> CircularProgressIndicator(Modifier.size(28.dp), color = Color.White, strokeWidth = 3.dp)
-                u.processing -> Text(stringResource(R.string.processing), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
-                else -> Icon(Icons.Filled.CheckCircle, null, tint = Color.White)
+    val photo = u.photo
+    val state = photo?.let { ContentGate.photoState(it) }
+    val rejected = state == ContentState.REJECTED
+    val cd = if (rejected) stringResource(R.string.cs_photo_rejected_cd) else null
+    Box(
+        Modifier.size(sizeDp.dp).clip(RoundedCornerShape(Radius.md))
+            .then(if (rejected && photo != null && onRejected != null) Modifier.clickable { onRejected(photo.id) } else Modifier)
+            .then(if (cd != null) Modifier.semantics { contentDescription = cd } else Modifier),
+    ) {
+        if (rejected) Box(Modifier.matchParentSize().background(c.surfaceAlt), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.HideImage, null, tint = c.textMuted, modifier = Modifier.size((sizeDp / 2).dp))
+        } else AsyncImage(u.uri, null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+        when {
+            u.failed -> Box(Modifier.matchParentSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.ErrorOutline, stringResource(R.string.action_failed), tint = Color.White)
             }
+            photo == null -> Box(Modifier.matchParentSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(Modifier.size(28.dp), color = Color.White, strokeWidth = 3.dp)
+            }
+            else -> StatusBadge(state ?: ContentState.PROCESSING, Modifier.align(Alignment.BottomEnd).padding(6.dp))
         }
     }
 }
@@ -606,7 +649,7 @@ private fun Badge(text: String, bg: Color, fg: Color, icon: ImageVector? = null)
 }
 
 @Composable
-private fun ReviewRow(r: Review, cvm: ContributeViewModel, apiBase: String, onPhoto: (List<Photo>, Int) -> Unit) {
+private fun ReviewRow(r: Review, place: Place, cvm: ContributeViewModel, apiBase: String, onPhoto: (List<Photo>, Int) -> Unit) {
     val c = Gimano.colors
     var flagMenu by remember { mutableStateOf(false) }
     var confirmBlock by remember { mutableStateOf(false) }
@@ -622,6 +665,14 @@ private fun ReviewRow(r: Review, cvm: ContributeViewModel, apiBase: String, onPh
             }
         }
         r.text?.let { Text(it, fontSize = 15.sp, color = c.text, modifier = Modifier.padding(top = 4.dp)) }
+        // The author's own view of the AI check: clock (checking), person (a person is looking), cross (not accepted).
+        val rs = if (cvm.mine(r)) ContentGate.reviewState(r) else ReviewState.PASSED
+        if (rs != ReviewState.PASSED) {
+            ReviewStatusLine(rs, Modifier.padding(top = 6.dp))
+            if (rs == ReviewState.REJECTED && r.moderation?.canAppeal == true) TextButton(onClick = { cvm.appealReview(r, place) }, Modifier.heightIn(min = 48.dp)) {
+                Icon(Icons.Filled.Person, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.cs_appeal), fontWeight = FontWeight.ExtraBold)
+            }
+        }
         if (r.photos.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
                 items(r.photos.size) { i -> AsyncImage(mediaUrl(r.photos[i].thumbUrl.ifBlank { r.photos[i].url }, apiBase), null, Modifier.size(72.dp).clip(RoundedCornerShape(Radius.sm)).clickable { onPhoto(r.photos, i) }, contentScale = ContentScale.Crop) }
@@ -668,39 +719,58 @@ private fun WriteReviewSheet(place: Place, d: my.gimano.app.ui.contribute.Review
     val pick = my.gimano.app.ui.common.rememberPhotoSource(5) { cvm.addReviewPhotos(it) }
     ModalBottomSheet(onDismissRequest = cvm::closeReview, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = c.surface,
         shape = RoundedCornerShape(topStart = Radius.sheet, topEnd = Radius.sheet)) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp).imePadding()) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp).imePadding()) {
             Text(place.name, style = GimanoType.title, color = c.text)
-            Row(Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 (1..5).forEach { n ->
                     val on = d.rating >= n
-                    Box(Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).clickable { cvm.updateDraft { it.copy(rating = n) } }, contentAlignment = Alignment.Center) {
-                        GIcon("star", "$n", size = 44.dp, stroke = if (on) c.report else c.outline, fill = if (on) c.report else Color.Transparent)
+                    val cd = stringResource(R.string.cs_rate_cd, n)
+                    Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).semantics { selected = d.rating == n }
+                        .clickable(onClickLabel = cd) { cvm.updateDraft { it.copy(rating = n) } }, contentAlignment = Alignment.Center) {
+                        GIcon("star", cd, size = 44.dp, stroke = if (on) c.report else c.outline, fill = if (on) c.report else Color.Transparent)
                     }
                 }
             }
-            OutlinedTextField(d.text, { v -> cvm.updateDraft { it.copy(text = v.take(2000)) } }, Modifier.fillMaxWidth(), minLines = 3, maxLines = 6,
-                placeholder = { Text(stringResource(R.string.review_hint)) }, shape = RoundedCornerShape(Radius.md))
+            OutlinedTextField(d.text, { v -> cvm.updateDraft { it.copy(text = v.take(ReviewPrefilter.SHOWN_MAX)) } }, Modifier.fillMaxWidth(), minLines = 3, maxLines = 6,
+                placeholder = { Text(stringResource(R.string.review_hint)) }, shape = RoundedCornerShape(Radius.md),
+                supportingText = { Text(stringResource(R.string.cs_review_count, d.text.length, ReviewPrefilter.SHOWN_MAX), Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.End) })
+            // Local pre-filter (nothing is sent): phone, link and offer tiles are crossed out while the text looks like an advert.
+            val lit = remember(d.text) { ReviewPrefilter.tiles(d.text) }
+            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                AdTilesRow(lit, Modifier.weight(1f))
+            }
+            Text(stringResource(if (lit.isNotEmpty()) R.string.cs_post_blocked else R.string.cs_review_ok_hint), Modifier.padding(top = 8.dp),
+                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (lit.isNotEmpty()) c.report else c.textMuted)
             // docs/safety.md C: security details → a warning; the review is held for a moderator.
             val sensitiveText = cvm.sensitive.hasMatch(d.text)
             if (sensitiveText) my.gimano.app.ui.safety.SensitiveWordsWarning(cvm::removeSensitiveFromReview, Modifier.padding(top = 6.dp))
             val photosOn = cvm.photosAllowedAt(place.lat, place.lng)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 10.dp)) {
-                items(d.uploads) { u -> UploadTile(u, 72) }
-                if (d.uploads.size < 5 && photosOn) item {
-                    Box(Modifier.size(72.dp).clip(RoundedCornerShape(Radius.md)).background(c.brandMist).clickable { pick() }, contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.AddAPhoto, stringResource(R.string.add_photo), tint = c.brand)
+            // Photos: 2-column grid, a round status badge on each (tick / clock / cross), polled while they are checked.
+            val cells = d.uploads.size + if (d.uploads.size < 5 && photosOn) 1 else 0
+            (0 until cells).chunked(2).forEach { row ->
+                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    row.forEach { i ->
+                        val u = d.uploads.getOrNull(i)
+                        if (u != null) UploadTile(u, 144, onRejected = cvm::showRejectedPhoto)
+                        else Box(Modifier.size(144.dp).clip(RoundedCornerShape(Radius.md)).background(c.brandMist).clickable(onClickLabel = stringResource(R.string.add_photo)) { pick() }, contentAlignment = Alignment.Center) {
+                            Icon(Icons.Filled.AddAPhoto, stringResource(R.string.add_photo), tint = c.brand, modifier = Modifier.size(36.dp))
+                        }
                     }
                 }
             }
-            if (!photosOn) Text(stringResource(R.string.restricted_b_photos_off), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.textMuted, modifier = Modifier.padding(bottom = 8.dp))
+            if (!photosOn) Text(stringResource(R.string.restricted_b_photos_off), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.textMuted, modifier = Modifier.padding(top = 8.dp))
             val uploading = d.uploads.any { it.photo == null && !it.failed }
-            Button(onClick = { cvm.submitReview(place) }, enabled = d.rating in 1..5 && !d.sending && !uploading,
-                modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(Radius.md),
+            Button(onClick = { cvm.submitReview(place) }, enabled = d.rating in 1..5 && !d.sending && !uploading && lit.isEmpty(),
+                modifier = Modifier.padding(top = 12.dp).fillMaxWidth().height(56.dp), shape = RoundedCornerShape(Radius.md),
                 colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn)) {
                 Text(stringResource(when { sensitiveText -> R.string.restricted_send_review; d.editingId != null -> R.string.save; else -> R.string.post_review }), style = GimanoType.button)
             }
         }
     }
+    // 422 content_rejected: nothing was stored. Big shield-x, the offending items crossed out, the safe part, Edit.
+    d.rejection?.let { f -> CantPostSheet(f, onPostPart = { cvm.postSafePart(place) }, onEdit = cvm::dismissRejection) }
+    // 403 posting_paused.
+    d.paused?.let { PausedSheet(it, cvm.use24h) { cvm.closeReview() } }
 }
 
 @Composable

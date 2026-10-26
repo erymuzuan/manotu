@@ -12,6 +12,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.ui.graphics.Color
@@ -28,7 +30,11 @@ import androidx.compose.ui.unit.sp
 import my.gimano.app.R
 import my.gimano.app.core.format.Formatters
 import my.gimano.app.data.model.InboxItem
+import my.gimano.app.core.safety.ContentGate
+import my.gimano.app.core.safety.InboxContent
 import my.gimano.app.ui.common.GIcon
+import my.gimano.app.ui.safety.ContentStatusTile
+import my.gimano.app.ui.safety.PausedCard
 import my.gimano.app.ui.report.currentLang
 import my.gimano.app.ui.theme.Gimano
 import my.gimano.app.ui.theme.GimanoType
@@ -53,7 +59,13 @@ enum class InboxGate(val icon: androidx.compose.ui.graphics.vector.ImageVector) 
 
 /** Inbox: news about the user's public contributions + announcements (nothing personal). */
 @Composable
-fun InboxScreen(items: List<InboxItem>, read: Set<String>, onBack: () -> Unit, onRefresh: () -> Unit, onMarkAll: () -> Unit, onOpenPlace: (InboxItem) -> Unit = {}) {
+fun InboxScreen(
+    items: List<InboxItem>, read: Set<String>, onBack: () -> Unit, onRefresh: () -> Unit, onMarkAll: () -> Unit, onOpenPlace: (InboxItem) -> Unit = {},
+    /** docs/content-safety.md: `content_rejected` / `content_held` buttons. */
+    onEditContent: (InboxItem) -> Unit = {}, onAppealContent: (InboxItem) -> Unit = {},
+    /** 403 `posting_paused` is running until this time: the "Paused" card on top. */
+    pausedUntil: Instant? = null, use24h: Boolean = false,
+) {
     val c = Gimano.colors
     val lang = currentLang()
     LaunchedEffect(Unit) { onRefresh() }
@@ -71,8 +83,14 @@ fun InboxScreen(items: List<InboxItem>, read: Set<String>, onBack: () -> Unit, o
             }
         }
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (pausedUntil != null) item(key = "paused") { PausedCard(pausedUntil, use24h) }
             items(items, key = { it.id }) { m ->
                 val unread = m.id !in read
+                val content = ContentGate.inboxContent(m.kind)
+                if (content != null) {
+                    ContentCard(m, content, unread, use24h, onEditContent, onAppealContent)
+                    return@items
+                }
                 val gate = InboxGate.of(m.kind)
                 val opens = gate != null && m.placeRef != null
                 Row(
@@ -117,6 +135,47 @@ fun InboxScreen(items: List<InboxItem>, read: Set<String>, onBack: () -> Unit, o
                         Formatters.parseInstant(m.createdAt)?.let { Text(Formatters.reportAge(it, Instant.now(), lang), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = c.textMuted) }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * `content_published` / `content_held` / `content_rejected` (docs/content-safety.md "Inbox"): a large status icon
+ * (tick, person, cross), the server's fixed title, and Edit / Appeal on a rejected one. The reasons are never printed:
+ * the server's own title and body carry the (fixed, localized) explanation.
+ */
+@Composable
+private fun ContentCard(m: InboxItem, kind: InboxContent, unread: Boolean, use24h: Boolean, onEdit: (InboxItem) -> Unit, onAppeal: (InboxItem) -> Unit) {
+    val c = Gimano.colors
+    val lang = currentLang()
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.surface)
+            .then(if (unread) Modifier.border(2.dp, c.report, RoundedCornerShape(20.dp)) else Modifier).padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ContentStatusTile(kind, size = 64.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                val title = m.title.ifBlank {
+                    stringResource(when (kind) { InboxContent.PUBLISHED -> R.string.cs_inbox_published; InboxContent.HELD -> R.string.cs_inbox_held; InboxContent.REJECTED -> R.string.cs_inbox_rejected })
+                }
+                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Black, color = c.text)
+                if (m.body.isNotBlank()) Text(m.body, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.textMuted)
+                Formatters.parseInstant(m.createdAt)?.let { Text(Formatters.reportAge(it, Instant.now(), lang), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = c.textMuted) }
+            }
+        }
+        val edit = ContentGate.canEdit(m) && kind == InboxContent.REJECTED
+        val appeal = ContentGate.canAppeal(m)
+        if (edit || appeal) Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (edit) OutlinedButton(onClick = { onEdit(m) }, Modifier.weight(1f).heightIn(min = 48.dp), shape = RoundedCornerShape(14.dp)) {
+                Icon(Icons.Filled.Edit, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.cs_edit), fontWeight = FontWeight.ExtraBold)
+            }
+            if (appeal) Button(
+                onClick = { onAppeal(m) }, Modifier.weight(1f).heightIn(min = 48.dp), shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn),
+            ) {
+                Icon(Icons.Filled.Person, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.cs_appeal), fontWeight = FontWeight.ExtraBold, maxLines = 1)
             }
         }
     }

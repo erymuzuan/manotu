@@ -73,6 +73,11 @@ interface GimanoRepository : my.gimano.app.data.share.ShareApi {
     suspend fun flagPhoto(photoId: String, reason: String)
     suspend fun uploadPhoto(placeId: String, jpeg: ByteArray, caption: String?): Photo
     suspend fun photos(placeId: String): PhotosPage
+    /** GET /photos/{id}: one photo's current status (polled after an upload; own photos carry `moderation`). */
+    suspend fun photo(photoId: String): Photo
+    /** "Ask a person" about a review or photo the AI check didn't accept (once each, held for a maintainer; 202). */
+    suspend fun appealReview(reviewId: String, note: String?)
+    suspend fun appealPhoto(photoId: String, note: String?)
 }
 
 /** Map centre for `near=lat,lng` (ranking origin when the user is looking elsewhere). */

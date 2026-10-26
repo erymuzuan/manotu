@@ -52,6 +52,10 @@ public sealed class CommunityPlace
     /// <summary>The owner's note when asking a person to review a rejected place (once per place).</summary>
     public string? AppealNote { get; set; }
     public DateTimeOffset? AppealedAt { get; set; }
+    /// <summary>Warnings the owner tagged (alcohol, gambling, tobacco), comma-separated (docs/content-safety.md "Place warnings").</summary>
+    public string? OwnerWarnings { get; set; }
+    /// <summary>All warnings shown: the owner's tags plus the AI check's sensitive_* codes and the brand watchlist, comma-separated.</summary>
+    public string? Warnings { get; set; }
 
     public static string NewId() => "c" + Guid.CreateVersion7().ToString("N");
     public static bool IsCommunityId(string id) => id.Length == 33 && id[0] == 'c';
@@ -148,6 +152,13 @@ public sealed class Review
     public int FlagCount { get; set; }
     /// <summary>Sensitive words (security details): hidden until a maintainer decides.</summary>
     public bool HeldForReview { get; set; }
+    /// <summary>Public content safety check (docs/content-safety.md): state, reason codes, the appeal. Default None = never checked.</summary>
+    public Community.ContentState ModerationState { get; set; }
+    public string? ModerationReasons { get; set; }
+    public DateTimeOffset? ModeratedAt { get; set; }
+    /// <summary>The author's note when asking a person to review a rejected item (once per item); shown only to maintainers.</summary>
+    public string? AppealNote { get; set; }
+    public DateTimeOffset? AppealedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? EditedAt { get; set; }
 }
@@ -184,6 +195,13 @@ public sealed class Photo
     public int Height { get; set; }
     public string? RejectReason { get; set; }
     public int FlagCount { get; set; }
+    /// <summary>Public content safety check (docs/content-safety.md): state, reason codes, the appeal. Default None = never checked.</summary>
+    public Community.ContentState ModerationState { get; set; }
+    public string? ModerationReasons { get; set; }
+    public DateTimeOffset? ModeratedAt { get; set; }
+    /// <summary>The author's note when asking a person to review a rejected item (once per item); shown only to maintainers.</summary>
+    public string? AppealNote { get; set; }
+    public DateTimeOffset? AppealedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
@@ -255,7 +273,22 @@ public sealed class InboxItem
     /// <summary>Daily aggregation key, e.g. "report_thanked:2026-10-23" ("24 drivers thanked you").</summary>
     public string? AggregateKey { get; set; }
     public int Count { get; set; } = 1;
+    /// <summary>content_* items: the place the review/photo belongs to, the fixed reason codes (comma-separated) and whether an appeal is still open.</summary>
+    public string? PlaceId { get; set; }
+    public string? Reasons { get; set; }
+    public bool? CanAppeal { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// One AI rejection of a review, photo or report note (nothing else: no text, no image). Counted for the "3 rejections in 24 h pause
+/// posting for 24 h" rule together with rejected places; rows older than two days are deleted.
+/// </summary>
+public sealed class ContentRejection
+{
+    public long Id { get; set; }
+    public Guid UserId { get; set; }
+    public DateTimeOffset At { get; set; }
 }
 
 /// <summary>Broadcast to everyone (inserted by operators; see docs/api.md "Inbox").</summary>

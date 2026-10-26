@@ -182,12 +182,23 @@ POST /api/v1/admin/moderation/{kind}/{id}/unban-author  lift the ban (hidden con
 ```
 
 `ModerationItem = {kind, id, placeId, status, flagCount, flags: [{reason, at?}], text?, mediaUrl?, authorName?,
-authorRef?, authorBanned, createdAt}`. Authors appear only by display name and the opaque `authorRef` handle, never by
+authorRef?, authorBanned, createdAt, held, reasons?, appealNote?}`. Reviews and photos that the AI content check **held**
+(docs/content-safety.md), or whose author appealed a rejection, wait in the `hidden` queue with `held: true`, the fixed
+`reasons` codes and the author's `appealNote`; `restore` publishes them (the author gets Inbox `content_published`), `hide`
+rejects them (`content_rejected`). Items still "checking" and rejections nobody appealed are not in the queue. Authors appear only by display name and the opaque `authorRef` handle, never by
 user id: act on an author through one of their items. Display names are filtered on set (word list, no links). Users can
 also hide a contributor on their own device by `authorRef`, without telling the server.
 
 Bans follow the pseudonymous model: a banned person can delete the account and start a new pseudonym, which then starts
 at the lowest tier (votes weigh less, new places need more confirmations), and its content can be reported and banned again.
+
+### Brand watchlist
+
+Back office page **Brand watchlist** (`/brand-watchlist`): list, add, edit and enable/disable the brand names the content check
+watches (groups `gambling`, `online_gambling`, `tobacco`, `high_risk_investment`, `loan_shark`, `alcohol`; place mode `warn` or
+`hold`; text mode `mention_ok` or `reject`), with a "Test a sentence" box that runs the spelling-trick-proof pre-filter (the model
+is not called). Brand names only, nothing private; every change is in the audit log (`brand.add|edit|enable|disable`). A starter
+set is seeded once into an empty table at API startup.
 
 ## Maintainer digest (worker)
 

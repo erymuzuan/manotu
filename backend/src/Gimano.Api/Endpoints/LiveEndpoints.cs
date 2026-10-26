@@ -48,12 +48,13 @@ public static class LiveEndpoints
         return TypedResults.Ok(new LiveResponse(alerts, jams, drivers, clock.GetUtcNow()));
     }
 
-    private static async Task<Results<Created<ReportDto>, ValidationProblem>> CreateReport(
+    private static async Task<Results<Created<ReportCreatedDto>, ValidationProblem>> CreateReport(
         CreateReportRequest req, HttpContext http, ReportService svc, CancellationToken ct)
     {
         if (Validation.LatLng(req.Lat, req.Lng) is { } p) return p;
         if (AlertRules.ValidateSubtype(req.Type, req.Subtype) is { } err) return Validation.Problem("subtype", err);
         if (req.Comment is { Length: > 500 }) return Validation.Problem("comment", "comment max 500 chars.");
+        if (req.Note is { Length: > 500 }) return Validation.Problem("note", "note max 500 chars.");
         if (req.Heading is < 0 or > 360) return Validation.Problem("heading", "heading must be 0–360.");
 
         var (report, _) = await svc.CreateAsync(http.User.RequiredUserId(), req, ct);

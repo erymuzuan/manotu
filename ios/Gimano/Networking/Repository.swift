@@ -75,6 +75,11 @@ protocol GimanoRepository: PlaceCardDataSource, DepartureTimesSource {
     /// Uploads a JPEG (already ≤ 2048 px, metadata-free); the server re-encodes to WebP.
     func uploadPhoto(_ jpeg: Data, placeId: String, caption: String?, progress: @escaping @Sendable (Double) -> Void) async throws -> Photo
     func photos(placeId: String, cursor: String?) async throws -> PhotosPage
+    /// `GET /photos/{id}`: the uploader's view (status + moderation) while the content check runs.
+    func photo(id: String) async throws -> Photo
+    /// `POST /reviews/{id}/appeal` and `POST /photos/{id}/appeal` `{note?}` → 202 (once per item, held for a maintainer).
+    func appealReview(id: String, note: String?) async throws
+    func appealPhoto(id: String, note: String?) async throws
     func deletePhoto(id: String) async throws
     func flagPhoto(id: String, reason: FlagReason) async throws
 
@@ -478,6 +483,18 @@ final class LiveRepository: GimanoRepository {
         return try await authed { try await self.client.get("places/\(placeId)/photos", query: q) }
     }
 
+    func photo(id: String) async throws -> Photo {
+        try await authed { try await self.client.get("photos/\(id)") }
+    }
+
+    func appealReview(id: String, note: String?) async throws {
+        try await authed { try await self.client.sendNoContent("POST", "reviews/\(id)/appeal", body: AppealContentRequest(note: note)) }
+    }
+
+    func appealPhoto(id: String, note: String?) async throws {
+        try await authed { try await self.client.sendNoContent("POST", "photos/\(id)/appeal", body: AppealContentRequest(note: note)) }
+    }
+
     func deletePhoto(id: String) async throws {
         try await authed { try await self.client.sendNoContent("DELETE", "photos/\(id)", body: Optional<Empty>.none) }
     }
@@ -677,6 +694,15 @@ final class FallbackRepository: GimanoRepository {
     }
     func photos(placeId: String, cursor: String?) async throws -> PhotosPage {
         try await run({ try await $0.photos(placeId: placeId, cursor: cursor) }, demoOp: { try await $0.photos(placeId: placeId, cursor: cursor) })
+    }
+    func photo(id: String) async throws -> Photo {
+        try await run({ try await $0.photo(id: id) }, demoOp: { try await $0.photo(id: id) })
+    }
+    func appealReview(id: String, note: String?) async throws {
+        try await run(gapFallback: false, { try await $0.appealReview(id: id, note: note) }, demoOp: { try await $0.appealReview(id: id, note: note) })
+    }
+    func appealPhoto(id: String, note: String?) async throws {
+        try await run(gapFallback: false, { try await $0.appealPhoto(id: id, note: note) }, demoOp: { try await $0.appealPhoto(id: id, note: note) })
     }
     func deletePhoto(id: String) async throws {
         try await run(gapFallback: false, { try await $0.deletePhoto(id: id) }, demoOp: { try await $0.deletePhoto(id: id) })

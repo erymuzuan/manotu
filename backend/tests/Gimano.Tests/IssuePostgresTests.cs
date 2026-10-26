@@ -545,7 +545,7 @@ public sealed class PostgresIntegrationIssueTests : IAsyncLifetime
         var clock = new MutableClock(T0);
         ReportService Svc(GimanoDbContext db) => new(db, new Bus(), new GeoLookup(db, new Gimano.Api.Live.DriverSnapshotStore(clock), clock), clock,
             new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
-            new RestrictedAreaService(db, new()));
+            new RestrictedAreaService(db, new()), TestGates.Content(db, clock));
         var req = new CreateReportRequest(ReportType.Hazard, null, Lat, Lng, 0, null);
 
         Guid first;

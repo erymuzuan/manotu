@@ -16,7 +16,7 @@ public sealed class PayloadTooLargeException(string message) : Exception(message
 /// publish photo.uploaded; the worker does orientation → strip metadata → WebP and flips status to published/rejected.
 /// </summary>
 public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPublisher bus, TimeProvider clock, AuthorHandles handles,
-    RestrictedAreaService restricted)
+    RestrictedAreaService restricted, ContentGate gate)
 {
     public const int PageSize = 30;
     public const int UploadsPerDay = 50;
@@ -24,6 +24,7 @@ public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPu
     public async Task<PhotoDto> UploadAsync(Guid userId, string placeId, IFormFile file, string? caption, CancellationToken ct)
     {
         var user = Moderation.EnsureMayContribute(await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct) ?? throw new UnauthorizedAccessException("This account was deleted."));
+        Moderation.EnsureNotPaused(user, clock.GetUtcNow());
         if (file.Length > ImageProcessor.MaxBytes) throw new PayloadTooLargeException("Photos are limited to 15 MB.");
         if (file.Length == 0) throw new ValidationException("file", "file is empty.");
         if (caption is { Length: > CommunityRules.MaxCaptionLength }) throw new ValidationException("caption", $"caption max {CommunityRules.MaxCaptionLength} chars.");
@@ -51,13 +52,15 @@ public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPu
         {
             PlaceId = placeId, UserId = userId, User = user, Caption = caption?.Trim(), CreatedAt = now,
             Width = w, Height = h, Status = PhotoStatus.Processing,
+            // The worker sends the metadata-free image to the content check once it is processed (docs/content-safety.md "Photos").
+            ModerationState = gate.Enabled ? ContentState.Checking : ContentState.None,
         };
         photo.UploadKey = MediaKeys.Upload(photo.Id);
         await media.PutAsync(photo.UploadKey, bytes, file.ContentType ?? "application/octet-stream", ct);
         db.Photos.Add(photo);
         await db.SaveChangesAsync(ct);
         await bus.PublishAsync(RoutingKeys.PhotoUploaded, new PhotoUploadedEvent(photo.Id), ct);
-        return ToDto(photo, handles);
+        return ToDto(photo, handles, userId);
     }
 
     public async Task<PhotosPage> ListAsync(string placeId, string? cursor, CancellationToken ct)
@@ -70,10 +73,30 @@ public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPu
         return new PhotosPage(rows.Select(p => ToDto(p, handles)).ToList(), more ? CommunityRules.EncodeCursor(rows[^1].Id) : null);
     }
 
-    public async Task<PhotoDto> GetAsync(Guid id, CancellationToken ct)
+    /// <summary>A published photo for anyone; its uploader also sees it while it is processing, checked, held or not accepted (with <c>moderation</c>).</summary>
+    public async Task<PhotoDto> GetAsync(Guid id, CancellationToken ct, Guid? viewer = null)
     {
         var p = await db.Photos.AsNoTracking().Include(x => x.User).FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException("Photo not found.");
-        return ToDto(p, handles);
+        if (p.Status != PhotoStatus.Published && p.UserId != viewer && p.ModerationState is ContentState.Held or ContentState.Checking or ContentState.Rejected)
+            throw new NotFoundException("Photo not found.");
+        return ToDto(p, handles, viewer);
+    }
+
+    /// <summary>"Ask for a review" on a photo the content check did not accept: once per photo, held for a maintainer.</summary>
+    public async Task AppealAsync(Guid userId, Guid id, string? note, CancellationToken ct)
+    {
+        var p = await db.Photos.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException("Photo not found.");
+        if (p.UserId != userId) throw new ForbiddenException("Only the uploader can ask for a review of this photo.");
+        if (p.ModerationState != ContentState.Rejected || p.Key is null) throw new ConflictException("Only a photo that was not accepted can be sent for review.");
+        if (p.AppealedAt is not null) throw new ConflictException("This photo was already sent for review.");
+        var now = clock.GetUtcNow();
+        p.AppealNote = Moderation.CheckAppealNote(note);
+        p.AppealedAt = now;
+        p.ModerationState = ContentState.Held;
+        p.Status = PhotoStatus.Processing;
+        p.ModeratedAt = now;
+        await db.SaveChangesAsync(ct);
+        await gate.AnnounceAsync("photo", p.Id.ToString(), p.PlaceId, ContentState.Held, late: false, ct);
     }
 
     public async Task DeleteAsync(Guid userId, Guid id, CancellationToken ct)
@@ -108,7 +131,13 @@ public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPu
         if (!ok) throw new NotFoundException("Place not found.");
     }
 
-    public static PhotoDto ToDto(Photo p, AuthorHandles h) => new(
-        p.Id, MediaKeys.Url(p.Key), MediaKeys.Url(p.ThumbKey), p.Width, p.Height, p.Caption,
-        p.User is null ? new AddedBy("Pemandu Manotu") : new AddedBy(p.User.DisplayName, h.For(p.UserId)), p.CreatedAt, p.Status);
+    /// <summary>URLs only for published photos; <c>moderation</c> only for the uploader (<paramref name="viewer"/>).</summary>
+    public static PhotoDto ToDto(Photo p, AuthorHandles h, Guid? viewer = null) => new(
+        p.Id, p.Status == PhotoStatus.Published ? MediaKeys.Url(p.Key) : null, p.Status == PhotoStatus.Published ? MediaKeys.Url(p.ThumbKey) : null,
+        p.Width, p.Height, p.Caption,
+        p.User is null ? new AddedBy("Pemandu Manotu") : new AddedBy(p.User.DisplayName, h.For(p.UserId)), p.CreatedAt, p.Status,
+        viewer is not null && p.UserId == viewer ? ModerationFor(p) : null);
+
+    internal static ContentModerationDto? ModerationFor(Photo p) => p.ModerationState == ContentState.None ? null
+        : new ContentModerationDto(p.ModerationState, ContentScreening.Split(p.ModerationReasons), p.ModerationState == ContentState.Rejected && p.AppealedAt is null && p.Key is not null);
 }

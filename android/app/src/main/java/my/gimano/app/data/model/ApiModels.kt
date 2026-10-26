@@ -130,6 +130,8 @@ data class PlaceSummary(
     val navigationPoint: NavigationPoint? = null,
     /** The AI check, for the owner only (GET /me/places/contributed); absent for other viewers. */
     val screening: PlaceScreening? = null,
+    /** docs/content-safety.md "Place warnings": `alcohol` | `gambling` | `tobacco` (omitted by the server when empty). */
+    val warnings: List<String> = emptyList(),
 )
 
 /**
@@ -220,13 +222,15 @@ data class Place(
     val navigationPoint: NavigationPoint? = null,
     /** The AI check, in the owner's view (POST/PATCH/appeal responses); absent for other viewers. */
     val screening: PlaceScreening? = null,
+    /** docs/content-safety.md "Place warnings": `alcohol` | `gambling` | `tobacco` (omitted by the server when empty). */
+    val warnings: List<String> = emptyList(),
 ) {
     val isCommunity get() = source == "community"
     val isUnverified get() = isCommunity && status != "published"
     val isGold get() = contributorTier == "emas"
     fun summary() = PlaceSummary(id, name, category, address, lat, lng, distanceM, brand, source, status, rating, reviewCount, thumbnailUrl,
         confirmationsWeighted, required, rural, contributorTier, badge = badge, heldForReview = heldForReview, navigationPoint = navigationPoint,
-        screening = screening)
+        screening = screening, warnings = warnings)
 }
 
 @Serializable
@@ -251,6 +255,19 @@ data class Photo(
     val uploadedBy: Author? = null,
     val createdAt: String? = null,
     val status: String? = null,   // processing | published | rejected
+    /** docs/content-safety.md "Photos": the uploader's own view of the image check; other viewers never get it. */
+    val moderation: ContentModeration? = null,
+)
+
+/**
+ * docs/content-safety.md: the owner's view of the AI check on a review or photo. [state]: passed | held | checking |
+ * rejected | skipped. [reasons] are fixed codes (PlaceScreening.ReasonCodes) that the app maps to its own copy.
+ */
+@Serializable
+data class ContentModeration(
+    val state: String = "passed",
+    val reasons: List<String> = emptyList(),
+    val canAppeal: Boolean = false,
 )
 
 @Serializable
@@ -268,6 +285,8 @@ data class Review(
     val mine: Boolean = false,          // client-side: written by this device's user
     /** Hidden until a moderator checks it (security details in the text). */
     val heldForReview: Boolean = false,
+    /** docs/content-safety.md "Reviews": the author's own view of the AI check (absent for other viewers). */
+    val moderation: ContentModeration? = null,
 )
 
 @Serializable
@@ -296,6 +315,8 @@ data class CreatePlaceRequest(
     val amenities: List<String>? = null,
     /** The `existing.id` of a 409 the user answered "No, mine is a different place" (left out when null). */
     val notDuplicateOf: String? = null,
+    /** "Anything people should know?": `alcohol` | `gambling` | `tobacco` (left out when none). */
+    val warnings: List<String>? = null,
 )
 
 @Serializable
@@ -563,6 +584,9 @@ data class Report(
     val confirmations: Int = 0,
     val thanks: Int = 0,
     val comment: String? = null,
+    /** docs/content-safety.md "Report notes": the note failed the check and was dropped; the report itself went out. */
+    val noteDropped: Boolean = false,
+    val noteReasons: List<String> = emptyList(),
 ) {
     val point get() = GeoPoint(lat, lng)
 }
@@ -660,6 +684,9 @@ data class ProblemDetails(
     val retryAfterSeconds: Int? = null,
     /** 409 on POST /places: the similar place nearby ("Is it already on the map?"). */
     val existing: PlaceSummary? = null,
+    /** 422 `content_rejected` (docs/content-safety.md "Reviews"): fixed reason codes and the review without the offending part. */
+    val reasons: List<String> = emptyList(),
+    val safeText: String? = null,
 )
 
 
@@ -681,6 +708,11 @@ data class InboxItem(
     val refId: String? = null,
     val read: Boolean = false,
     val count: Int = 1,
+    /** `content_published` / `content_held` / `content_rejected` (docs/content-safety.md "Inbox"): what the item is about. */
+    val subjectKind: String? = null,
+    val subjectId: String? = null,
+    val reasons: List<String> = emptyList(),
+    val canAppeal: Boolean = false,
 ) {
     /** The community place this item is about, if any. */
     val placeRef: String? get() = if (refType == "place") refId ?: placeId else placeId

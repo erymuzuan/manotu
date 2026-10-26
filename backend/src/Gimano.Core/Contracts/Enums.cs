@@ -70,7 +70,8 @@ public enum FlagReason { Spam, Offensive, OffTopic, ConflictOfInterest, Other, S
 public enum PhotoStatus { Processing, Published, Rejected }
 
 public enum InboxKind { PlacePublished, PlaceRejected, ReportThanked, ReviewHelpful, EditAccepted, FeedbackStatus, Announcement, PlaceExpired,
-    IssueConfirmed, IssueRefuted, IssueResolved, PlaceHeld, PlaceNotAccepted, PlaceLive }
+    IssueConfirmed, IssueRefuted, IssueResolved, PlaceHeld, PlaceNotAccepted, PlaceLive,
+    ContentPublished, ContentHeld, ContentRejected }
 
 /// <summary>Road and place complaints (docs/complaints.md, docs/api.md "Issues").</summary>
 public enum IssueKind

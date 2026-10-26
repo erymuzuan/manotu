@@ -70,7 +70,9 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
             Country = CountryResolver.Resolve(at.Lat, at.Lng), OwnerId = userId, Owner = user, CreatedAt = now, UpdatedAt = now,
             RequiredConfirmations = Reputation.RequiredConfirmations(user.Tier, gate.LaunchMode),
             Rural = await IsRuralAsync(at, ct), SaidDifferentFrom = saidDifferent,
+            OwnerWarnings = PlaceWarnings.Join(req.Warnings?.Take(PlaceWarnings.MaxFromOwner)),
         };
+        place.Warnings = place.OwnerWarnings;
         if (held) { place.Status = PlaceStatus.Hidden; place.HeldForReview = true; }
         // The AI check decides (design page "Add a place"); without it, Emas contributors publish immediately as before.
         else if (gate.Enabled) place.ScreeningState = ScreeningState.Checking;
@@ -145,6 +147,13 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         if (req.Phone is not null) place.Phone = req.Phone.Trim();
         if (req.Website is not null) place.Website = req.Website.Trim();
         if (req.OpeningHours is not null) place.OpeningHours = req.OpeningHours.Trim();
+        if (req.Warnings is not null)
+        {
+            // The owner's tags change; what the AI check and the watchlist added stays until the place is checked again.
+            var derived = PlaceWarnings.Split(place.Warnings).Except(PlaceWarnings.Split(place.OwnerWarnings));
+            place.OwnerWarnings = PlaceWarnings.Join(req.Warnings.Take(PlaceWarnings.MaxFromOwner));
+            place.Warnings = PlaceWarnings.Join(PlaceWarnings.Split(place.OwnerWarnings).Concat(derived));
+        }
         if (req.Amenities is not null) place.Amenities = req.Amenities.Select(a => a.Trim()).Where(a => a.Length is > 0 and <= 40).Distinct().Take(30).ToList();
         if (held && place.Status is PlaceStatus.Pending or PlaceStatus.Published or PlaceStatus.Rejected) { place.Status = PlaceStatus.Hidden; place.HeldForReview = true; }
         place.UpdatedAt = clock.GetUtcNow();

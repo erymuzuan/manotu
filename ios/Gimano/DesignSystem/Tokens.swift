@@ -170,6 +170,8 @@ extension Color {
     static let tealInk = Color(light: 0x0E5A54, dark: 0x8FE0D8)
     static let amberMist = Color(light: 0xFFF1CC, dark: 0x3A2E12)
     static let amberInk = Color(light: 0x7A5200, dark: 0xF5D27A)
+    /// Warning banner border (content safety).
+    static let amberEdge = Color(light: 0xFFD466, dark: 0x6B5420)
     static let coralMist = Color(light: 0xFFE4DC, dark: 0x3A1A12)
 }
 

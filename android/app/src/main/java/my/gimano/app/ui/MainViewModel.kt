@@ -646,7 +646,9 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                                 quickReport = s.quickReport?.let { q -> if (q.key == key) q.copy(street = r.street, sent = true) else q })
                         }
                     }
-                    if (!nav.value.active) _events.tryEmit(UiEvent.Toast(R.string.report_sent))
+                    // docs/content-safety.md "Report notes": the note failed the check and was left out; the report itself went out.
+                    if (my.gimano.app.core.safety.ContentGate.noteDropped(r)) _events.tryEmit(UiEvent.Toast(R.string.cs_note_dropped))
+                    else if (!nav.value.active) _events.tryEmit(UiEvent.Toast(R.string.report_sent))
                 }
                 .onFailure { e ->
                     session.onFailed()

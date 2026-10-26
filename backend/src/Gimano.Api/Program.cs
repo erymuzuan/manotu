@@ -149,6 +149,7 @@ if (config.GetValue("Database:MigrateOnStartup", true))
         try
         {
             await db.Database.MigrateAsync();
+            await Gimano.Core.Community.BrandWatchlistService.EnsureSeededAsync(db);
             break;
         }
         catch (Exception ex) when (attempt < 60 && ex is Npgsql.NpgsqlException or System.Net.Sockets.SocketException or InvalidOperationException)

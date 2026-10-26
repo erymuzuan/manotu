@@ -21,6 +21,12 @@ import my.gimano.app.core.places.CreateFailure
 import my.gimano.app.core.places.OpeningHours
 import my.gimano.app.core.places.PlaceGate
 import my.gimano.app.core.places.RatingSummary
+import my.gimano.app.core.safety.ContentFailure
+import my.gimano.app.core.safety.ContentGate
+import my.gimano.app.core.safety.ContentState
+import my.gimano.app.core.safety.PlaceWarning
+import my.gimano.app.core.safety.PostingPause
+import my.gimano.app.core.safety.ReviewState
 import my.gimano.app.data.places.PlaceDraft
 import my.gimano.app.core.safety.RestrictedZone
 import my.gimano.app.data.model.*
@@ -31,7 +37,7 @@ import retrofit2.HttpException
 import java.io.File
 import java.util.UUID
 
-enum class AddStep { PIN, DETAILS, VISIBILITY }
+enum class AddStep { PIN, DETAILS, WARNINGS, VISIBILITY }
 
 data class AddPlaceState(
     val step: AddStep = AddStep.PIN,
@@ -70,6 +76,8 @@ data class AddPlaceState(
     val blockedSheet: Boolean = false,
     /** "Simpan untuk saya sahaja" from A: a private place (allowed anywhere, photos included), never public. */
     val privateOnly: Boolean = false,
+    /** "Anything people should know?": the owner's warnings, sent as `warnings[]` on a public place. */
+    val warnings: Set<PlaceWarning> = emptySet(),
 ) {
     /** B: near an area, sharing publicly: a note, no photos, held for a moderator. */
     val nearArea get() = zone == RestrictedZone.NEAR && !privateOnly
@@ -79,6 +87,7 @@ data class AddPlaceState(
     fun request(): CreatePlaceRequest = CreatePlaceRequest(
         name.trim(), category ?: "other", pin.lat, pin.lng, address.ifBlank { null }, description.trim().ifBlank { null },
         phone.ifBlank { null }, website.ifBlank { null }, hours, amenities.toList().ifEmpty { null }, notDuplicateOf,
+        PlaceWarning.wire(warnings),
     )
 }
 
@@ -107,7 +116,13 @@ data class UploadItem(val key: String, val uri: Uri, val photo: Photo? = null, v
     val processing get() = photo?.status == "processing"
 }
 
-data class ReviewDraft(val rating: Int = 0, val text: String = "", val uploads: List<UploadItem> = emptyList(), val editingId: String? = null, val sending: Boolean = false)
+data class ReviewDraft(
+    val rating: Int = 0, val text: String = "", val uploads: List<UploadItem> = emptyList(), val editingId: String? = null, val sending: Boolean = false,
+    /** 422 `content_rejected`: the "Can't post this" sheet (nothing was stored). */
+    val rejection: ContentFailure.Rejected? = null,
+    /** 403 `posting_paused`: the "Paused" sheet. */
+    val paused: java.time.Instant? = null,
+)
 
 data class ReviewsState(
     val placeId: String? = null,
@@ -116,6 +131,8 @@ data class ReviewsState(
     val summary: RatingSummary = RatingSummary.of(emptyList()),
     val draft: ReviewDraft? = null,
     val placeUploads: List<UploadItem> = emptyList(),
+    /** The rejected photo whose screen is open (its photo id). */
+    val rejectedPhotoId: String? = null,
 )
 
 sealed interface ContribEvent {
@@ -443,7 +460,7 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
                 step = AddStep.VISIBILITY, pin = pin, address = r.address.orEmpty(), name = r.name, category = r.category, phone = r.phone.orEmpty(),
                 website = r.website.orEmpty(), description = r.description.orEmpty(), amenities = r.amenities.orEmpty().toSet(),
                 hoursEnabled = r.openingHours != null, photos = d.photos.map { Uri.fromFile(File(it)) }, zone = c.restricted.zone(pin),
-                draftId = d.id, notDuplicateOf = r.notDuplicateOf, fromList = true,
+                draftId = d.id, notDuplicateOf = r.notDuplicateOf, fromList = true, warnings = PlaceWarning.of(r.warnings).toSet(),
                 overlay = when {
                     left == null -> null
                     d.reason == PlaceDraft.PAUSED -> AddOverlay.Paused(d.readyAt())
@@ -476,7 +493,7 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
             _add.value = AddPlaceState(
                 step = AddStep.DETAILS, pin = pin, address = p.address, name = p.name, category = p.category, phone = p.phone.orEmpty(),
                 website = p.website.orEmpty(), description = p.description.orEmpty(), amenities = p.amenities.toSet(), zone = c.restricted.zone(pin),
-                editingId = p.id, editingRejected = PlaceGate.result(p).notAccepted, fromList = true, overlay = AddOverlay.Result(p, PlaceGate.result(p)),
+                editingId = p.id, editingRejected = PlaceGate.result(p).notAccepted, fromList = true, warnings = PlaceWarning.of(p.warnings).toSet(), overlay = AddOverlay.Result(p, PlaceGate.result(p)),
             ).let { st -> p.openingHours?.let { h -> st.withHours(h) } ?: st }
             _events.tryEmit(ContribEvent.OpenAddPlace)
         }
@@ -535,11 +552,12 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
 
     // ---------------------------------------------------------------- reviews & photos
 
-    fun loadReviews(place: Place) {
+    /** [keep]: the author's own review that the list may not carry yet (held or still being checked): shown with its status. */
+    fun loadReviews(place: Place, keep: Review? = null) {
         _reviews.value = ReviewsState(placeId = place.id, loading = true, summary = RatingSummary.of(emptyList(), place.rating, place.reviewCount))
         viewModelScope.launch {
             val page = runCatching { c.repo.reviews(place.id, "recent") }.getOrNull()
-            val list = page?.reviews.orEmpty()
+            val list = page?.reviews.orEmpty().let { l -> if (keep != null && l.none { it.id == keep.id }) listOf(keep) + l else l }
             _reviews.update {
                 if (it.placeId != place.id) it else it.copy(reviews = list, loading = false,
                     summary = RatingSummary.of(list.map { r -> r.rating }, place.rating ?: list.takeIf { l -> l.isNotEmpty() }?.map { r -> r.rating }?.average(), maxOf(place.reviewCount, list.size)))
@@ -550,11 +568,23 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     private var myReviewIds = HashSet<String>()
     fun mine(r: Review) = r.mine || r.id in myReviewIds
 
-    fun openReview(existing: Review? = null) {
-        if (!termsOk { openReview(existing) }) return
-        _reviews.update { it.copy(draft = existing?.let { r -> ReviewDraft(r.rating, r.text.orEmpty(), editingId = r.id) } ?: ReviewDraft()) }
+    /** [rating] = the star tapped on the place page (1-5), 0 to start without one. */
+    fun openReview(existing: Review? = null, rating: Int = 0) {
+        if (!termsOk { openReview(existing, rating) }) return
+        PostingPause.active()?.let { until -> _reviews.update { it.copy(draft = ReviewDraft(paused = until)) }; return }
+        _reviews.update { it.copy(draft = existing?.let { r -> ReviewDraft(r.rating, r.text.orEmpty(), editingId = r.id) } ?: ReviewDraft(rating = rating.coerceIn(0, 5))) }
     }
     fun closeReview() = _reviews.update { it.copy(draft = null) }
+
+    /** "Can't post this" · Edit: back to the text, as it was. */
+    fun dismissRejection() = updateDraft { it.copy(rejection = null) }
+
+    /** "Can't post this" · "Post this part": the server's safe text replaces the draft and is sent again. */
+    fun postSafePart(place: Place) {
+        val part = _reviews.value.draft?.rejection?.let(ContentGate::safePart) ?: return
+        updateDraft { it.copy(text = part, rejection = null) }
+        submitReview(place)
+    }
     fun updateDraft(f: (ReviewDraft) -> ReviewDraft) = _reviews.update { it.copy(draft = it.draft?.let(f)) }
 
     /** C in a review: "Buang ayat ini". */
@@ -580,30 +610,126 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     private suspend fun upload(placeId: String, u: Uri): Photo? {
         val b = PhotoPrep.decode(c.app, u) ?: return null
         return runCatching { c.repo.uploadPhoto(placeId, PhotoPrep.jpeg(b), null) }
-            .onFailure { e -> if (e is my.gimano.app.data.repo.RestrictedAreaException) _events.tryEmit(ContribEvent.Text(e.detail)) }
+            .onFailure { e ->
+                if (e is my.gimano.app.data.repo.RestrictedAreaException) _events.tryEmit(ContribEvent.Text(e.detail))
+                else if (e is HttpException) (ContentGate.failure(e.code(), runCatching { e.response()?.errorBody()?.string() }.getOrNull()) as? ContentFailure.Paused)
+                    ?.let { p -> PostingPause.set(p.until); _events.tryEmit(ContribEvent.Message(R.string.cs_paused_short)) }
+            }
             .getOrNull()?.also {
             log.photo(it.id, it.url)
             PhotoPrep.deleteIfCameraTemp(c.app, u)   // uploaded: the camera's temp file is no longer needed
+            track(it)
+        }
+    }
+
+    // ---- photo status: tick (published) / clock (processing, checking) / cross (rejected); polls GET /photos/{id}
+
+    private val polling = HashSet<String>()
+
+    /** Polls an uploaded photo every few seconds until it is published or rejected (or about two minutes pass). */
+    private fun track(photo: Photo) {
+        if (!ContentGate.shouldPoll(photo) || !polling.add(photo.id)) return
+        viewModelScope.launch {
+            try {
+                repeat(ContentGate.POLL_TRIES) {
+                    delay(ContentGate.POLL_MS)
+                    val now = runCatching { c.repo.photo(photo.id) }.getOrNull() ?: return@repeat
+                    applyPhoto(now)
+                    if (!ContentGate.shouldPoll(now)) return@launch
+                }
+            } finally { polling.remove(photo.id) }
+        }
+    }
+
+    /** A fresher copy of an uploaded photo: replaces it in the review draft and in the place's pending strip. */
+    private fun applyPhoto(p: Photo) {
+        fun List<UploadItem>.swap() = map { if (it.photo?.id == p.id) it.copy(photo = p) else it }
+        _reviews.update { s -> s.copy(placeUploads = s.placeUploads.swap(), draft = s.draft?.let { d -> d.copy(uploads = d.uploads.swap()) }) }
+    }
+
+    fun showRejectedPhoto(id: String) = _reviews.update { it.copy(rejectedPhotoId = id) }
+    fun closeRejectedPhoto() = _reviews.update { it.copy(rejectedPhotoId = null) }
+
+    /** Rejected photo · "Another photo": the rejected one leaves the draft / strip; the picker opens in the screen. */
+    fun dropPhoto(id: String) {
+        _reviews.update { s ->
+            s.copy(rejectedPhotoId = null, placeUploads = s.placeUploads.filterNot { it.photo?.id == id },
+                draft = s.draft?.let { d -> d.copy(uploads = d.uploads.filterNot { it.photo?.id == id }) })
+        }
+    }
+
+    /** Rejected photo · "Ask a person": POST /photos/{id}/appeal. */
+    fun appealPhoto(id: String) {
+        if (!termsOk { appealPhoto(id) }) return
+        viewModelScope.launch {
+            runCatching { c.repo.appealPhoto(id, null) }
+                .onSuccess {
+                    _reviews.update { it.copy(rejectedPhotoId = null) }
+                    _events.tryEmit(ContribEvent.Message(R.string.cs_appeal_sent))
+                }
+                .onFailure { e -> _events.tryEmit(failure(e, if ((e as? HttpException)?.code() == 409) R.string.appeal_already else R.string.action_failed)) }
+        }
+    }
+
+    /** A stored review the check didn't accept (or held): "Ask a person" → POST /reviews/{id}/appeal. */
+    fun appealReview(r: Review, place: Place) {
+        if (!termsOk { appealReview(r, place) }) return
+        viewModelScope.launch {
+            runCatching { c.repo.appealReview(r.id, null) }
+                .onSuccess { _events.tryEmit(ContribEvent.Message(R.string.cs_appeal_sent)); loadReviews(place) }
+                .onFailure { e -> _events.tryEmit(failure(e, if ((e as? HttpException)?.code() == 409) R.string.appeal_already else R.string.action_failed)) }
+        }
+    }
+
+    /** Inbox · Appeal on a rejected review or photo (the place is not needed: the list reloads when its card opens). */
+    fun appealContent(kind: String?, id: String) {
+        if (!termsOk { appealContent(kind, id) }) return
+        viewModelScope.launch {
+            runCatching {
+                when (kind) {
+                    "review" -> c.repo.appealReview(id, null)
+                    "photo" -> c.repo.appealPhoto(id, null)
+                    "place" -> { c.repo.appealPlace(id, null); Unit }
+                    else -> Unit
+                }
+            }
+                .onSuccess { _events.tryEmit(ContribEvent.Message(R.string.cs_appeal_sent)) }
+                .onFailure { e -> _events.tryEmit(failure(e, if ((e as? HttpException)?.code() == 409) R.string.appeal_already else R.string.action_failed)) }
         }
     }
 
     fun submitReview(place: Place) {
         val d = _reviews.value.draft ?: return
-        if (d.rating !in 1..5) return
+        if (d.rating !in 1..5 || d.sending) return
+        PostingPause.active()?.let { until -> updateDraft { it.copy(paused = until) }; return }
         updateDraft { it.copy(sending = true) }
         viewModelScope.launch {
-            val body = ReviewRequest(d.rating, d.text.trim().ifBlank { null }, d.uploads.mapNotNull { it.photo?.id }.ifEmpty { null })
+            val body = ReviewRequest(d.rating, d.text.trim().ifBlank { null }, d.uploads.filter { it.photo != null && ContentGate.photoState(it.photo) != ContentState.REJECTED }.mapNotNull { it.photo?.id }.ifEmpty { null })
             runCatching { if (d.editingId != null) c.repo.updateReview(d.editingId, body) else c.repo.createReview(place.id, body) }
                 .onSuccess { r ->
                     myReviewIds += r.id
-                    log.review(r.id, place.name, held = r.heldForReview)
+                    val state = ContentGate.reviewState(r)
+                    log.review(r.id, place.name, held = state != ReviewState.PASSED)
                     _reviews.update { it.copy(draft = null) }
-                    _events.tryEmit(ContribEvent.Message(if (r.heldForReview) R.string.restricted_held else R.string.review_posted))
-                    loadReviews(place)
+                    _events.tryEmit(ContribEvent.Message(when (state) {
+                        ReviewState.PASSED -> if (r.heldForReview) R.string.restricted_held else R.string.review_posted
+                        ReviewState.HELD -> R.string.cs_review_held
+                        ReviewState.CHECKING -> R.string.cs_review_checking
+                        ReviewState.REJECTED -> R.string.cs_review_rejected
+                    }))
+                    loadReviews(place, keep = r.takeIf { state != ReviewState.PASSED }?.copy(mine = true))
                 }
                 .onFailure { e ->
                     updateDraft { it.copy(sending = false) }
-                    _events.tryEmit(failure(e, if ((e as? HttpException)?.code() == 409) R.string.review_one_per_place else R.string.action_failed))
+                    val http = e as? HttpException
+                    val f = http?.let { ContentGate.failure(it.code(), runCatching { it.response()?.errorBody()?.string() }.getOrNull()) }
+                    when (f) {
+                        // 422 content_rejected: nothing was stored. The "Can't post this" sheet explains it (never the model's words).
+                        is ContentFailure.Rejected -> updateDraft { it.copy(rejection = f) }
+                        // 403 posting_paused: 3 rejections in 24 h.
+                        is ContentFailure.Paused -> { PostingPause.set(f.until); updateDraft { it.copy(paused = f.until ?: java.time.Instant.now().plusSeconds(24 * 3600)) } }
+                        else -> _events.tryEmit(failure(e, if (http?.code() == 409) R.string.review_one_per_place else R.string.action_failed))
+                    }
                 }
         }
     }
@@ -631,6 +757,13 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
     /** "Report place" (community places only; POST /places/{id}/flag). */
     fun flagPlace(p: Place, reason: String) = viewModelScope.launch {
         runCatching { c.repo.flagPlace(p.id, reason) }.onSuccess { _events.tryEmit(ContribEvent.Message(R.string.thanks_flag)) }
+    }
+
+    /** Warning banner · "Not right? Tell us": POST /places/{id}/flag {reason: "other"}. */
+    fun flagWarning(p: Place) = viewModelScope.launch {
+        runCatching { c.repo.flagPlace(p.id, "other") }
+            .onSuccess { _events.tryEmit(ContribEvent.Message(R.string.thanks_flag)) }
+            .onFailure { _events.tryEmit(ContribEvent.Message(R.string.action_failed)) }
     }
 
     /** "Block this user": on this phone only (never sent); their reviews and photos disappear everywhere. */

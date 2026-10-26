@@ -12,7 +12,20 @@ enum ScreeningReason: String, CaseIterable, Sendable {
     case wrongCategory = "wrong_category"
 
     static func parse(_ codes: [String]) -> [ScreeningReason] {
-        codes.map { ScreeningReason(rawValue: $0.lowercased()) ?? .unclear }
+        codes.map { ScreeningReason(rawValue: $0.lowercased()) ?? alias($0.lowercased()) ?? .unclear }
+    }
+
+    /// The public-content-safety codes (docs/content-safety.md) that can also come back on a place, shown with the
+    /// closest existing copy. Warning-only `sensitive_*` codes are not a rejection (`ok`).
+    static func alias(_ code: String) -> ScreeningReason? {
+        switch code {
+        case "violence", "drugs", "counterfeit": .illegal
+        case "personal_data": .privateHome
+        case "gambling_promo", "alcohol_promo", "tobacco_promo", "brand_promo", "external_contact", "medical_claims": .spam
+        case "high_risk_investment", "loan_shark", "mlm": .scam
+        case "sensitive_alcohol", "sensitive_gambling", "sensitive_tobacco": .ok
+        default: nil
+        }
     }
 
     /// B4 ("someone's home"): offered "Keep it just for me" and "It's a business: ask for a review".

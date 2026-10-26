@@ -42,7 +42,7 @@ class SwitchingRepository(
             // The proxy answers but the API behind it is down (500/502/503/504 HTML page): same as unreachable.
             if (!my.gimano.app.core.net.Reachability.isGatewayDown(e.code())) {
                 policy.onSuccess()
-                if (e.code() == 403) Moderation.reportBanned()   // banned account: reports and votes are refused
+                if (e.code() == 403 && !Moderation.isAddingPaused(e)) Moderation.reportBanned()   // banned account: reports and votes are refused
                 RestrictedAreaException.from(e)?.let { throw it }   // 422 restricted_area: the server's own words
                 throw e
             }
@@ -145,6 +145,9 @@ class SwitchingRepository(
     override suspend fun flagPhoto(photoId: String, reason: String) = write { flagPhoto(photoId, reason) }
     override suspend fun uploadPhoto(placeId: String, jpeg: ByteArray, caption: String?) = write { uploadPhoto(placeId, jpeg, caption) }
     override suspend fun photos(placeId: String) = pick { photos(placeId) }
+    override suspend fun photo(photoId: String) = write { photo(photoId) }
+    override suspend fun appealReview(reviewId: String, note: String?) = write { appealReview(reviewId, note) }
+    override suspend fun appealPhoto(photoId: String, note: String?) = write { appealPhoto(photoId, note) }
     override suspend fun createShare(expiresInMinutes: Int) = write { createShare(expiresInMinutes) }
     override suspend fun updateShare(shareId: String, writeToken: String, sealed: my.gimano.app.data.share.SealedShare) = write { updateShare(shareId, writeToken, sealed) }
     override suspend fun deleteShare(shareId: String, writeToken: String) = write { deleteShare(shareId, writeToken) }

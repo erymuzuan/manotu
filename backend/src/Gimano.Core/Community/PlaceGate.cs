@@ -12,7 +12,8 @@ namespace Gimano.Core.Community;
 /// Runs the AI check on a community place and applies the answer (PlaceScreening.ForNew / ForEdit): the API calls it while the
 /// app waits (4 s), the worker for places still "checking". Saves and publishes the place's events.
 /// </summary>
-public sealed class PlaceGate(GimanoDbContext db, IPlaceScreener screener, IEventPublisher bus, TimeProvider clock, IOptions<VettingOptions> vetting)
+public sealed class PlaceGate(GimanoDbContext db, IPlaceScreener screener, IEventPublisher bus, TimeProvider clock, IOptions<VettingOptions> vetting,
+    BrandWatchlistService? brands = null)
 {
     public const double NearbyRadiusM = 150;
     public bool Enabled => screener.Enabled;
@@ -21,7 +22,9 @@ public sealed class PlaceGate(GimanoDbContext db, IPlaceScreener screener, IEven
     /// <summary>Checks <paramref name="place"/> (its owner loaded). Returns false when there was no answer and it stays "checking".</summary>
     public async Task<bool> RunAsync(CommunityPlace place, bool isEdit, TimeSpan? wait, bool late, CancellationToken ct)
     {
-        var input = await InputAsync(place, isEdit, ct);
+        var matches = brands is null ? [] : (await brands.MatcherAsync(ct)).Match(place.Name, place.Description, place.Website);
+        var input = await InputAsync(place, isEdit, ct) with { Brands = matches.Count == 0 ? null : matches };
+        var holdByBrand = matches.Any(m => m.PlaceMode == BrandPlaceMode.Hold);
         ScreeningResult result;
         using (var cts = CancellationTokenSource.CreateLinkedTokenSource(ct))
         {
@@ -33,28 +36,37 @@ public sealed class PlaceGate(GimanoDbContext db, IPlaceScreener screener, IEven
         {
             if (!result.Unavailable) return false;
             // Off or over budget: the plain vetting rules (as before the check existed).
-            await FinishAsync(place, isEdit ? place.Status : PlainStatus(place), ScreeningState.Skipped, held: false, listed: false, null, late, ct);
+            if (holdByBrand) await FinishAsync(place, PlaceStatus.Hidden, ScreeningState.Held, held: true, listed: false, null, late, ct, WarningsFor(place, null, matches));
+            else await FinishAsync(place, isEdit ? place.Status : PlainStatus(place), ScreeningState.Skipped, held: false, listed: false, null, late, ct, WarningsFor(place, null, matches));
             return true;
         }
         var owner = place.Owner;
         var tier = owner?.Tier ?? Tier.Baharu;
         var isNew = owner is null || PlaceScreening.IsNewContributor(owner.JoinedAt, owner.PlacesAccepted, clock.GetUtcNow());
         var outcome = isEdit ? PlaceScreening.ForEdit(v, place.Status, place.ResolvedAt is not null, tier, isNew) : PlaceScreening.ForNew(v, tier, isNew);
-        await FinishAsync(place, outcome.Status, outcome.State, outcome.HeldForReview, outcome.Listed, v, late, ct);
+        // A watchlist brand set to "hold" (online gambling, loans, investment) never goes live on the model's say-so; rejections stand.
+        if (holdByBrand && outcome.State != ScreeningState.Rejected && outcome.State != ScreeningState.Held)
+            outcome = new ScreeningOutcome(PlaceStatus.Hidden, ScreeningState.Held, true, false);
+        await FinishAsync(place, outcome.Status, outcome.State, outcome.HeldForReview, outcome.Listed, v, late, ct, WarningsFor(place, v, matches));
         return true;
     }
 
     /// <summary>Still no answer after an hour: a maintainer decides instead (design B6).</summary>
     public Task GiveUpAsync(CommunityPlace place, CancellationToken ct) =>
-        FinishAsync(place, PlaceStatus.Hidden, ScreeningState.Held, held: true, listed: false, null, late: true, ct);
+        FinishAsync(place, PlaceStatus.Hidden, ScreeningState.Held, held: true, listed: false, null, late: true, ct, WarningsFor(place, null, []));
+
+    /// <summary>The owner's tags, the AI check's sensitive_* codes and the watchlist brands' groups (docs/content-safety.md "Place warnings").</summary>
+    internal static IReadOnlyList<string>? WarningsFor(CommunityPlace place, ScreeningVerdict? v, IReadOnlyList<BrandMatch> matches) =>
+        PlaceWarnings.Merge(PlaceWarnings.Split(place.OwnerWarnings), v is null ? null : PlaceWarnings.FromReasonCodes(v.Reasons), matches.Select(m => m.Warning));
 
     private PlaceStatus PlainStatus(CommunityPlace p) => p.Owner?.Tier == Tier.Emas ? PlaceStatus.Published : PlaceStatus.Pending;
 
     private async Task FinishAsync(CommunityPlace place, PlaceStatus status, ScreeningState state, bool held, bool listed, ScreeningVerdict? v,
-        bool late, CancellationToken ct)
+        bool late, CancellationToken ct, IReadOnlyList<string>? warnings = null)
     {
         var now = clock.GetUtcNow();
         var before = place.Status;
+        place.Warnings = PlaceWarnings.Join(warnings);
         var owner = place.Owner;
         place.Status = status;
         place.ScreeningState = state;

@@ -210,8 +210,10 @@ POST   /places                        → 201 Place   (owner view, with `screeni
   { name, category, lat, lng, address?, description?, phone?, website?,
     openingHours?: "Mo-Fr 08:00-18:00; Sa 08:00-13:00",     // OSM opening_hours syntax
     amenities?: string[],                                    // always public; private places never reach the server
+    warnings?: ("alcohol"|"gambling"|"tobacco")[],           // the owner's tags (max 3, unknown values ignored); see "Place warnings"
     notDuplicateOf?: string }                                // the `existing.id` of a 409 the user answered "No, mine is different"
-PATCH  /places/{id}                   → Place        (owner only, community places only; a changed place is checked again;
+PATCH  /places/{id}                   → Place        (owner only, community places only; a changed place is checked again; `warnings` is
+                                                      replaced when sent and does not trigger a new check;
                                                       a `rejected` place may be edited: "Edit and try again")
 POST   /places/{id}/appeal  (signed)  {note?: ≤ 200}  → Place   (owner only, `rejected` places, once per place → hidden,
                                                       held for a maintainer; 409 if not rejected or already appealed)
@@ -268,7 +270,28 @@ The owner's `Place` (POST/PATCH/appeal responses, `GET /me/places/contributed`) 
 | `skipped` / `none` | not checked (off, over budget, older places, restricted-area holds) | as before |
 
 `reasons` ⊂ `spam, scam, gibberish, harassment, private_home, adult, illegal, duplicate, security, unclear,
-wrong_category` (and `ok` on a pass). The apps show their own copy for each code, never model text.
+wrong_category` (and `ok` on a pass), plus the public-content-safety codes (design: canvas "Manotu AI Content Safety"):
+
+| Group | Codes |
+|---|---|
+| Harm | `violence`, `drugs`, `personal_data`, `3r` (race, religion, royalty) |
+| Promotion (rejected) | `gambling_promo`, `alcohol_promo`, `tobacco_promo`, `brand_promo`, `external_contact` (phone, WhatsApp, Telegram, links) |
+| Money and goods | `high_risk_investment`, `loan_shark`, `mlm`, `counterfeit`, `medical_claims` |
+| Warning only | `sensitive_alcohol`, `sensitive_gambling`, `sensitive_tobacco`: the place stays listed and apps show a warning banner |
+
+Mentioning that a place sells or hosts alcohol, gambling or tobacco is accepted; offers, codes, links and contacts for them
+are rejected. The same check and codes screen reviews, report notes and photos (text and image, public content only, never
+user id, device or location): see `docs/content-safety.md` and "Reviews & photos" below. Unknown codes from the model become
+`unclear`. The apps show their own copy for each code, never model text.
+
+**Place warnings.** `Place` and `PlaceSummary` carry `warnings?: ("alcohol"|"gambling"|"tobacco")[]`, omitted when empty, in a fixed
+order. Sources: the owner's tags on `POST/PATCH /places`, the AI check's `sensitive_*` codes, the brand watchlist (a place whose
+name, description or website matches a brand set to `warn`), and, for map (OSM) places, tags (`shop=alcohol`,
+`amenity=bar|pub|biergarten|casino`, `leisure=adult_gaming_centre`, `shop=bookmaker|lottery`, `shop=tobacco|e-cigarette`). The place
+stays listed and routable; the apps show a banner. A community place whose name matches a brand set to `hold` (online gambling,
+loan shark, high-risk investment) is held for a maintainer unless the AI check rejects it. "Not right? Tell us" =
+`POST /places/{id}/flag {reason:"other"}`. Search results come from the search index, so `warnings` appears on them after the
+next reindex (it is always present on `GET /places/{id}`, nearby and `/me/places/contributed`).
 Rate limits answer `429` with `Retry-After` and `retryAfterSeconds` (B5 "You can add more in 40 minutes").
 
 **Automated checks before `pending` → visible:**
@@ -328,24 +351,60 @@ reasons need three); a maintainer acts within 24 h.
 
 ```
 GET    /places/{id}/reviews?sort=recent|helpful&cursor=   → {reviews: Review[], next?}
-POST   /places/{id}/reviews           {rating: 1–5, text?: ≤ 2000, photoIds?: string[]} → 201 Review
-PATCH  /reviews/{id}  /  DELETE /reviews/{id}      (author only; one review per user per place)
+POST   /places/{id}/reviews           {rating: 1–5, text?: ≤ 2000, photoIds?: string[]} → 201 Review (screened, see below)
+                                      → 422 {code:"content_rejected", reasons, safeText?}   → 403 {code:"posting_paused", pausedUntil}
+PATCH  /reviews/{id}  /  DELETE /reviews/{id}      (author only; one review per user per place; an edited text is screened the same way)
+POST   /reviews/{id}/appeal           {note?: ≤ 200} → 202   (author only, once, only after a late rejection; held for a maintainer)
 POST   /reviews/{id}/helpful          → 204   (toggle)
 POST   /reviews/{id}/flag             {reason: spam|offensive|off_topic|conflict_of_interest|sensitive_location|other} → 202
 
 POST   /photos   multipart/form-data: file (JPEG/PNG/HEIC/WebP, ≤ 15 MB), placeId, caption?
-  → 201 Photo   (status "processing" → "published" | "rejected")
+  → 201 Photo   (status "processing" → "published" | "rejected"; held photos stay "processing", see below)
 GET    /places/{id}/photos?cursor=    → {photos: Photo[], next?}
 DELETE /photos/{id}                   (uploader only)
 POST   /photos/{id}/flag              {reason}
+POST   /photos/{id}/appeal            {note?: ≤ 200} → 202   (uploader only, once, only after a rejection; held for a maintainer)
 POST   /places/{id}/flag              {reason} → 202   (community places only; 3 reports from different users hide it)
 GET    /media/{key}.webp              (public, immutable, Cache-Control: max-age=31536000)
 GET    /photos/{id}                   → Photo   (poll after upload: status processing → published | rejected)
 ```
 
 `Review = {id, placeId, rating, text?, photos: Photo[], author: {displayName, level, reviewCount, authorRef?},
-helpfulCount, createdAt, editedAt?, status: "published"|"hidden"}`
-`Photo = {id, url, thumbUrl, width, height, caption?, uploadedBy: {displayName, authorRef?}, createdAt, status}`
+helpfulCount, createdAt, editedAt?, status: "published"|"hidden", heldForReview, moderation?}`
+`Photo = {id, url, thumbUrl, width, height, caption?, uploadedBy: {displayName, authorRef?}, createdAt, status, moderation?}`
+`moderation = {state: "passed"|"held"|"checking"|"rejected"|"skipped", reasons: string[], canAppeal: bool}`: **the author's own view only**
+(absent for everyone else, and for content that was never checked). Photos never use `skipped` (an unchecked photo has no
+`moderation`). `url`/`thumbUrl` are set only while `status` is `published`.
+
+**Public content safety (docs/content-safety.md).** Reviews (text, new or edited), photos (after EXIF/GPS stripping, as a
+metadata-free JPEG) and the free-text note of a road report go through the Claude Haiku 5.5 check, with the same reason codes and
+the same US$20/week budget as places. The model sees only the public text or image and the public place's name, never user id,
+pseudonym, device, contact or location; content is never logged.
+
+| Review verdict | Response |
+|---|---|
+| publish | `201 Review`, `status: "published"`, `moderation.state: "passed"` (`reasons: []`) |
+| hold | `201 Review`, `status: "hidden"`, `heldForReview: true`, `moderation: {state:"held", reasons, canAppeal:false}`; a maintainer decides within 24 h; Inbox `content_held` |
+| no answer in 4 s | `201 Review`, `status: "hidden"`, `moderation.state: "checking"`; the worker finishes it (an hour at most, then it is held) and the result arrives in the Inbox (`content_published`, `content_held` or `content_rejected`) |
+| reject | `422 {title, status, detail, code: "content_rejected", reasons: string[], safeText?: string}`; nothing is stored (a rejected `PATCH` leaves the review as it was). `safeText` = the text without the offending part, only when a useful part remains |
+| check off / budget used up | `201 Review` as before the check (profanity and link filters only), `moderation.state: "skipped"` |
+
+A rating-only `PATCH` is not screened. The author also gets their own hidden review back in `GET /places/{id}/reviews` (first
+page, when the request is signed in) with its `moderation`. A review rejected only after the app stopped waiting stays hidden with
+`moderation: {state:"rejected", reasons, canAppeal:true}` until appealed; unappealed rejected reviews and photo files are deleted
+after 7 days. An appeal (`POST …/appeal`, `202`) turns the item into `held` (`canAppeal:false`); `409` when not rejected or already
+appealed; `400` for a note over 200 characters or with links. A maintainer's approval publishes it (Inbox `content_published`), a
+refusal rejects it (`content_rejected`, `canAppeal:false` once appealed).
+
+**Photos.** `POST /photos` still answers `201 Photo` with `status: "processing"`; the uploader's `Photo` carries
+`moderation.state: "checking"` while the worker processes and checks it (poll `GET /photos/{id}`). Outcomes: `published`
+(`passed`), `rejected` (`rejected`, `canAppeal: true`), or still `processing` while held (`held`) or `checking`. Other viewers see
+only published photos (`GET /photos/{id}` of someone else's unpublished photo is `404`). A rejected photo never blocks the review
+or place it belongs to.
+
+**Pause.** Three AI rejections in 24 hours (reviews, review edits, photos, report notes and rejected places together) pause
+posting for 24 hours: `403 {code: "posting_paused", pausedUntil}` on `POST/PATCH /reviews` and `POST /photos`
+(`adding_paused` for places, same `pausedUntil`, same clock).
 
 **`authorRef` (blocking, Apple 1.2):** an opaque, stable id for the contributor, the same on every review, photo,
 community place (`addedBy`) and issue (`reportedBy`) of theirs: `base64url(HMAC-SHA256(server secret, internal user
@@ -648,13 +707,17 @@ SignalR hub: `wss://{host}/hubs/live`
 POST /reports
 { "type":"hazard", "subtype":"pothole", "lat":3.1, "lng":101.6,
   "heading":270, "comment":null }
-→ 201 Report
+→ 201 Report   (+ `note` or `comment`: optional free text ≤ 500; screened, see below)
 
 POST /reports/{id}/votes     {"stillThere": true}   → Report
 POST /reports/{id}/thanks                           → 204
 DELETE /reports/{id}   (signed)                     → 204   Undo within 2 min (docs/driving.md §6.4): withdraws your own
                                                     report, or your confirmation when yours was merged into it; later 409
 ```
+
+**Report notes.** The free-text `note` (alias `comment`) is checked (docs/content-safety.md "Report notes"). A rejected or held note
+is dropped and the report is created anyway: the `201` body then also has `noteDropped: true` and `noteReasons: string[]`
+(both absent otherwise). If the check gives no answer in time or is off, the note is kept. Notes are not shown to other drivers.
 
 Privacy: about an hour after a report expires, it is **unlinked from its reporter** (`reportedBy` becomes "Pemandu
 Manotu") and its votes are deleted, so no per-user history of reported locations is kept. Points already earned stay.
@@ -851,11 +914,17 @@ POST /me/inbox/read          {upTo: ISO time}   → 204   (everything created at
 
 `InboxItem = {id, kind, title, body, refType?, refId?, createdAt, read, count}`
 `kind ∈ place_published, place_rejected, place_expired, report_thanked, review_helpful, edit_accepted, feedback_status, announcement,
-place_held, place_not_accepted, place_live`
+place_held, place_not_accepted, place_live, content_published, content_held, content_rejected`
 
 - `place_held` / `place_not_accepted`: the AI check held or didn't accept the user's place (also sent when the app
   already showed the result). `place_live`: a place went on the map after the app stopped waiting (`checking`), or a
   maintainer accepted a held or appealed place. All three: `refType: "place"`, `refId` = the community place id.
+
+- `content_published` / `content_held` / `content_rejected` (docs/content-safety.md): the content check or a maintainer decided on
+  the user's review or photo (held and rejected are also sent when the app already showed the result; published only when it
+  came late or from a maintainer). Besides the usual fields they carry `subjectKind: "review"|"photo"`, `subjectId`, `placeId`,
+  `reasons: string[]` (fixed codes) and `canAppeal: bool` (rejected and not yet appealed), and `refType`/`refId` = the same
+  subject. The title names the place. Places keep `place_held` / `place_not_accepted` / `place_live` (no `subjectKind: "place"`).
 
 - `report_thanked` and `review_helpful` are **aggregated per day** (Malaysia time) into one item, e.g. "24 drivers thanked
   you" (`count: 24`). Each new thank moves it to the top as unread.

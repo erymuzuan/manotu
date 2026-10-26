@@ -322,6 +322,8 @@ struct PlaceSummary: Codable, Sendable, Identifiable, Hashable {
     var heldForReview: Bool?
     /// The AI check, for the owner only (`GET /me/places/contributed`); absent for everyone else.
     var screening: PlaceScreening?
+    /// "alcohol" | "gambling" | "tobacco" (docs/content-safety.md "Place warnings"); omitted when empty.
+    var warnings: [String]?
 
     init(id: String, name: String, category: PlaceCategory, address: String, lat: Double, lng: Double, distanceM: Double? = nil,
          brand: String? = nil, source: PlaceSource? = nil, status: PlaceStatus? = nil, rating: Double? = nil,
@@ -414,12 +416,15 @@ struct Place: Codable, Sendable, Identifiable, Hashable {
     var navigationPoint: NavigationPoint?
     /// The AI check, in the owner's view only (POST/PATCH/appeal responses).
     var screening: PlaceScreening?
+    /// "alcohol" | "gambling" | "tobacco" (docs/content-safety.md "Place warnings"); omitted when empty.
+    var warnings: [String]?
 
     var summary: PlaceSummary {
         var s = PlaceSummary(id: id, name: name, category: category, address: address, lat: lat, lng: lng, distanceM: distanceM, brand: brand,
                              source: source, status: status, rating: rating, reviewCount: reviewCount, thumbnailUrl: thumbnailUrl)
         s.heldForReview = heldForReview
         s.screening = screening
+        s.warnings = warnings
         s.confirmationsWeighted = confirmationsWeighted
         s.required = required
         return s
@@ -474,6 +479,8 @@ struct NewPlace: Codable, Sendable, Hashable {
     var amenities: [String]?
     /// The `existing.id` of a 409 the user answered "No, mine is a different place" (B1). Only on `POST /places`.
     var notDuplicateOf: String?
+    /// The owner's "Anything people should know?" tags (`alcohol`, `gambling`, `tobacco`); nil = none (docs/content-safety.md).
+    var warnings: [String]?
 }
 
 /// The AI check on a community place (docs/api.md "AI check"), in the owner's view only.
@@ -552,6 +559,8 @@ struct Photo: Codable, Sendable, Hashable, Identifiable {
     var status: PhotoStatus?
     /// Opaque contributor handle (`authorRef`), at the top level or inside `uploadedBy`.
     var authorRef: String?
+    /// The uploader's own view of the content check (docs/content-safety.md "Photos"); other viewers never get it.
+    var moderation: ContentModeration?
 
     var blockRef: String? { authorRef ?? uploadedBy?.authorRef }
 }
@@ -580,6 +589,8 @@ struct Review: Codable, Sendable, Hashable, Identifiable {
     var heldForReview: Bool?
     /// Opaque contributor handle (`authorRef`), at the top level or inside `author`.
     var authorRef: String?
+    /// The author's own view of the content check (docs/content-safety.md "Reviews").
+    var moderation: ContentModeration?
 
     var blockRef: String? { authorRef ?? author.authorRef }
 }
@@ -915,6 +926,9 @@ struct Report: Codable, Sendable, Identifiable, Hashable {
     var expiresAt: Date
     var confirmations: Int
     var thanks: Int
+    /// `POST /reports` only: the free-text note didn't pass the content check and was dropped; the report is live anyway.
+    var noteDropped: Bool?
+    var noteReasons: [String]?
 
     var location: LatLng { LatLng(lat: lat, lng: lng) }
 }
@@ -1170,6 +1184,10 @@ enum InboxKind: String, Codable, Sendable {
     case placeHeld = "place_held"
     case placeNotAccepted = "place_not_accepted"
     case placeLive = "place_live"
+    /// Public content check (docs/content-safety.md "Inbox"): a held review/photo was approved / is held / was rejected.
+    case contentPublished = "content_published"
+    case contentHeld = "content_held"
+    case contentRejected = "content_rejected"
     case announcement
     case unknown
 
@@ -1189,6 +1207,12 @@ struct InboxItem: Codable, Sendable, Hashable, Identifiable {
     var createdAt: Date
     var read: Bool?
     var count: Int?
+    /// content_* kinds: `subjectKind` "review" | "photo" | "place", the subject and its place, fixed reason codes.
+    var subjectKind: String?
+    var subjectId: String?
+    var placeId: String?
+    var reasons: [String]?
+    var canAppeal: Bool?
 }
 
 struct InboxPage: Codable, Sendable {

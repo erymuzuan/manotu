@@ -217,7 +217,7 @@ struct AddPlaceFlow: View {
     @Environment(\.dismiss) private var dismiss
     let start: LatLng
 
-    enum Step { case pin, details, visibility }
+    enum Step { case pin, details, warnings, visibility }
     /// After "Share with everyone": the check is running, or what it answered.
     enum Phase {
         case checking
@@ -236,6 +236,8 @@ struct AddPlaceFlow: View {
     @State private var website = ""
     @State private var details = ""
     @State private var amenities: Set<String> = []
+    /// "Anything people should know?": sent as `warnings[]` on POST /places.
+    @State private var warnings: Set<PlaceWarning> = []
     @State private var hours = OpeningHours.uniform([OpeningHours.Range(open: 8 * 60, close: 22 * 60)])
     @State private var hoursEnabled = false
     @State private var photos: [PickedPhoto] = []
@@ -275,6 +277,7 @@ struct AddPlaceFlow: View {
             _phone = State(initialValue: p.phone ?? "")
             _website = State(initialValue: p.website ?? "")
             _amenities = State(initialValue: Set(p.amenities ?? []))
+            _warnings = State(initialValue: Set(PlaceWarning.parse(p.warnings)))
             if let h = p.openingHours, let parsed = OpeningHours.parse(h) {
                 _hours = State(initialValue: parsed)
                 _hoursEnabled = State(initialValue: true)
@@ -316,6 +319,7 @@ struct AddPlaceFlow: View {
                     switch step {
                     case .pin: pinStep
                     case .details: detailsStep
+                    case .warnings: WarningsStepView(selection: $warnings) { step = .visibility }
                     case .visibility: visibilityStep
                     }
                 }
@@ -329,7 +333,8 @@ struct AddPlaceFlow: View {
                             switch step {
                             case .pin: dismiss()
                             case .details: step = .pin
-                            case .visibility: step = .details
+                            case .warnings: step = .details
+                            case .visibility: step = privateOnly ? .details : .warnings
                             }
                         }
                         .accessibilityIdentifier("addPlaceBack")
@@ -516,7 +521,7 @@ struct AddPlaceFlow: View {
                 Text("Amenities").font(Tokens.Font.label).foregroundStyle(Color.textMuted)
                 FlowChips(options: Self.amenityOptions, selection: $amenities)
 
-                Button("Next") { step = .visibility }
+                Button("Next") { step = privateOnly ? .visibility : .warnings }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("detailsNext")
@@ -633,7 +638,8 @@ struct AddPlaceFlow: View {
     private func newPlace(notDuplicateOf: String? = nil) -> NewPlace {
         NewPlace(name: trimmedName, category: category, lat: center.lat, lng: center.lng, address: opt(address),
                  description: opt(details), phone: opt(phone), website: opt(website),
-                 openingHours: hoursEnabled ? opt(hours.osm) : nil, amenities: amenities.sorted(), notDuplicateOf: notDuplicateOf)
+                 openingHours: hoursEnabled ? opt(hours.osm) : nil, amenities: amenities.sorted(), notDuplicateOf: notDuplicateOf,
+                 warnings: PlaceWarning.wire(warnings))
     }
 
     private func savePrivate() async {

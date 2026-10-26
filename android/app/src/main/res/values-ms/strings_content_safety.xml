@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keselamatan kandungan awam (docs/content-safety.md). Ikon dahulu, teks sedikit. Kod sebab dipetakan kepada teks tetap ini. -->
+<resources>
+    <!-- Sepanduk amaran tempat -->
+    <string name="cs_warn_alcohol">Menyajikan alkohol</string>
+    <string name="cs_warn_gambling">Ada perjudian</string>
+    <string name="cs_warn_tobacco">Jual rokok atau vape</string>
+    <string name="cs_warn_banner_cd">Amaran: %1$s</string>
+    <string name="cs_warn_explain_cd">Apa ini?</string>
+    <string name="cs_warn_explain">Manotu menyenaraikan tempat seadanya. Tempat ini ditandakan supaya anda tahu sebelum pergi. Anda masih boleh memandu ke sini.</string>
+    <string name="cs_warn_tell">Tak betul? Beritahu kami</string>
+    <string name="cs_warn_tell_cd">Tak betul? Beritahu kami</string>
+
+    <!-- Tambah tempat -->
+    <string name="cs_know_title">Ada apa-apa orang patut tahu?</string>
+    <string name="cs_know_alcohol">Alkohol</string>
+    <string name="cs_know_gambling">Perjudian</string>
+    <string name="cs_know_tobacco">Rokok · vape</string>
+    <string name="cs_know_none">Tiada</string>
+    <string name="cs_know_preview_cd">Pratonton amaran pada halaman tempat</string>
+
+    <!-- Ulasan -->
+    <string name="cs_rate_cd">Beri %1$d daripada 5</string>
+    <string name="cs_rate_selected_cd">%1$d daripada 5 bintang</string>
+    <string name="cs_review_count">%1$d / %2$d</string>
+    <string name="cs_tile_phone">Telefon</string>
+    <string name="cs_tile_link">Pautan</string>
+    <string name="cs_tile_offer">Tawaran</string>
+    <string name="cs_tile_cd">Tidak dibenarkan di sini: %1$s</string>
+    <string name="cs_review_ok_hint">Menyebut “ada kedai vape di sebelah” tidak mengapa.</string>
+    <string name="cs_post_blocked">Nampak seperti iklan</string>
+    <string name="cs_review_held">Seseorang akan menyemak ulasan anda dalam 24 jam.</string>
+    <string name="cs_review_checking">Masih disemak. Jawapannya masuk ke Peti masuk anda.</string>
+    <string name="cs_review_rejected">Ulasan anda tidak diterima.</string>
+    <string name="cs_state_held">Seseorang sedang menyemak</string>
+    <string name="cs_state_checking">Sedang disemak…</string>
+    <string name="cs_state_rejected">Tidak diterima</string>
+
+    <!-- "Tak boleh siar ini" -->
+    <string name="cs_cant_post">Tak boleh siar ini</string>
+    <string name="cs_post_part">Siar bahagian ini</string>
+    <string name="cs_edit">Sunting</string>
+    <string name="cs_appeal">Minta seseorang semak</string>
+    <string name="cs_appeal_sent">Dihantar. Seseorang akan melihatnya.</string>
+    <string name="cs_issue_phone">Nombor telefon</string>
+    <string name="cs_issue_link">Pautan</string>
+    <string name="cs_issue_offer">Tawaran</string>
+    <string name="cs_issue_gambling">Perjudian</string>
+    <string name="cs_issue_alcohol">Alkohol</string>
+    <string name="cs_issue_tobacco">Tembakau</string>
+    <string name="cs_issue_scam">Penipuan</string>
+    <string name="cs_issue_money">Tawaran wang</string>
+    <string name="cs_issue_violence">Keganasan</string>
+    <string name="cs_issue_adult">Dewasa</string>
+    <string name="cs_issue_drugs">Dadah</string>
+    <string name="cs_issue_personal">Maklumat peribadi</string>
+    <string name="cs_issue_hate">Kebencian</string>
+    <string name="cs_issue_illegal">Menyalahi undang-undang</string>
+    <string name="cs_issue_other">Tidak dibenarkan</string>
+    <string name="cs_issue_cd">Tidak dibenarkan: %1$s</string>
+
+    <!-- Dijeda -->
+    <string name="cs_paused_title">Siaran dijeda</string>
+    <string name="cs_paused_until">Buka semula pada %1$s</string>
+    <string name="cs_paused_later">Buka semula sebentar lagi</string>
+    <string name="cs_paused_short">Siaran dijeda seketika.</string>
+
+    <!-- Foto -->
+    <string name="cs_photo_published">Disiarkan</string>
+    <string name="cs_photo_processing">Disemak</string>
+    <string name="cs_photo_rejected">Tidak diterima</string>
+    <string name="cs_photo_status_cd">Foto: %1$s</string>
+    <string name="cs_photo_rejected_cd">Foto tidak diterima. Ketik untuk lihat sebabnya.</string>
+    <string name="cs_photo_hidden">Foto ini disembunyikan</string>
+    <string name="cs_pi_violence">Keganasan</string>
+    <string name="cs_pi_adult">Dewasa</string>
+    <string name="cs_pi_gambling_drugs">Judi · dadah</string>
+    <string name="cs_pi_plates_faces">Plat · muka</string>
+    <string name="cs_photo_another">Foto lain</string>
+    <string name="cs_photo_ask">Minta seseorang semak</string>
+    <string name="cs_photo_close_cd">Tutup</string>
+
+    <!-- Nota laporan jalan -->
+    <string name="cs_note_hint">Nota pendek (pilihan)</string>
+    <string name="cs_note_ok_cd">Siap</string>
+    <string name="cs_note_count">%1$d / %2$d</string>
+    <string name="cs_note_dropped">Laporan dihantar. Nota tidak disertakan.</string>
+
+    <!-- Peti masuk -->
+    <string name="cs_inbox_published">Kini awam</string>
+    <string name="cs_inbox_held">Seseorang sedang menyemak</string>
+    <string name="cs_inbox_rejected">Tidak diterima</string>
+    <string name="cs_inbox_edit_cd">Sunting</string>
+</resources>

@@ -27,7 +27,7 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
         var limit = Math.Clamp(q.Limit, 1, SearchQueryBuilder.MaxLimit);
         return SearchResults.Dedupe(hits, h => h.Name, h => (h.Lat, h.Lng), limit)
             .Select(h => new PlaceSummary(h.Id, h.Name, h.Category, h.Address, h.Lat, h.Lng, Distance(q.Lat, q.Lng, h.Lat, h.Lng), h.Brand,
-                h.Source, PublicStatus(h.Status), h.Rating, h.ReviewCount, MediaKeys.Url(h.ThumbKey))).ToList();
+                h.Source, PublicStatus(h.Status), h.Rating, h.ReviewCount, MediaKeys.Url(h.ThumbKey), Warnings: h.Warnings)).ToList();
     }
 
     /// <summary>Only pending/published are part of the public contract.</summary>
@@ -72,8 +72,8 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
         else query = query.OrderByDescending(p => p.Popularity);
         var rows = await query.Take(limit).ToListAsync(ct);
         var crow = await community.Take(limit).ToListAsync(ct);
-        return crow.Select(p => new PlaceHit(p.Id, p.Name, p.Category, p.Address, p.Location.Y, p.Location.X, null, 0, PlaceSource.Community, p.Status))
-            .Concat(rows.Select(p => new PlaceHit(p.Id, p.Name, p.Category, p.Address, p.Location.Y, p.Location.X, p.Brand, 0)))
+        return crow.Select(p => new PlaceHit(p.Id, p.Name, p.Category, p.Address, p.Location.Y, p.Location.X, null, 0, PlaceSource.Community, p.Status, Warnings: WarningsOf(p)))
+            .Concat(rows.Select(p => new PlaceHit(p.Id, p.Name, p.Category, p.Address, p.Location.Y, p.Location.X, p.Brand, 0, Warnings: PlaceWarnings.FromOsmTags(p.Tags))))
             .Take(limit).ToList();
     }
 
@@ -169,7 +169,8 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
         if (p is null) return null;
         return new PlaceDto(p.Id, p.Name, p.Category, p.Address, p.Location.Y, p.Location.X, Distance(lat, lng, p.Location.Y, p.Location.X), p.Brand,
             p.Phone, p.Website, p.OpeningHours, p.Tags.GetValueOrDefault("manotu:closed") == "yes" ? false : OpeningHours.IsOpen(p.OpeningHours, local), p.Amenities, p.Tags, p.OsmType, p.OsmId,
-            PlaceSource.Osm, null, agg?.Rating, agg?.ReviewCount ?? 0, MediaKeys.Url(agg?.ThumbKey), p.Tags.GetValueOrDefault("manotu:description"), null, 0, photos);
+            PlaceSource.Osm, null, agg?.Rating, agg?.ReviewCount ?? 0, MediaKeys.Url(agg?.ThumbKey), p.Tags.GetValueOrDefault("manotu:description"), null, 0, photos,
+            Warnings: PlaceWarnings.FromOsmTags(p.Tags));
     }
 
     internal static PlaceDto ToDto(CommunityPlace c, double? lat, double? lng, PlaceAggregates? agg, IReadOnlyList<PhotoDto> photos, DateTime local, string? ownerHandle = null) =>
@@ -177,7 +178,7 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
             c.Phone, c.Website, c.OpeningHours, OpeningHours.IsOpen(c.OpeningHours, local), c.Amenities, new Dictionary<string, string>(), null, null,
             PlaceSource.Community, c.Status, agg?.Rating, agg?.ReviewCount ?? 0, MediaKeys.Url(agg?.ThumbKey),
             c.Description, c.Owner is null ? new AddedBy("Pemandu Manotu") : new AddedBy(c.Owner.DisplayName, ownerHandle), c.VerifiedCount, photos,
-            HeldForReview: c.HeldForReview);
+            HeldForReview: c.HeldForReview, Warnings: WarningsOf(c));
 
     public async Task<IReadOnlyList<PhotoDto>> RecentPhotosAsync(string placeId, CancellationToken ct, int take = 10)
     {
@@ -189,11 +190,14 @@ public sealed class PlaceService(GimanoDbContext db, PlaceSearchIndex index, Tim
 
     public static PlaceSummary ToSummary(Place p, double? lat, double? lng, PlaceAggregates? agg = null) =>
         new(p.Id, p.Name, p.Category, p.Address, p.Location.Y, p.Location.X, Distance(lat, lng, p.Location.Y, p.Location.X), p.Brand,
-            PlaceSource.Osm, null, agg?.Rating, agg?.ReviewCount ?? 0, MediaKeys.Url(agg?.ThumbKey));
+            PlaceSource.Osm, null, agg?.Rating, agg?.ReviewCount ?? 0, MediaKeys.Url(agg?.ThumbKey), Warnings: PlaceWarnings.FromOsmTags(p.Tags));
+
+    /// <summary>The owner's tags plus what the AI check and the brand watchlist added (null when none, so the field is omitted).</summary>
+    internal static IReadOnlyList<string>? WarningsOf(CommunityPlace c) => PlaceWarnings.Merge(PlaceWarnings.Split(c.OwnerWarnings), PlaceWarnings.Split(c.Warnings));
 
     public static PlaceSummary ToSummary(CommunityPlace p, double? lat, double? lng, PlaceAggregates? agg = null) =>
         new(p.Id, p.Name, p.Category, p.Address, p.Location.Y, p.Location.X, Distance(lat, lng, p.Location.Y, p.Location.X), null,
-            PlaceSource.Community, PublicStatus(p.Status), agg?.Rating, agg?.ReviewCount ?? 0, MediaKeys.Url(agg?.ThumbKey));
+            PlaceSource.Community, PublicStatus(p.Status), agg?.Rating, agg?.ReviewCount ?? 0, MediaKeys.Url(agg?.ThumbKey), Warnings: WarningsOf(p));
 
     private static double? Distance(double? lat, double? lng, double pLat, double pLng) =>
         lat is { } a && lng is { } b ? Math.Round(GeoMath.HaversineM(a, b, pLat, pLng)) : null;

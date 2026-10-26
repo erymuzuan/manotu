@@ -78,6 +78,7 @@ private struct ReportDetail: View {
     let onCancel: () -> Void
     @State private var picked: String?
     @State private var comment = ""
+    @FocusState private var noteFocused: Bool
     @State private var timerOn = false
     @State private var fill: CGFloat = 0
     @State private var secondsLeft = Int(ReportDefaults.autoSendS)
@@ -134,13 +135,35 @@ private struct ReportDetail: View {
                 .frame(width: Tokens.Size.reportTile + 20)
         }
         if type.wantsComment {
-            TextField(type == .closure ? String(localized: "Which road? (optional)") : String(localized: "What's wrong? (optional)"),
-                      text: $comment, axis: .vertical)
-                .font(Tokens.Font.body)
-                .lineLimit(2...4)
-                .padding(14)
+            // Note: at most 140 characters; the server drops a note that fails the content check and still sends the report.
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(alignment: .top, spacing: 4) {
+                    TextField(type == .closure ? String(localized: "Which road? (optional)") : String(localized: "What's wrong? (optional)"),
+                              text: $comment, axis: .vertical)
+                        .font(Tokens.Font.body)
+                        .lineLimit(2...4)
+                        .focused($noteFocused)
+                        .accessibilityIdentifier("reportNote")
+                    if noteFocused {
+                        Button { noteFocused = false } label: {
+                            Image(systemName: "checkmark.circle.fill").font(.system(size: 26)).foregroundStyle(Color.brand)
+                                .frame(width: 44, height: 44).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("OK"))
+                        .accessibilityIdentifier("reportNoteOK")
+                    }
+                }
+                .padding(.leading, 14).padding(.trailing, noteFocused ? 4 : 14).padding(.vertical, noteFocused ? 4 : 14)
                 .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: Tokens.Radius.md))
-                .onChange(of: comment) { _, _ in timerOn = false }
+                if !comment.isEmpty {
+                    Text(verbatim: "\(comment.count) / \(ReportNote.maxChars)").font(Tokens.Font.small).foregroundStyle(Color.textMuted)
+                }
+            }
+            .onChange(of: comment) { _, v in
+                timerOn = false
+                if v.count > ReportNote.maxChars { comment = ReportNote.clamped(v) }
+            }
         }
         if timerOn {
             Text("Sends in \(secondsLeft) s · tap an option to choose first")

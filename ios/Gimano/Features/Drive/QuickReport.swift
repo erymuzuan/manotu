@@ -69,7 +69,7 @@ enum QuickReportFan {
     }
 
     static func newReport(_ t: ReportType, subtype: String? = nil, comment: String? = nil, at p: LatLng, heading: Double?) -> NewReport {
-        NewReport(type: t, subtype: subtype, lat: p.lat, lng: p.lng, heading: heading, comment: comment?.isEmpty == true ? nil : comment)
+        NewReport(type: t, subtype: subtype, lat: p.lat, lng: p.lng, heading: heading, comment: comment?.isEmpty == true ? nil : comment.map(ReportNote.clamped))
     }
 }
 

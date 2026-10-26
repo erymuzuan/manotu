@@ -49,6 +49,23 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problems, ILogger
             pd.Extensions["pausedUntil"] = paused.Until;
             return await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = http, ProblemDetails = pd });
         }
+        if (exception is PostingPausedException posting)
+        {
+            http.Response.StatusCode = StatusCodes.Status403Forbidden;
+            var pd = new ProblemDetails { Status = 403, Title = "Posting paused", Detail = posting.Message };
+            pd.Extensions["code"] = "posting_paused";
+            pd.Extensions["pausedUntil"] = posting.Until;
+            return await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = http, ProblemDetails = pd });
+        }
+        if (exception is ContentRejectedException rejected)
+        {
+            http.Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
+            var pd = new ProblemDetails { Status = 422, Title = "Content not accepted", Detail = rejected.Message };
+            pd.Extensions["code"] = "content_rejected";
+            pd.Extensions["reasons"] = rejected.Reasons;
+            if (rejected.SafeText is not null) pd.Extensions["safeText"] = rejected.SafeText;
+            return await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = http, ProblemDetails = pd });
+        }
         if (exception is RateLimitedException { RetryAfter: { } after } limited)
         {
             var seconds = (int)Math.Ceiling(Math.Max(1, after.TotalSeconds));

@@ -25,6 +25,7 @@ public sealed class PhotoProcessor(
         if (photo is null || photo.Status != PhotoStatus.Processing || photo.UploadKey is null) return;
 
         var original = await media.GetAsync(photo.UploadKey, ct);
+        var uploadKey = photo.UploadKey;
         if (original is null)
         {
             Reject(photo, "Upload missing.");
@@ -41,21 +42,39 @@ public sealed class PhotoProcessor(
                 photo.ThumbKey = p.ThumbKey;
                 photo.Width = p.Width;
                 photo.Height = p.Height;
-                photo.Status = PhotoStatus.Published;
-                if (photo.User is not null) photo.User.Points += CommunityRules.Points.Photo;
                 logger.LogInformation("Photo {Id}: {In:n0} B → {Out:n0} B WebP {W}×{H} + {Thumb:n0} B thumb in {Ms:n0} ms",
                     photo.Id, original.Length, p.Webp.Length, p.Width, p.Height, p.Thumb.Length, sw.Elapsed.TotalMilliseconds);
+
+                // The content check sees the metadata-free image only (docs/content-safety.md "Photos"): published, held, rejected, or still checking.
+                var gate = scope.ServiceProvider.GetRequiredService<ContentGate>();
+                var outcome = await CheckAsync(gate, db, photo, p.Webp, ct);
+                photo.UploadKey = null;
+                await gate.ApplyPhotoAsync(photo, outcome, late: false, ct);
+                await media.DeleteAsync(uploadKey, ct); // the original (with its EXIF/GPS) is never kept
+                return;
             }
             catch (ImageRejectedException ex)
             {
                 Reject(photo, ex.Message);
             }
         }
-        var uploadKey = photo.UploadKey;
         photo.UploadKey = null;
+        photo.ModerationState = ContentState.None;
         await db.SaveChangesAsync(ct);
         await media.DeleteAsync(uploadKey, ct); // the original (with its EXIF/GPS) is never kept
         await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(photo.PlaceId), ct);
+    }
+
+    /// <summary>JPEG from the stripped WebP, then the check (25 s: this runs in the worker, nobody is waiting on it).</summary>
+    internal static async Task<ContentOutcome> CheckAsync(ContentGate gate, GimanoDbContext db, Photo photo, byte[] webp, CancellationToken ct)
+    {
+        var placeName = CommunityPlace.IsCommunityId(photo.PlaceId)
+            ? await db.CommunityPlaces.AsNoTracking().Where(x => x.Id == photo.PlaceId).Select(x => x.Name).FirstOrDefaultAsync(ct)
+            : await db.Places.AsNoTracking().Where(x => x.Id == photo.PlaceId).Select(x => x.Name).FirstOrDefaultAsync(ct);
+        byte[] jpeg;
+        try { jpeg = await Task.Run(() => ImageProcessor.ToScreeningJpeg(webp), ct); }
+        catch (ImageRejectedException) { return new ContentOutcome(ContentOutcomeKind.Held, ["unclear"]); }
+        return await gate.CheckImageAsync(jpeg, new ContentInput(ContentKind.Photo, photo.Caption, placeName), TimeSpan.FromSeconds(25), ct);
     }
 
     private void Reject(Photo photo, string reason)

@@ -426,20 +426,35 @@ struct InboxView: View {
                                                          : "Inbox isn't available on the server yet. News about your public contributions will appear here."))
                     .accessibilityIdentifier("inboxEmpty")
             }
+            if let until = model.postingPausedUntil, PostingPause.isActive(until: until) {
+                PausedCard(until: until).listRowBackground(Color.clear).listRowInsets(EdgeInsets())
+            }
             if !model.inboxItems.isEmpty {
                 Text("News about your contributions: places, reviews, reports and feedback.")
                     .font(Tokens.Font.caption).foregroundStyle(Color.textMuted)
                     .listRowBackground(Color.clear)
             }
             ForEach(model.inboxItems) { item in
+                VStack(alignment: .leading, spacing: 0) {
                 Button { open(item) } label: {
                     HStack(alignment: .top, spacing: 12) {
-                        GimanoIcon(icon: item.kind.icon, size: 28)
-                            .frame(width: 48, height: 48)
-                            .background(item.kind.tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        if let status = ContentInboxStatus.of(item) {
+                            // Content check: a large status icon (tick, person, clock or cross).
+                            Image(systemName: status.symbol).font(.system(size: 30, weight: .bold)).foregroundStyle(status.ink)
+                                .frame(width: 56, height: 56)
+                                .background(status.tint, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .accessibilityLabel(Text(verbatim: status.spoken))
+                        } else {
+                            GimanoIcon(icon: item.kind.icon, size: 28)
+                                .frame(width: 48, height: 48)
+                                .background(item.kind.tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
                         VStack(alignment: .leading, spacing: 3) {
                             Text(item.title).font(Tokens.Font.bodyBold).foregroundStyle(Color.textPrimary)
                             if let b = item.body { Text(b).font(Tokens.Font.caption).foregroundStyle(Color.textMuted) }
+                            if ContentInboxStatus.of(item) != nil, let first = ContentReason.explaining(item.reasons ?? []).first {
+                                Text(String(localized: first.copy)).font(Tokens.Font.caption).foregroundStyle(Color.textMuted)
+                            }
                             Text(item.createdAt.formatted(.relative(presentation: .named))).font(Tokens.Font.small).foregroundStyle(Color.textMuted)
                         }
                         Spacer()
@@ -449,6 +464,10 @@ struct InboxView: View {
                     }
                 }
                 .accessibilityIdentifier("inboxItem")
+                if let status = ContentInboxStatus.of(item), status.canEdit || status.canAppeal {
+                    ContentInboxActions(item: item, status: status) { editContent(item) }.padding(.leading, 68)
+                }
+                }
                 .listRowBackground(
                     HStack(spacing: 0) {
                         if item.read != true { Color.report.frame(width: 4) }
@@ -476,10 +495,18 @@ struct InboxView: View {
         }
     }
 
+    /// "Edit" on a rejected review or photo: the place page, where the review is edited or a photo added.
+    private func editContent(_ item: InboxItem) {
+        if item.subjectKind == "place" { dismiss(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { model.menuSheet = .contributions }; return }
+        guard let id = item.placeId ?? (item.refType == "place" ? item.refId : nil) else { return }
+        dismiss()
+        model.openPlace(PlaceSummary(id: id, name: item.title, category: .other, address: "", lat: model.position.lat, lng: model.position.lng))
+    }
+
     private func open(_ item: InboxItem) {
         // C2: a held or not-accepted place is only visible to its owner: open "My contributions", where it can be
         // edited, discarded or sent for a review.
-        if item.kind.opensContributions {
+        if item.kind.opensContributions || (ContentInboxStatus.of(item) != nil && item.subjectKind == "place") {
             dismiss()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { model.menuSheet = .contributions }
             return
@@ -506,7 +533,9 @@ extension InboxKind {
     var tint: Color {
         switch self {
         case .placePublished, .placeLive, .editAccepted, .issueConfirmed, .issueResolved: .tealMist
-        case .placeNotAccepted: Color(light: 0xFFE2E2, dark: 0x4A1418)
+        case .placeNotAccepted, .contentRejected: Color(light: 0xFFE2E2, dark: 0x4A1418)
+        case .contentHeld: .amberMist
+        case .contentPublished: .tealMist
         case .reportThanked: .coralMist
         case .reviewHelpful: .amberMist
         default: .brandMist
@@ -516,7 +545,9 @@ extension InboxKind {
     var icon: GIcon {
         switch self {
         case .placePublished, .placeLive: .map
-        case .placeHeld: .recent
+        case .placeHeld, .contentHeld: .recent
+        case .contentPublished: .map
+        case .contentRejected: .close
         case .placeRejected, .placeNotAccepted, .placeExpired: .close
         case .reportThanked: .heart
         case .reviewHelpful: .star

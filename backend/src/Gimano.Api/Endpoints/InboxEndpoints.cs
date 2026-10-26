@@ -46,7 +46,10 @@ public static class InboxEndpoints
             items.Select(i =>
             {
                 var (title, body) = InboxRules.Render(i, lang);
-                return new InboxItemDto(i.Id, i.Kind, title, body, i.RefType, i.RefId, i.CreatedAt, i.CreatedAt <= readUpTo, i.Count);
+                var content = i.Kind is InboxKind.ContentPublished or InboxKind.ContentHeld or InboxKind.ContentRejected;
+                return new InboxItemDto(i.Id, i.Kind, title, body, i.RefType, i.RefId, i.CreatedAt, i.CreatedAt <= readUpTo, i.Count,
+                    content ? i.RefType : null, content ? i.RefId : null, content ? i.PlaceId : null,
+                    content ? ContentScreening.Split(i.Reasons) : null, content ? i.CanAppeal ?? false : null);
             }),
             anns.Select(a => new InboxItemDto(a.Id, InboxKind.Announcement, ms ? a.TitleMs ?? a.Title : a.Title, ms ? a.BodyMs ?? a.Body : a.Body,
                 a.Url is null ? null : "url", a.Url, a.CreatedAt, a.CreatedAt <= readUpTo)));

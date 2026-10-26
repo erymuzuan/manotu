@@ -11,6 +11,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddGimanoData(builder.Configuration).AddGimanoSearch(builder.Configuration).AddGimanoMessaging(builder.Configuration);
 builder.Services.AddGimanoScreening(builder.Configuration);
 builder.Services.AddHostedService<Gimano.Worker.Vetting.PlaceScreeningRetry>();
+builder.Services.AddHostedService<Gimano.Worker.Vetting.ContentScreeningRetry>();
 
 builder.Services.AddSingleton<SpeedWindow>();
 builder.Services.AddSingleton<Gimano.Worker.Traffic.TraversalCounter>();

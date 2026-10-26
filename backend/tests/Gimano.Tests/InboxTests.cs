@@ -53,6 +53,6 @@ public class InboxTests
     [Fact]
     public void Wire_kinds_match_the_contract() =>
         Assert.Equal(["place_published", "place_rejected", "report_thanked", "review_helpful", "edit_accepted", "feedback_status", "announcement", "place_expired", "issue_confirmed", "issue_refuted", "issue_resolved",
-            "place_held", "place_not_accepted", "place_live"],
+            "place_held", "place_not_accepted", "place_live", "content_published", "content_held", "content_rejected"],
             Enum.GetValues<InboxKind>().Select(GimanoJson.ToWire));
 }

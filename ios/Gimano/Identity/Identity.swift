@@ -77,6 +77,8 @@ enum SignedEndpoints {
         case ("POST", 3):
             return (s[0] == "places" && ["verify", "suggest-edit", "reviews", "appeal"].contains(s[2])) || (s[0] == "reports" && s[2] == "votes")
                 || (s[0] == "issues" && s[2] == "votes")
+                // Content-safety appeals (docs/content-safety.md): signed like the place appeal.
+                || ((s[0] == "reviews" || s[0] == "photos") && s[2] == "appeal")
         default: return false
         }
     }

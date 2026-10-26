@@ -14,6 +14,14 @@ actor DemoRepository: GimanoRepository {
     private var reviewsByPlace: [String: [Review]] = [:]
     private var photosByPlace: [String: [(photo: Photo, readyAt: Date)]] = [:]
     private var helpful: Set<String> = []
+    // Public content check (docs/content-safety.md), mirrored with `DemoContentCheck`.
+    private var contentRejections: [Date] = []
+    private var postingPausedUntil: Date?
+    private var reviewChecking: [String: Date] = [:]
+    private var photoVerdicts: [String: DemoContentCheck.Verdict] = [:]
+    private var contentInbox: [InboxItem] = []
+    private var notedPhotos: Set<String> = []
+    private var appealedPhotos: Set<String> = []
     /// Demo user's display name for authored content.
     private var me: PersonRef { PersonRef(displayName: user.displayName, level: user.level, reviewCount: reviewsByPlace.values.flatMap { $0 }.filter { $0.author.displayName == user.displayName }.count) }
     private var routeCounter = 0
@@ -151,7 +159,7 @@ actor DemoRepository: GimanoRepository {
                      openingHours: s.category == .fuel || s.category == .restArea ? "24/7" : "Mo-Su 10:00-22:00",
                      openNow: true, amenities: amenities, tags: [:], osmType: "node", osmId: Int64(abs(s.id.hashValue) % 1_000_000_000),
                      source: .osm, status: .published, rating: ratingOf(id).0, reviewCount: ratingOf(id).1,
-                     photos: publishedPhotos(id))
+                     photos: publishedPhotos(id), warnings: DemoContentCheck.warnings(forPlaceNamed: s.name))
     }
 
     // MARK: community places (demo)
@@ -162,12 +170,34 @@ actor DemoRepository: GimanoRepository {
         return (Double(r.map(\.rating).reduce(0, +)) / Double(r.count), r.count)
     }
 
+    /// What everyone sees: processing or published photos; held and rejected ones stay hidden.
     private func publishedPhotos(_ placeId: String) -> [Photo] {
-        (photosByPlace[placeId] ?? []).map { item in
-            var p = item.photo
-            p.status = Date() >= item.readyAt ? .published : .processing
-            return p
+        (photosByPlace[placeId] ?? []).compactMap { item in
+            let p = ownView(item.photo, readyAt: item.readyAt)
+            return p.moderation?.state == .rejected || p.moderation?.state == .held ? nil : { var q = p; q.moderation = nil; return q }()
         }
+    }
+
+    /// The uploader's view: status after the demo check, plus `moderation`.
+    private func ownView(_ photo: Photo, readyAt: Date) -> Photo {
+        var p = photo
+        let v = photoVerdicts[photo.id] ?? DemoContentCheck.Verdict(state: .passed, reasons: ["ok"])
+        let done = Date() >= readyAt
+        switch (done, v.state) {
+        case (false, _): p.status = .processing; p.moderation = ContentModeration(state: .checking)
+        case (true, .rejected): p.status = .rejected; p.moderation = ContentModeration(state: .rejected, reasons: v.reasons, canAppeal: !appealedPhotos.contains(photo.id))
+        case (true, .held): p.status = .processing; p.moderation = ContentModeration(state: .held, reasons: v.reasons)
+        case (true, .checking): p.status = .processing; p.moderation = ContentModeration(state: .checking)
+        default: p.status = .published; p.moderation = ContentModeration(state: .passed, reasons: ["ok"])
+        }
+        return p
+    }
+
+    func photo(id: String) async throws -> Photo {
+        for list in photosByPlace.values {
+            if let item = list.first(where: { $0.photo.id == id }) { return ownView(item.photo, readyAt: item.readyAt) }
+        }
+        throw APIError.http(status: 404, problem: nil)
     }
 
     // Server rules mirrored for the demo (docs/api.md "AI check"): pause → limit → duplicate → the check.
@@ -217,7 +247,7 @@ actor DemoRepository: GimanoRepository {
         var p = Place(id: "demo-community-\(UUID().uuidString.prefix(8).lowercased())", name: name, category: new.category,
                       address: new.address ?? "", lat: new.lat, lng: new.lng, phone: new.phone, website: new.website,
                       openingHours: new.openingHours, amenities: new.amenities ?? [], tags: [:], source: .community, status: .pending,
-                      reviewCount: 0, description: new.description, addedBy: PersonRef(displayName: user.displayName), verifiedCount: 0, photos: [])
+                      reviewCount: 0, description: new.description, addedBy: PersonRef(displayName: user.displayName), verifiedCount: 0, photos: [], warnings: new.warnings)
         p.confirmationsWeighted = 0
         p.required = 3
         apply(DemoScreening.verdict(name: name, description: new.description, emas: user.tier == .emas), to: &p, now: now)
@@ -306,6 +336,7 @@ actor DemoRepository: GimanoRepository {
         community[i].openingHours = new.openingHours
         community[i].description = new.description
         community[i].amenities = new.amenities
+        community[i].warnings = new.warnings
         // A changed place is checked again ("Edit and try again" on a rejected one).
         if community[i].status != .published {
             apply(DemoScreening.verdict(name: new.name, description: new.description, emas: user.tier == .emas), to: &community[i], now: .now)
@@ -421,6 +452,7 @@ actor DemoRepository: GimanoRepository {
     // MARK: reviews & photos (demo)
 
     func reviews(placeId: String, sort: ReviewSort, cursor: String?) async throws -> ReviewsPage {
+        settleContent()
         // Every demo place starts with one sample review by another (sample) contributor, so reporting and blocking
         // can be tried in Demo mode. It stays in this demo store.
         if reviewsByPlace[placeId] == nil {
@@ -443,20 +475,73 @@ actor DemoRepository: GimanoRepository {
         if (reviewsByPlace[placeId] ?? []).contains(where: { $0.author.displayName == user.displayName }) {
             throw APIError.http(status: 409, problem: ProblemDetails(title: "One review per place"))
         }
+        let verdict = try screen(new.text)
         let photos = publishedPhotos(placeId).filter { (new.photoIds ?? []).contains($0.id) }
-        let r = Review(id: "demo-review-\(UUID().uuidString.prefix(8))", placeId: placeId, rating: new.rating, text: new.text, photos: photos,
+        var r = Review(id: "demo-review-\(UUID().uuidString.prefix(8))", placeId: placeId, rating: new.rating, text: new.text, photos: photos,
                        author: me, helpfulCount: 0, createdAt: .now, editedAt: nil, status: "published")
+        apply(verdict, to: &r)
         reviewsByPlace[placeId, default: []].insert(r, at: 0)
         user.points = (user.points ?? 0) + 3
         return r
     }
 
+    /// 403 posting_paused, then the check: a rejection throws 422 content_rejected (nothing stored); 3 in 24 h pause posting.
+    private func screen(_ text: String?) throws -> DemoContentCheck.Verdict {
+        let now = Date()
+        if let until = postingPausedUntil, until > now {
+            throw APIError.http(status: 403, problem: ProblemDetails(title: "Posting paused", status: 403, code: "posting_paused", pausedUntil: JSON.makeISO(until)))
+        }
+        let v = DemoContentCheck.verdict(text: text)
+        if v.state == .rejected {
+            contentRejections.removeAll { now.timeIntervalSince($0) > 86400 }
+            contentRejections.append(now)
+            if contentRejections.count >= 3 { postingPausedUntil = now.addingTimeInterval(86400) }
+            throw APIError.http(status: 422, problem: ProblemDetails(title: "Not accepted", status: 422, code: "content_rejected",
+                                                                     reasons: v.reasons, safeText: v.safeText))
+        }
+        return v
+    }
+
+    private func apply(_ v: DemoContentCheck.Verdict, to r: inout Review) {
+        switch v.state {
+        case .held:
+            r.status = "hidden"; r.heldForReview = true
+            r.moderation = ContentModeration(state: .held, reasons: v.reasons, canAppeal: true)
+        case .checking:
+            r.status = "hidden"
+            r.moderation = ContentModeration(state: .checking)
+            reviewChecking[r.id] = Date().addingTimeInterval(DemoContentCheck.slowCheck)
+        default:
+            r.moderation = ContentModeration(state: .passed, reasons: ["ok"])
+        }
+    }
+
+    /// Finishes `#slow` reviews: published, with a content_published note in the Inbox.
+    private func settleContent(now: Date = .now) {
+        for (id, until) in reviewChecking where until <= now {
+            reviewChecking[id] = nil
+            for pid in reviewsByPlace.keys {
+                guard let i = reviewsByPlace[pid]!.firstIndex(where: { $0.id == id }) else { continue }
+                reviewsByPlace[pid]![i].status = "published"
+                reviewsByPlace[pid]![i].moderation = ContentModeration(state: .passed, reasons: ["ok"])
+                contentInbox.append(InboxItem(id: "demo-content-\(id)", kind: .contentPublished, title: String(localized: "Your review is up"),
+                                              body: nil, refType: "review", refId: id, createdAt: now, read: nil, count: nil,
+                                              subjectKind: "review", subjectId: id, placeId: pid, reasons: ["ok"], canAppeal: false))
+            }
+        }
+    }
+
+    /// Demo only: finish every `checking` review now (tests).
+    func finishContentChecksNow() { settleContent(now: .distantFuture) }
+
     func updateReview(id: String, _ new: NewReview) async throws -> Review {
         for (pid, list) in reviewsByPlace {
             if let i = list.firstIndex(where: { $0.id == id }) {
                 var r = list[i]
+                let verdict = try screen(new.text)
                 r.rating = new.rating
                 r.text = new.text
+                apply(verdict, to: &r)
                 if let ids = new.photoIds { r.photos = publishedPhotos(pid).filter { ids.contains($0.id) } }
                 r.editedAt = .now
                 reviewsByPlace[pid]![i] = r
@@ -480,6 +565,25 @@ actor DemoRepository: GimanoRepository {
 
     func flagReview(id: String, reason: FlagReason) async throws {}
 
+    func appealReview(id: String, note: String?) async throws {
+        await pause()
+        for pid in reviewsByPlace.keys {
+            guard let i = reviewsByPlace[pid]!.firstIndex(where: { $0.id == id }) else { continue }
+            guard reviewsByPlace[pid]![i].moderation?.canAppeal != false else { throw APIError.conflict(Data(#"{"status":409,"title":"Conflict"}"#.utf8)) }
+            reviewsByPlace[pid]![i].heldForReview = true
+            reviewsByPlace[pid]![i].moderation = ContentModeration(state: .held, reasons: reviewsByPlace[pid]![i].moderation?.reasons ?? [], canAppeal: false)
+            return
+        }
+        throw APIError.http(status: 404, problem: nil)
+    }
+
+    func appealPhoto(id: String, note: String?) async throws {
+        await pause()
+        guard photoVerdicts[id] != nil else { throw APIError.http(status: 404, problem: nil) }
+        photoVerdicts[id] = DemoContentCheck.Verdict(state: .held, reasons: photoVerdicts[id]?.reasons ?? [])
+        appealedPhotos.insert(id)
+    }
+
     /// Stores the photo as WebP (like the server) and serves it from a local file URL ending in .webp.
     func uploadPhoto(_ jpeg: Data, placeId: String, caption: String?, progress: @escaping @Sendable (Double) -> Void) async throws -> Photo {
         for step in 1...5 {
@@ -498,6 +602,7 @@ actor DemoRepository: GimanoRepository {
         let photo = Photo(id: id, url: full.absoluteString, thumbUrl: small.absoluteString, width: Int(size.width), height: Int(size.height),
                           caption: caption, uploadedBy: PersonRef(displayName: user.displayName), createdAt: .now, status: .processing)
         photosByPlace[placeId, default: []].insert((photo, Date().addingTimeInterval(1.5)), at: 0)
+        photoVerdicts[id] = DemoContentCheck.photoVerdict(caption: caption)
         if let i = community.firstIndex(where: { $0.id == placeId }), community[i].thumbnailUrl == nil { community[i].thumbnailUrl = photo.thumbUrl }
         user.points = (user.points ?? 0) + 2
         return photo
@@ -529,6 +634,18 @@ actor DemoRepository: GimanoRepository {
                                    createdAt: .now.addingTimeInterval(-60), read: nil, count: nil))
         }
         items += screeningInbox
+        settleContent()
+        items += contentInbox
+        for list in photosByPlace.values {
+            for item in list where Date() >= item.readyAt && !notedPhotos.contains(item.photo.id) {
+                guard let v = photoVerdicts[item.photo.id], v.state == .rejected else { continue }
+                notedPhotos.insert(item.photo.id)
+                contentInbox.append(InboxItem(id: "demo-content-\(item.photo.id)", kind: .contentRejected, title: String(localized: "A photo wasn't accepted"),
+                                              body: nil, refType: "photo", refId: item.photo.id, createdAt: .now, read: nil, count: nil,
+                                              subjectKind: "photo", subjectId: item.photo.id, placeId: nil, reasons: v.reasons, canAppeal: true))
+                items.append(contentInbox[contentInbox.count - 1])
+            }
+        }
         let helpfulMine = reviewsByPlace.values.flatMap { $0 }.filter { $0.author.displayName == user.displayName }.map(\.helpfulCount).reduce(0, +)
         if helpfulMine > 0 {
             items.append(InboxItem(id: "demo-helpful", kind: .reviewHelpful, title: "\(helpfulMine) drivers found your review helpful",
@@ -664,9 +781,14 @@ actor DemoRepository: GimanoRepository {
         case .weather: 120 * 60
         default: 60 * 60
         }
-        let r = Report(id: "demo-\(UUID().uuidString.prefix(8))", type: new.type, subtype: new.subtype, lat: new.lat, lng: new.lng,
+        var r = Report(id: "demo-\(UUID().uuidString.prefix(8))", type: new.type, subtype: new.subtype, lat: new.lat, lng: new.lng,
                        heading: new.heading, street: nil, reportedBy: ReportAuthor(displayName: user.displayName, mood: user.mood),
                        createdAt: .now, expiresAt: .now.addingTimeInterval(ttl), confirmations: 1, thanks: 0)
+        // A note that looks like an advert is dropped; the report still goes out (docs/content-safety.md "Report notes").
+        if let note = new.comment, DemoContentCheck.verdict(text: note).state == .rejected {
+            r.noteDropped = true
+            r.noteReasons = DemoContentCheck.verdict(text: note).reasons
+        }
         reports.append(r)
         user.points = (user.points ?? 0) + 6
         return r

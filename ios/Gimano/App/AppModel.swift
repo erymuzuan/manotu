@@ -1876,6 +1876,8 @@ final class AppModel {
     var quickReport: QuickReportUndo?
     /// Set by the hold arc: the report sheet opens straight on this type's detail sheet.
     var reportInitialType: ReportType?
+    /// 403 `posting_paused` (3 AI rejections in 24 h): reviews and photos wait until then ("Paused" card). In memory only.
+    var postingPausedUntil: Date?
     /// Reports this phone sent: never asked "still there?" about its own.
     @ObservationIgnored private var ownReportIds: Set<String> = []
     @ObservationIgnored private var quickReportCloseTask: Task<Void, Never>?
@@ -1910,7 +1912,12 @@ final class AppModel {
                 let r = try await repo.createReport(new)
                 quickReportLog = "sent=\(r.id)"
                 ownReportIds.insert(r.id)
-                if screen != .navigating { showToast(isDemo ? String(localized: "Demo mode: kept on this phone, not sent") : String(localized: "Thanks! Your report is live.")) }
+                if screen != .navigating {
+                    switch ReportNote.result(of: r) {
+                    case .noteDropped: showToast(String(localized: "Report sent. We left out your note."), seconds: 3.5)
+                    case .sent: showToast(isDemo ? String(localized: "Demo mode: kept on this phone, not sent") : String(localized: "Thanks! Your report is live."))
+                    }
+                }
                 if quickReport?.startedAt == card.startedAt {
                     let action = quickReport!.sent(id: r.id)
                     quickReport?.street = r.street

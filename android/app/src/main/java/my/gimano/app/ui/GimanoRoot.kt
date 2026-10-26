@@ -50,6 +50,8 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     val ui by vm.ui.collectAsStateWithLifecycle()
     val nav by vm.nav.collectAsStateWithLifecycle()
     val settings by vm.settingsState.collectAsStateWithLifecycle()
+    val postingPauseRaw by my.gimano.app.core.safety.PostingPause.until.collectAsStateWithLifecycle()
+    val postingPause = postingPauseRaw?.takeIf { it.isAfter(java.time.Instant.now()) }
     val upd by container.updater.ui.collectAsStateWithLifecycle()
     val homeSheetDp by vm.homeSheetDp.collectAsStateWithLifecycle()
     val placeSheetDp by vm.placeSheetDp.collectAsStateWithLifecycle()
@@ -340,7 +342,11 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
                 Screen.Favourites -> my.gimano.app.ui.more.FavouritesScreen(ui.saved, ui.myLocation?.point, settings.lastBackupAt, vm)
                 Screen.Inbox -> my.gimano.app.ui.inbox.InboxScreen(ui.inbox, settings.inboxRead, onBack = vm::back, onRefresh = { vm.refreshInbox() }, onMarkAll = { vm.markInboxRead() },
                     // C2: the AI check's results open that place's result screen (appeal, edit, keep it just for me).
-                    onOpenPlace = { item -> item.placeRef?.let { id -> cvm.openResult(id) } })
+                    onOpenPlace = { item -> item.placeRef?.let { id -> cvm.openResult(id) } },
+                    // Content safety: Edit opens the place (a review or photo is fixed from its place) or the place's own result screen; Appeal asks a person.
+                    onEditContent = { item -> if (item.subjectKind == "place") item.subjectId?.let { id -> cvm.openResult(id) } else item.placeId?.let { id -> vm.openPlaceLink(id) } },
+                    onAppealContent = { item -> item.subjectId?.let { id -> cvm.appealContent(item.subjectKind, id) } },
+                    pausedUntil = postingPause, use24h = settings.use24h)
                 Screen.Theme -> my.gimano.app.ui.more.ThemeScreen(settings.theme, onPick = { vm.setTheme(it) }, onBack = vm::back)
                 Screen.Events -> my.gimano.app.ui.events.EventsListScreen(container.eventStore, container.hostStore, settings.use24h, onBack = vm::back,
                     onOpen = { id -> vm.open(Screen.EventDetail(id)) }, onOpenHosted = { id -> vm.openHostEvent(id) }, onNew = vm::newHostEvent)

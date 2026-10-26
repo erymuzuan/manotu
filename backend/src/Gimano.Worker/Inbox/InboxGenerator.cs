@@ -15,7 +15,7 @@ public sealed class InboxGenerator(RabbitMqConnection connection, IServiceScopeF
     protected override string QueueName => "gimano.worker.inbox";
     protected override IReadOnlyList<string> RoutingKeyBindings =>
         [RoutingKeys.ReportThanked, RoutingKeys.ReviewHelpful, RoutingKeys.PlaceVerified, RoutingKeys.SuggestionApplied, RoutingKeys.FeedbackStatusChanged,
-         RoutingKeys.IssueChanged, RoutingKeys.PlaceScreened];
+         RoutingKeys.IssueChanged, RoutingKeys.PlaceScreened, RoutingKeys.ContentScreened];
 
     protected override async Task HandleAsync(JsonElement message, string routingKey, CancellationToken ct)
     {
@@ -65,6 +65,33 @@ public sealed class InboxGenerator(RabbitMqConnection connection, IServiceScopeF
                 if (p?.OwnerId is { } uid && kind is { } k) await AddAsync(db, uid, k, p.Name, "place", e.PlaceId, ct);
                 break;
             }
+            case RoutingKeys.ContentScreened:
+            {
+                // A review or photo the content check held or rejected, or approved late / by a maintainer (docs/content-safety.md "Inbox").
+                var e = message.Deserialize<ContentScreenedEvent>(o)!;
+                Guid? uid; string? reasons; bool canAppeal;
+                if (e.SubjectKind == "review" && Guid.TryParse(e.SubjectId, out var rid))
+                {
+                    var r = await db.Reviews.AsNoTracking().Where(x => x.Id == rid).Select(x => new { x.UserId, x.ModerationReasons, x.AppealedAt, x.ModerationState }).FirstOrDefaultAsync(ct);
+                    (uid, reasons, canAppeal) = (r?.UserId, r?.ModerationReasons, r is { ModerationState: Core.Community.ContentState.Rejected, AppealedAt: null });
+                }
+                else if (e.SubjectKind == "photo" && Guid.TryParse(e.SubjectId, out var pid))
+                {
+                    var p = await db.Photos.AsNoTracking().Where(x => x.Id == pid).Select(x => new { x.UserId, x.ModerationReasons, x.AppealedAt, x.ModerationState }).FirstOrDefaultAsync(ct);
+                    (uid, reasons, canAppeal) = (p?.UserId, p?.ModerationReasons, p is { ModerationState: Core.Community.ContentState.Rejected, AppealedAt: null });
+                }
+                else break;
+                var kind = e.State switch
+                {
+                    Core.Community.ContentState.Held => InboxKind.ContentHeld,
+                    Core.Community.ContentState.Rejected => InboxKind.ContentRejected,
+                    Core.Community.ContentState.Passed when e.Late => InboxKind.ContentPublished,
+                    _ => (InboxKind?)null,
+                };
+                if (uid is { } user && kind is { } k)
+                    await AddAsync(db, user, k, await PlaceNameAsync(db, e.PlaceId, ct), e.SubjectKind, e.SubjectId, ct, e.PlaceId, reasons, kind == InboxKind.ContentRejected ? canAppeal : false);
+                break;
+            }
             case RoutingKeys.SuggestionApplied:
             {
                 var e = message.Deserialize<SuggestionAppliedEvent>(o)!;
@@ -106,7 +133,8 @@ public sealed class InboxGenerator(RabbitMqConnection connection, IServiceScopeF
             : await db.Places.Where(p => p.Id == placeId).Select(p => p.Name).FirstOrDefaultAsync(ct);
 
     /// <summary>Adds an item, or bumps today's aggregate ("24 drivers thanked you") and moves it to the top as unread.</summary>
-    private async Task AddAsync(GimanoDbContext db, Guid userId, InboxKind kind, string? subject, string? refType, string? refId, CancellationToken ct)
+    private async Task AddAsync(GimanoDbContext db, Guid userId, InboxKind kind, string? subject, string? refType, string? refId, CancellationToken ct,
+        string? placeId = null, string? reasons = null, bool? canAppeal = null)
     {
         var user = await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => new { u.Locale }).FirstOrDefaultAsync(ct);
         if (user is null) return;
@@ -119,7 +147,7 @@ public sealed class InboxGenerator(RabbitMqConnection connection, IServiceScopeF
             db.InboxItems.Add(new InboxItem
             {
                 UserId = userId, Kind = kind, Title = title, Body = body, Subject = subject, RefType = key is null ? refType : null, RefId = key is null ? refId : null,
-                AggregateKey = key, CreatedAt = now,
+                AggregateKey = key, CreatedAt = now, PlaceId = placeId, Reasons = reasons, CanAppeal = canAppeal,
             });
         }
         else
@@ -134,7 +162,7 @@ public sealed class InboxGenerator(RabbitMqConnection connection, IServiceScopeF
         {
             // Two events raced to create today's aggregate: retry once as an increment.
             db.ChangeTracker.Clear();
-            await AddAsync(db, userId, kind, subject, refType, refId, ct);
+            await AddAsync(db, userId, kind, subject, refType, refId, ct, placeId, reasons, canAppeal);
         }
     }
 }

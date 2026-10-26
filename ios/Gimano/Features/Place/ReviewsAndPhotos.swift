@@ -148,6 +148,7 @@ struct ReviewRow: View {
     @State private var viewer: PhotoViewerItem?
     @State private var helpfulOn = false
     @State private var confirmBlock = false
+    @State private var appealing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -177,6 +178,9 @@ struct ReviewRow: View {
                 if review.editedAt != nil { Text("edited").font(Tokens.Font.small).foregroundStyle(Color.textMuted) }
             }
             if let t = review.text, !t.isEmpty { Text(t).font(Tokens.Font.body) }
+            if let m = review.moderation, m.state != .passed, m.state != .skipped {
+                ModerationChip(moderation: m, onAppeal: { appealing = true })
+            }
             if let photos = review.photos, !photos.isEmpty {
                 let ready = photos.filter { $0.url != nil }
                 let urls = ready.compactMap { MediaURL.resolve($0.url) }
@@ -216,6 +220,7 @@ struct ReviewRow: View {
             Text("Their reviews and photos will be hidden on this phone. You can unblock them in Settings.")
         }
         .fullScreenCover(item: $viewer) { v in PhotoViewer(urls: v.urls, index: v.index, photos: v.photos) }
+        .sheet(isPresented: $appealing) { ContentAppealSheet(subject: .review(id: review.id)) { Task { await onChange() } } }
     }
 }
 
@@ -279,9 +284,13 @@ struct WriteReviewSheet: View {
     /// The place's position, for the restricted-area check (docs/safety.md part 4).
     var location: LatLng? = nil
     let existing: Review?
+    /// A star tapped on the place card starts the review with that rating.
+    var initialRating = 0
     let onDone: () async -> Void
     @State private var rating = 0
     @State private var text = ""
+    @State private var rejection: ContentRejectionItem?
+    @State private var appealFeedback = false
     @State private var photos: [PickedPhoto] = []
     @State private var progress: Double?
     @State private var error: String?
@@ -291,7 +300,8 @@ struct WriteReviewSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    HStack(spacing: 8) {
+                    if let until = model.postingPausedUntil, PostingPause.isActive(until: until) { PausedCard(until: until) }
+                    HStack(spacing: 4) {
                         ForEach(1...5, id: \.self) { n in
                             Button { rating = n } label: {
                                 Image(systemName: n <= rating ? "star.fill" : "star")
@@ -299,6 +309,8 @@ struct WriteReviewSheet: View {
                                     .foregroundStyle(Color(uiColor: Tokens.Palette.traffic2))
                             }
                             .buttonStyle(.plain)
+                            .frame(width: 48, height: 48)
+                            .contentShape(Rectangle())
                             .accessibilityLabel(Text("\(n) stars"))
                             .accessibilityIdentifier("reviewStar.\(n)")
                         }
@@ -314,7 +326,13 @@ struct WriteReviewSheet: View {
                         .padding(14)
                         .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: Tokens.Radius.md, style: .continuous))
                         .accessibilityIdentifier("reviewText")
-                        .onChange(of: text) { if text.count > 2000 { text = String(text.prefix(2000)) } }
+                        .onChange(of: text) { if text.count > textLimit { text = String(text.prefix(textLimit)) } }
+                    HStack {
+                        Spacer()
+                        Text(verbatim: "\(text.count) / \(ReviewPrefilter.maxChars)").font(Tokens.Font.small).foregroundStyle(Color.textMuted)
+                            .accessibilityIdentifier("reviewCounter")
+                    }
+                    if looksLikeAdvert { AdHintTiles(hints: hints) }
                     if sensitive {
                         SensitiveTermsWarning { text = model.restricted.terms.removingMatchingSentences(text) }
                     }
@@ -330,7 +348,7 @@ struct WriteReviewSheet: View {
                     if let error { Text(error).foregroundStyle(Color.speeding).font(Tokens.Font.caption).accessibilityIdentifier("reviewError") }
                     Button(sensitive ? "Send for review" : (existing == nil ? "Post review" : "Save changes")) { Task { await send() } }
                         .buttonStyle(PrimaryButtonStyle())
-                        .disabled(rating == 0 || sending || proximity == .blocked)
+                        .disabled(rating == 0 || sending || proximity == .blocked || looksLikeAdvert || paused)
                         .accessibilityIdentifier("postReview")
                     if let existing {
                         Button("Delete review", role: .destructive) {
@@ -350,9 +368,37 @@ struct WriteReviewSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancel") { dismiss() } } }
             .onAppear {
-                if let existing { rating = existing.rating; text = existing.text ?? "" }
+                if let existing { rating = existing.rating; text = existing.text ?? "" } else if initialRating > 0 { rating = initialRating }
+            }
+            .sheet(item: $rejection) { r in
+                CantPostSheet(reasons: r.reasons, safeText: r.safeText, onPostSafe: {
+                    let safe = r.safeText ?? text
+                    rejection = nil
+                    text = safe
+                    Task { await send() }
+                }, onEdit: { rejection = nil }, onAppeal: {
+                    rejection = nil
+                    appealFeedback = true
+                })
+                .presentationDetents([.large])
+            }
+            .onChange(of: appealFeedback) { _, on in
+                // A rejected post stores nothing, so there is nothing to appeal by id: "Ask a person" opens feedback instead.
+                if on { appealFeedback = false; dismiss(); model.openFeedback(from: .place, placeId: placeId) }
             }
         }
+    }
+
+    private var hints: Set<AdHint> { ReviewPrefilter.hints(text) }
+    private var looksLikeAdvert: Bool { !hints.isEmpty }
+    private var paused: Bool { PostingPause.isActive(until: model.postingPausedUntil) }
+    /// New text stops at 500; an older, longer review being edited keeps its length.
+    private var textLimit: Int { max(ReviewPrefilter.maxChars, existing?.text?.count ?? 0) }
+
+    struct ContentRejectionItem: Identifiable {
+        let id = UUID()
+        let reasons: [ContentReason]
+        let safeText: String?
     }
 
     private var proximity: RestrictedProximity { location.map { model.restricted.proximity(of: $0) } ?? .clear }
@@ -384,12 +430,25 @@ struct WriteReviewSheet: View {
             let saved = existing == nil ? try await model.repo.createReview(placeId: placeId, body) : try await model.repo.updateReview(id: existing!.id, body)
             try? model.store.setSetting("review.\(placeId)", saved.id)
             await onDone()
-            if saved.heldForReview == true || sensitive {
+            switch ReviewOutcome.of(saved) {
+            case .held:
                 model.showToast(String(localized: "Checked within 24 hours. You'll get a note in your Inbox."), seconds: 4)
-            } else {
-                model.showToast(String(localized: "Thanks for your review!"))
+            case .checking:
+                model.showToast(String(localized: "Sent. We're still checking. The answer comes to your Inbox."), seconds: 4)
+            case .published:
+                if sensitive {
+                    model.showToast(String(localized: "Checked within 24 hours. You'll get a note in your Inbox."), seconds: 4)
+                } else {
+                    model.showToast(String(localized: "Thanks for your review!"))
+                }
             }
             dismiss()
+        } catch where ContentFailure.isContentError(error) {
+            switch ContentFailure.classify(error, original: text) {
+            case .rejected(let reasons, let safe): rejection = ContentRejectionItem(reasons: reasons, safeText: safe)
+            case .paused(let until): model.postingPausedUntil = until ?? .now.addingTimeInterval(86400)
+            default: break
+            }
         } catch let e as APIError where e.isServerSideGap {
             error = String(localized: "Reviews aren't available on the server yet.")
         } catch APIError.http(status: 403, _) where existing != nil {
@@ -576,7 +635,8 @@ extension PlaceStatus {
     }
 }
 
-/// Place card → "Add photo": camera or library, metadata stripped on the phone, then uploaded.
+/// Place card → "Add photo": camera or library, metadata stripped on the phone, then uploaded. Each uploaded photo
+/// shows a round status badge (tick, clock, cross) that follows `GET /photos/{id}` until the content check is final.
 struct AddPlacePhotosSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -584,53 +644,95 @@ struct AddPlacePhotosSheet: View {
     let placeName: String
     var location: LatLng? = nil
     @State private var photos: [PickedPhoto] = []
+    @State private var uploaded: [UploadedPhoto] = []
     @State private var progress: Double?
     @State private var error: String?
+    @State private var rejected: UploadedPhoto?
+    @State private var appealing: Photo?
 
     /// Photos are refused within reviewM of a restricted area (docs/safety.md B).
     private var proximity: RestrictedProximity { location.map { model.restricted.proximity(of: $0) } ?? .clear }
+    private var paused: Bool { PostingPause.isActive(until: model.postingPausedUntil) }
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                if proximity == .blocked { RestrictedBlockedNote() }
-                if proximity == .clear {
-                    PhotoPickerRow(photos: $photos)
-                } else if let reviewM = model.restricted.set?.reviewM {
-                    PhotosOffCaption(reviewM: reviewM)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let until = model.postingPausedUntil, paused { PausedCard(until: until) }
+                    if !uploaded.isEmpty {
+                        UploadedPhotosGrid(items: $uploaded) { rejected = $0 }
+                    }
+                    if proximity == .blocked { RestrictedBlockedNote() }
+                    if proximity == .clear {
+                        PhotoPickerRow(photos: $photos)
+                    } else if let reviewM = model.restricted.set?.reviewM {
+                        PhotosOffCaption(reviewM: reviewM)
+                    }
+                    Label("Location and camera details are removed before upload.", systemImage: "location.slash.fill")
+                        .font(Tokens.Font.small).foregroundStyle(Color.textMuted)
+                    if let progress { ProgressView(value: progress) }
+                    if let error { Text(error).font(Tokens.Font.caption).foregroundStyle(Color.speeding) }
+                    Button("Upload") { Task { await upload() } }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(photos.isEmpty || progress != nil || paused)
+                        .accessibilityIdentifier("uploadPhotos")
                 }
-                Text("Location and camera details are removed on your phone before upload.")
-                    .font(Tokens.Font.small).foregroundStyle(Color.textMuted)
-                if let progress { ProgressView(value: progress) }
-                if let error { Text(error).font(Tokens.Font.caption).foregroundStyle(Color.speeding) }
-                Button("Upload") { Task { await upload() } }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(photos.isEmpty || progress != nil)
-                    .accessibilityIdentifier("uploadPhotos")
-                Spacer()
+                .padding(Tokens.Space.gutter)
             }
-            .padding(Tokens.Space.gutter)
             .navigationTitle(placeName)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancel") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { Button(uploaded.isEmpty ? "Cancel" : "Done") { dismiss() } }
+            }
+            .sheet(item: $rejected) { item in
+                let m = item.photo.moderation
+                RejectedPhotoSheet(reasons: m?.reasons ?? [], canAppeal: m?.canAppeal ?? false, onAnother: {
+                    uploaded.removeAll { $0.id == item.id }
+                    rejected = nil
+                }, onAppeal: {
+                    rejected = nil
+                    appealing = item.photo
+                })
+                .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $appealing) { p in
+                ContentAppealSheet(subject: .photo(id: p.id)) {
+                    // Back to "being checked": the tile polls again.
+                    if let i = uploaded.firstIndex(where: { $0.photo.id == p.id }) {
+                        var q = uploaded[i].photo
+                        q.status = .processing
+                        q.moderation = ContentModeration(state: .held, reasons: q.moderation?.reasons ?? [])
+                        let item = UploadedPhoto(preview: uploaded[i].preview, photo: q)
+                        uploaded[i] = item
+                    }
+                }
+            }
         }
     }
 
     private func upload() async {
         guard await model.ensureRulesAccepted() else { return }
         progress = 0
+        error = nil
         defer { progress = nil }
+        let batch = photos
+        var done: [UploadedPhoto] = []
         do {
-            for (i, p) in photos.enumerated() {
-                let base = Double(i) / Double(photos.count), share = 1 / Double(photos.count)
-                _ = try await model.repo.uploadPhoto(p.jpeg, placeId: placeId, caption: nil) { f in
+            for (i, p) in batch.enumerated() {
+                let base = Double(i) / Double(batch.count), share = 1 / Double(batch.count)
+                let photo = try await model.repo.uploadPhoto(p.jpeg, placeId: placeId, caption: nil) { f in
                     Task { @MainActor in progress = base + f * share }
                 }
+                done.append(UploadedPhoto(preview: p.preview, photo: photo))
             }
-            model.showToast(String(localized: "Thanks! Photos are being processed."))
-            dismiss()
+            model.showToast(String(localized: "Thanks! We're checking your photos."))
+        } catch where ContentFailure.isContentError(error) {
+            if case .paused(let until) = ContentFailure.classify(error) { model.postingPausedUntil = until ?? .now.addingTimeInterval(86400) }
         } catch {
             self.error = error.localizedDescription
         }
+        uploaded += done
+        // Photos that went up stay in the grid; the rest stay in the picker for another try.
+        photos = Array(batch.dropFirst(done.count))
     }
 }

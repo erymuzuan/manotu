@@ -34,6 +34,8 @@ public static class CommunityEndpoints
         var reviews = api.MapGroup("/reviews").WithTags("Reviews").RequireAuthorization();
         reviews.MapPatch("/{id:guid}", PatchReview).RequireSignature();
         reviews.MapDelete("/{id:guid}", DeleteReview).RequireSignature();
+        reviews.MapPost("/{id:guid}/appeal", AppealReview).RequireSignature()
+            .WithSummary("Author only: ask a maintainer to review a review the content check didn't accept (once per review; note ≤ 200 chars).");
         reviews.MapPost("/{id:guid}/helpful", Helpful);
         reviews.MapPost("/{id:guid}/flag", FlagReview);
 
@@ -41,6 +43,8 @@ public static class CommunityEndpoints
         photos.MapPost("", Upload).RequireSignature().DisableAntiforgery().WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes))
             .WithSummary("multipart/form-data: file (JPEG/PNG/WebP, ≤ 15 MB), placeId, caption?. 415 for HEIC/undecodable.");
         photos.MapGet("/{id:guid}", GetPhoto).AllowAnonymous();
+        photos.MapPost("/{id:guid}/appeal", AppealPhoto).RequireSignature()
+            .WithSummary("Uploader only: ask a maintainer to review a photo the content check didn't accept (once per photo; note ≤ 200 chars).");
         photos.MapDelete("/{id:guid}", DeletePhoto);
         photos.MapPost("/{id:guid}/flag", FlagPhoto);
         return api;
@@ -95,10 +99,10 @@ public static class CommunityEndpoints
     private static async Task<Ok<List<PlaceSummary>>> Contributed(HttpContext http, CommunityService svc, CancellationToken ct) =>
         TypedResults.Ok((await svc.ContributedAsync(http.User.RequiredUserId(), ct)).ToList());
 
-    private static async Task<Ok<ReviewsPage>> ListReviews(string id, string? sort, string? cursor, ReviewService svc, CancellationToken ct)
+    private static async Task<Ok<ReviewsPage>> ListReviews(string id, string? sort, string? cursor, HttpContext http, ReviewService svc, CancellationToken ct)
     {
         var s = GimanoJson.TryParseWire<ReviewSort>(sort, out var parsed) ? parsed : ReviewSort.Recent;
-        return TypedResults.Ok(await svc.ListAsync(id, s, cursor, ct));
+        return TypedResults.Ok(await svc.ListAsync(id, s, cursor, ct, http.User.UserId()));
     }
 
     private static async Task<Created<ReviewDto>> CreateReview(string id, CreateReviewRequest req, HttpContext http, ReviewService svc, CancellationToken ct)
@@ -109,6 +113,18 @@ public static class CommunityEndpoints
 
     private static async Task<Ok<ReviewDto>> PatchReview(Guid id, PatchReviewRequest req, HttpContext http, ReviewService svc, CancellationToken ct) =>
         TypedResults.Ok(await svc.PatchAsync(http.User.RequiredUserId(), id, req, ct));
+
+    private static async Task<Accepted> AppealReview(Guid id, AppealContentRequest req, HttpContext http, ReviewService svc, CancellationToken ct)
+    {
+        await svc.AppealAsync(http.User.RequiredUserId(), id, req.Note, ct);
+        return TypedResults.Accepted((string?)null);
+    }
+
+    private static async Task<Accepted> AppealPhoto(Guid id, AppealContentRequest req, HttpContext http, PhotoService svc, CancellationToken ct)
+    {
+        await svc.AppealAsync(http.User.RequiredUserId(), id, req.Note, ct);
+        return TypedResults.Accepted((string?)null);
+    }
 
     private static async Task<NoContent> DeleteReview(Guid id, HttpContext http, ReviewService svc, CancellationToken ct)
     {
@@ -149,7 +165,8 @@ public static class CommunityEndpoints
     private static async Task<Ok<PhotosPage>> ListPhotos(string id, string? cursor, PhotoService svc, CancellationToken ct) =>
         TypedResults.Ok(await svc.ListAsync(id, cursor, ct));
 
-    private static async Task<Ok<PhotoDto>> GetPhoto(Guid id, PhotoService svc, CancellationToken ct) => TypedResults.Ok(await svc.GetAsync(id, ct));
+    private static async Task<Ok<PhotoDto>> GetPhoto(Guid id, HttpContext http, PhotoService svc, CancellationToken ct) =>
+        TypedResults.Ok(await svc.GetAsync(id, ct, http.User.UserId()));
 
     private static async Task<NoContent> DeletePhoto(Guid id, HttpContext http, PhotoService svc, CancellationToken ct)
     {

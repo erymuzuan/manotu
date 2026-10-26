@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Public content safety (docs/content-safety.md; design canvas "Manotu AI Content Safety"). Icon-led, very little text.
+     Reason codes map to this fixed copy; the check's own words are never shown. -->
+<resources>
+    <!-- Place warning banner -->
+    <string name="cs_warn_alcohol">Serves alcohol</string>
+    <string name="cs_warn_gambling">Gambling here</string>
+    <string name="cs_warn_tobacco">Cigarettes or vape sold</string>
+    <string name="cs_warn_banner_cd">Warning: %1$s</string>
+    <string name="cs_warn_explain_cd">What is this?</string>
+    <string name="cs_warn_explain">Manotu lists places as they are. This one is marked so you know before you go. You can still drive here.</string>
+    <string name="cs_warn_tell">Not right? Tell us</string>
+    <string name="cs_warn_tell_cd">Not right? Tell us</string>
+
+    <!-- Add a place: "Anything people should know?" -->
+    <string name="cs_know_title">Anything people should know?</string>
+    <string name="cs_know_alcohol">Alcohol</string>
+    <string name="cs_know_gambling">Gambling</string>
+    <string name="cs_know_tobacco">Cigarettes · vape</string>
+    <string name="cs_know_none">None</string>
+    <string name="cs_know_preview_cd">Preview of the warning on the place page</string>
+
+    <!-- Reviews -->
+    <string name="cs_rate_cd">Rate %1$d of 5</string>
+    <string name="cs_rate_selected_cd">%1$d of 5 stars</string>
+    <string name="cs_review_count">%1$d / %2$d</string>
+    <string name="cs_tile_phone">Phone</string>
+    <string name="cs_tile_link">Link</string>
+    <string name="cs_tile_offer">Offer</string>
+    <string name="cs_tile_cd">Not allowed here: %1$s</string>
+    <string name="cs_review_ok_hint">Saying “a vape shop is next door” is fine.</string>
+    <string name="cs_post_blocked">Looks like an advert</string>
+    <string name="cs_review_held">A person will check your review within 24 hours.</string>
+    <string name="cs_review_checking">Still checking your review. The answer comes to your Inbox.</string>
+    <string name="cs_review_rejected">Your review was not accepted.</string>
+    <string name="cs_state_held">A person is checking</string>
+    <string name="cs_state_checking">Checking…</string>
+    <string name="cs_state_rejected">Not accepted</string>
+
+    <!-- "Can't post this" -->
+    <string name="cs_cant_post">Can\'t post this</string>
+    <string name="cs_post_part">Post this part</string>
+    <string name="cs_edit">Edit</string>
+    <string name="cs_appeal">Ask a person</string>
+    <string name="cs_appeal_sent">Sent. A person will look at it.</string>
+    <string name="cs_issue_phone">Phone number</string>
+    <string name="cs_issue_link">Link</string>
+    <string name="cs_issue_offer">Offer</string>
+    <string name="cs_issue_gambling">Gambling</string>
+    <string name="cs_issue_alcohol">Alcohol</string>
+    <string name="cs_issue_tobacco">Tobacco</string>
+    <string name="cs_issue_scam">Scam</string>
+    <string name="cs_issue_money">Money offer</string>
+    <string name="cs_issue_violence">Violence</string>
+    <string name="cs_issue_adult">Adult</string>
+    <string name="cs_issue_drugs">Drugs</string>
+    <string name="cs_issue_personal">Personal info</string>
+    <string name="cs_issue_hate">Hate</string>
+    <string name="cs_issue_illegal">Illegal</string>
+    <string name="cs_issue_other">Not allowed</string>
+    <string name="cs_issue_cd">Not allowed: %1$s</string>
+
+    <!-- Paused -->
+    <string name="cs_paused_title">Posting paused</string>
+    <string name="cs_paused_until">Back at %1$s</string>
+    <string name="cs_paused_later">Back in a while</string>
+    <string name="cs_paused_short">Posting is paused for a while.</string>
+
+    <!-- Photos -->
+    <string name="cs_photo_published">Published</string>
+    <string name="cs_photo_processing">Checking</string>
+    <string name="cs_photo_rejected">Not accepted</string>
+    <string name="cs_photo_status_cd">Photo: %1$s</string>
+    <string name="cs_photo_rejected_cd">Photo not accepted. Tap to see why.</string>
+    <string name="cs_photo_hidden">This photo is hidden</string>
+    <string name="cs_pi_violence">Violence</string>
+    <string name="cs_pi_adult">Adult</string>
+    <string name="cs_pi_gambling_drugs">Gambling · drugs</string>
+    <string name="cs_pi_plates_faces">Plates · faces</string>
+    <string name="cs_photo_another">Another photo</string>
+    <string name="cs_photo_ask">Ask a person</string>
+    <string name="cs_photo_close_cd">Close</string>
+
+    <!-- Road-report note -->
+    <string name="cs_note_hint">Short note (optional)</string>
+    <string name="cs_note_ok_cd">Done</string>
+    <string name="cs_note_count">%1$d / %2$d</string>
+    <string name="cs_note_dropped">Report sent. The note was left out.</string>
+
+    <!-- Inbox -->
+    <string name="cs_inbox_published">Now public</string>
+    <string name="cs_inbox_held">A person is checking</string>
+    <string name="cs_inbox_rejected">Not accepted</string>
+    <string name="cs_inbox_edit_cd">Edit</string>
+</resources>

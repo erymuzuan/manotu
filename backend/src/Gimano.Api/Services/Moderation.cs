@@ -17,7 +17,7 @@ public sealed record ModerationFlag(FlagReason Reason, DateTimeOffset? At);
 /// </summary>
 public sealed record ModerationItem(ModerationKind Kind, string Id, string? PlaceId, string Status, int FlagCount,
     IReadOnlyList<ModerationFlag> Flags, string? Text, string? MediaUrl, string? AuthorName, string? AuthorRef,
-    bool AuthorBanned, DateTimeOffset CreatedAt, bool Held = false);
+    bool AuthorBanned, DateTimeOffset CreatedAt, bool Held = false, IReadOnlyList<string>? Reasons = null, string? AppealNote = null);
 
 /// <summary>
 /// Moderation of user content (Apple 1.2 / Play UGC; docs/back-office.md "Moderation"): flagged reviews, photos and
@@ -31,6 +31,22 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
         : throw new ForbiddenException("This account can no longer post public content (community rules: https://manotu.app/terms/).");
 
     /// <summary>
+    /// Reviews, photos and notes are paused while <c>SuspendedUntil</c> is in the future (3 AI rejections in 24 h; the same pause as for places).
+    /// </summary>
+    public static User EnsureNotPaused(User user, DateTimeOffset now) => user.SuspendedUntil is { } until && until > now
+        ? throw new PostingPausedException(until, $"Posting is paused until {until:yyyy-MM-dd HH:mm} UTC because several of your posts were not accepted.")
+        : user;
+
+    /// <summary>The appeal note: at most 200 characters, friendly and without links; null when empty.</summary>
+    public static string? CheckAppealNote(string? note)
+    {
+        var n = note?.Trim();
+        if (n is { Length: > PlaceScreening.MaxAppealLength }) throw new ValidationException("note", $"note max {PlaceScreening.MaxAppealLength} chars.");
+        if (TextFilter.Default.Check(n, rejectLinks: true) != TextVerdict.Ok) throw new ValidationException("note", "Please keep the note friendly and without links.");
+        return string.IsNullOrEmpty(n) ? null : n;
+    }
+
+    /// <summary>
     /// Flagged (or hidden) items, most-flagged first. state=flagged: visible items with at least one flag (to review);
     /// state=hidden: hidden by flags or a moderator (to restore or confirm).
     /// </summary>
@@ -39,22 +55,29 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
         var items = new List<ModerationItem>();
         if (kind is null or ModerationKind.Review)
         {
-            var q = db.Reviews.AsNoTracking().Include(r => r.User).Where(r => hidden ? r.Status == ReviewStatus.Hidden : r.Status == ReviewStatus.Published && r.FlagCount > 0);
+            // Hidden = flags, moderator hides and held content; reviews still "checking" or not accepted by the AI (nobody appealed) are not for a person yet.
+            var q = db.Reviews.AsNoTracking().Include(r => r.User).Where(r => hidden
+                ? r.Status == ReviewStatus.Hidden && r.ModerationState != ContentState.Checking && r.ModerationState != ContentState.Rejected
+                : r.Status == ReviewStatus.Published && r.FlagCount > 0);
             foreach (var r in await q.OrderByDescending(r => r.FlagCount).ThenByDescending(r => r.CreatedAt).Take(200).ToListAsync(ct))
             {
                 var flags = await db.ReviewFlags.AsNoTracking().Where(f => f.ReviewId == r.Id).Select(f => new ModerationFlag(f.Reason, f.CreatedAt)).ToListAsync(ct);
                 items.Add(new ModerationItem(ModerationKind.Review, r.Id.ToString(), r.PlaceId, GimanoJson.ToWire(r.Status), r.FlagCount, flags, r.Text, null,
-                    r.User?.DisplayName, handles.For(r.UserId), r.User?.BannedAt is not null, r.CreatedAt, r.HeldForReview));
+                    r.User?.DisplayName, handles.For(r.UserId), r.User?.BannedAt is not null, r.CreatedAt, r.HeldForReview,
+                    ContentScreening.Split(r.ModerationReasons), r.AppealNote));
             }
         }
         if (kind is null or ModerationKind.Photo)
         {
-            var q = db.Photos.AsNoTracking().Include(p => p.User).Where(p => hidden ? p.Status == PhotoStatus.Rejected && p.FlagCount > 0 : p.Status == PhotoStatus.Published && p.FlagCount > 0);
+            var q = db.Photos.AsNoTracking().Include(p => p.User).Where(p => hidden
+                ? (p.Status == PhotoStatus.Rejected && p.FlagCount > 0) || p.ModerationState == ContentState.Held
+                : p.Status == PhotoStatus.Published && p.FlagCount > 0);
             foreach (var p in await q.OrderByDescending(p => p.FlagCount).ThenByDescending(p => p.CreatedAt).Take(200).ToListAsync(ct))
             {
                 var flags = await db.PhotoFlags.AsNoTracking().Where(f => f.PhotoId == p.Id).Select(f => new ModerationFlag(f.Reason, null)).ToListAsync(ct);
                 items.Add(new ModerationItem(ModerationKind.Photo, p.Id.ToString(), p.PlaceId, GimanoJson.ToWire(p.Status), p.FlagCount, flags, p.Caption,
-                    MediaKeys.Url(p.Key), p.User?.DisplayName, handles.For(p.UserId), p.User?.BannedAt is not null, p.CreatedAt));
+                    MediaKeys.Url(p.Key), p.User?.DisplayName, handles.For(p.UserId), p.User?.BannedAt is not null, p.CreatedAt,
+                    p.ModerationState == ContentState.Held, ContentScreening.Split(p.ModerationReasons), p.AppealNote));
             }
         }
         if (kind is null or ModerationKind.Place)
@@ -83,14 +106,18 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
     public async Task HideAsync(ModerationKind kind, string id, CancellationToken ct)
     {
         string? placeId = null, rejectedHeld = null;
+        (string Kind, string Id, string Place)? contentRejected = null;
         switch (kind)
         {
             case ModerationKind.Review:
                 var r = await db.Reviews.FirstOrDefaultAsync(x => x.Id == ParseGuid(id), ct) ?? throw new NotFoundException("Review not found.");
+                // A review the AI check held and a maintainer refuses: its author hears "not accepted" (and may appeal once).
+                if (r.ModerationState == ContentState.Held) { r.ModerationState = ContentState.Rejected; r.ModeratedAt = clock.GetUtcNow(); contentRejected = ("review", r.Id.ToString(), r.PlaceId); }
                 r.Status = ReviewStatus.Hidden; r.HeldForReview = false; placeId = r.PlaceId;
                 break;
             case ModerationKind.Photo:
                 var p = await db.Photos.FirstOrDefaultAsync(x => x.Id == ParseGuid(id), ct) ?? throw new NotFoundException("Photo not found.");
+                if (p.ModerationState == ContentState.Held) { p.ModerationState = ContentState.Rejected; p.ModeratedAt = clock.GetUtcNow(); contentRejected = ("photo", p.Id.ToString(), p.PlaceId); }
                 p.Status = PhotoStatus.Rejected; p.RejectReason = "moderation"; placeId = p.PlaceId;
                 break;
             case ModerationKind.Place:
@@ -103,6 +130,7 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
         await db.SaveChangesAsync(ct);
         if (placeId is not null) await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(placeId), ct);
         if (rejectedHeld is not null) await bus.PublishAsync(RoutingKeys.PlaceVerified, new PlaceVerifiedEvent(rejectedHeld, PlaceStatus.Hidden), ct);
+        if (contentRejected is { } cr) await bus.PublishAsync(RoutingKeys.ContentScreened, new ContentScreenedEvent(cr.Kind, cr.Id, cr.Place, ContentState.Rejected, Late: true), ct);
     }
 
     /// <summary>Restores an item a moderator found fine (also "dismiss": its flags are cleared, so it leaves the queue).</summary>
@@ -110,12 +138,14 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
     {
         string placeId;
         string? acceptedScreened = null;
+        (string Kind, string Id)? contentApproved = null;
         switch (kind)
         {
             case ModerationKind.Review:
             {
                 var gid = ParseGuid(id);
                 var r = await db.Reviews.FirstOrDefaultAsync(x => x.Id == gid, ct) ?? throw new NotFoundException("Review not found.");
+                if (r.ModerationState is ContentState.Held or ContentState.Rejected) { r.ModerationState = ContentState.Passed; r.ModerationReasons = null; r.ModeratedAt = clock.GetUtcNow(); contentApproved = ("review", r.Id.ToString()); }
                 r.Status = ReviewStatus.Published; r.FlagCount = 0; r.HeldForReview = false; placeId = r.PlaceId;
                 await db.ReviewFlags.Where(f => f.ReviewId == gid).ExecuteDeleteAsync(ct);
                 break;
@@ -125,6 +155,7 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
                 var gid = ParseGuid(id);
                 var p = await db.Photos.FirstOrDefaultAsync(x => x.Id == gid, ct) ?? throw new NotFoundException("Photo not found.");
                 if (p.Key is null) throw new ConflictException("This photo was never processed.");
+                if (p.ModerationState is ContentState.Held or ContentState.Rejected) { p.ModerationState = ContentState.Passed; p.ModerationReasons = null; p.ModeratedAt = clock.GetUtcNow(); contentApproved = ("photo", p.Id.ToString()); }
                 p.Status = PhotoStatus.Published; p.RejectReason = null; p.FlagCount = 0; placeId = p.PlaceId;
                 await db.PhotoFlags.Where(f => f.PhotoId == gid).ExecuteDeleteAsync(ct);
                 break;
@@ -148,6 +179,7 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
         }
         await db.SaveChangesAsync(ct);
         await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(placeId), ct);
+        if (contentApproved is { } ca) await bus.PublishAsync(RoutingKeys.ContentScreened, new ContentScreenedEvent(ca.Kind, ca.Id, placeId, ContentState.Passed, Late: true), ct);
         if (acceptedScreened is not null)
             await bus.PublishAsync(RoutingKeys.PlaceScreened, new PlaceScreenedEvent(acceptedScreened, Core.Community.ScreeningState.Passed, Late: true), ct);
     }

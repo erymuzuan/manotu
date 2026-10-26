@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 namespace Gimano.Core.Contracts;
 
 // ---- Auth & profile -------------------------------------------------------
@@ -33,7 +34,8 @@ public sealed record PlaceSummary(
     string Id, string Name, PlaceCategory Category, string Address, double Lat, double Lng, double? DistanceM, string? Brand,
     PlaceSource Source = PlaceSource.Osm, PlaceStatus? Status = null, double? Rating = null, int ReviewCount = 0, string? ThumbnailUrl = null,
     double? ConfirmationsWeighted = null, double? Required = null, ChainGroup? ChainGroup = null, bool? OpenNow = null,
-    double? AnchorDistanceM = null, PlaceBadge? Badge = null, bool HeldForReview = false, PlaceScreeningDto? Screening = null);
+    double? AnchorDistanceM = null, PlaceBadge? Badge = null, bool HeldForReview = false, PlaceScreeningDto? Screening = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Warnings = null);
 
 /// <summary>
 /// A place's open complaint, for the card/list badge: "Dilaporkan tutup · sahkan?" (suspected place_closed_perm),
@@ -51,7 +53,8 @@ public sealed record PlaceDto(
     PlaceSource Source = PlaceSource.Osm, PlaceStatus? Status = null, double? Rating = null, int ReviewCount = 0, string? ThumbnailUrl = null,
     string? Description = null, AddedBy? AddedBy = null, int VerifiedCount = 0, IReadOnlyList<PhotoDto>? Photos = null,
     PlaceBadge? Badge = null, NavigationPoint? NavigationPoint = null, bool HeldForReview = false, PlaceScreeningDto? Screening = null,
-    double? ConfirmationsWeighted = null, double? Required = null);
+    double? ConfirmationsWeighted = null, double? Required = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Warnings = null);
 
 /// <summary>
 /// Route here instead of the display pin. source: confirmed (a confirmed place_entrance_wrong, IssueId set), osm_entrance
@@ -67,7 +70,8 @@ public sealed record AddedBy(string DisplayName, string? AuthorRef = null);
 /// <param name="NotDuplicateOf">The id from a 409 "Is it already on the map?" that the user said is a different place.</param>
 public sealed record CreatePlaceRequest(
     string Name, PlaceCategory? Category, double Lat, double Lng, string? Address, string? Description,
-    string? Phone, string? Website, string? OpeningHours, IReadOnlyList<string>? Amenities, string? NotDuplicateOf = null);
+    string? Phone, string? Website, string? OpeningHours, IReadOnlyList<string>? Amenities, string? NotDuplicateOf = null,
+    IReadOnlyList<string>? Warnings = null);
 
 /// <summary>Ask a person to review a place the AI check didn't accept (once per place).</summary>
 public sealed record AppealPlaceRequest(string? Note);
@@ -80,7 +84,7 @@ public sealed record PlaceScreeningDto(Community.ScreeningState State, IReadOnly
 
 public sealed record PatchCommunityPlaceRequest(
     string? Name, PlaceCategory? Category, double? Lat, double? Lng, string? Address, string? Description,
-    string? Phone, string? Website, string? OpeningHours, IReadOnlyList<string>? Amenities);
+    string? Phone, string? Website, string? OpeningHours, IReadOnlyList<string>? Amenities, IReadOnlyList<string>? Warnings = null);
 
 public sealed record SuggestEditRequest(
     string? Name, PlaceCategory? Category, double? Lat, double? Lng, string? Address, string? Phone, string? Website,
@@ -103,7 +107,17 @@ public sealed record ReviewAuthor(string DisplayName, int Level, int ReviewCount
 
 public sealed record ReviewDto(
     Guid Id, string PlaceId, int Rating, string? Text, IReadOnlyList<PhotoDto> Photos, ReviewAuthor Author,
-    int HelpfulCount, DateTimeOffset CreatedAt, DateTimeOffset? EditedAt, ReviewStatus Status, bool HeldForReview = false);
+    int HelpfulCount, DateTimeOffset CreatedAt, DateTimeOffset? EditedAt, ReviewStatus Status, bool HeldForReview = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ContentModerationDto? Moderation = null);
+
+/// <summary>
+/// The content check for the author only (docs/content-safety.md): state passed | held | checking | rejected | skipped, fixed reason
+/// codes the apps translate, and whether an appeal is still open.
+/// </summary>
+public sealed record ContentModerationDto(Community.ContentState State, IReadOnlyList<string> Reasons, bool CanAppeal);
+
+/// <summary>Ask a person to review a rejected review or photo (once per item; note at most 200 characters).</summary>
+public sealed record AppealContentRequest(string? Note);
 
 public sealed record ReviewsPage(IReadOnlyList<ReviewDto> Reviews, string? Next);
 
@@ -115,7 +129,8 @@ public sealed record FlagRequest(FlagReason Reason);
 
 public sealed record PhotoDto(
     Guid Id, string? Url, string? ThumbUrl, int Width, int Height, string? Caption, AddedBy UploadedBy, DateTimeOffset CreatedAt,
-    PhotoStatus Status = PhotoStatus.Published);
+    PhotoStatus Status = PhotoStatus.Published,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ContentModerationDto? Moderation = null);
 
 public sealed record PhotosPage(IReadOnlyList<PhotoDto> Photos, string? Next);
 
@@ -255,7 +270,19 @@ public sealed record AlertOnRoute(
 
 public sealed record CreateReportRequest(
     ReportType Type, string? Subtype, double Lat, double Lng, double? Heading, string? Comment,
-    double? EndLat = null, double? EndLng = null);
+    double? EndLat = null, double? EndLng = null, string? Note = null);
+
+/// <summary>The created report; <c>noteDropped</c> and <c>noteReasons</c> appear only when the free-text note was not accepted (the report still went out).</summary>
+public sealed record ReportCreatedDto(
+    Guid Id, ReportType Type, string? Subtype, double Lat, double Lng, double? Heading, string? Street,
+    ReportedBy ReportedBy, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, int Confirmations, int Thanks,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? NoteDropped = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? NoteReasons = null)
+    : ReportDto(Id, Type, Subtype, Lat, Lng, Heading, Street, ReportedBy, CreatedAt, ExpiresAt, Confirmations, Thanks)
+{
+    public static ReportCreatedDto From(ReportDto r, bool? noteDropped = null, IReadOnlyList<string>? noteReasons = null) =>
+        new(r.Id, r.Type, r.Subtype, r.Lat, r.Lng, r.Heading, r.Street, r.ReportedBy, r.CreatedAt, r.ExpiresAt, r.Confirmations, r.Thanks, noteDropped, noteReasons);
+}
 
 public sealed record VoteRequest(bool StillThere);
 
@@ -313,7 +340,12 @@ public sealed record FeedbackSummary(Guid Id, FeedbackCategory Category, string 
 
 public sealed record InboxItemDto(
     Guid Id, InboxKind Kind, string Title, string Body, string? RefType, string? RefId, DateTimeOffset CreatedAt,
-    bool Read, int Count = 1);
+    bool Read, int Count = 1,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SubjectKind = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SubjectId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PlaceId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Reasons = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CanAppeal = null);
 
 public sealed record InboxPage(IReadOnlyList<InboxItemDto> Items, string? Next, int Unread);
 

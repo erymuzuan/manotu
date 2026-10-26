@@ -1,4 +1,5 @@
 using Gimano.Core.Alerts;
+using Gimano.Core.Community;
 using Gimano.Core.Contracts;
 using Gimano.Core.Data;
 using Gimano.Core.Domain;
@@ -10,9 +11,10 @@ using Microsoft.Extensions.Caching.Memory;
 namespace Gimano.Api.Services;
 
 
-public sealed class ReportService(GimanoDbContext db, IEventPublisher bus, GeoLookup geo, TimeProvider clock, IMemoryCache cache, RestrictedAreaService restricted)
+public sealed class ReportService(GimanoDbContext db, IEventPublisher bus, GeoLookup geo, TimeProvider clock, IMemoryCache cache, RestrictedAreaService restricted,
+    ContentGate gate)
 {
-    public async Task<(ReportDto Report, bool Merged)> CreateAsync(Guid userId, CreateReportRequest req, CancellationToken ct)
+    public async Task<(ReportCreatedDto Report, bool Merged)> CreateAsync(Guid userId, CreateReportRequest req, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
         var loc = new GeoPoint(req.Lat, req.Lng);
@@ -46,7 +48,22 @@ public sealed class ReportService(GimanoDbContext db, IEventPublisher bus, GeoLo
             await db.SaveChangesAsync(ct);
             var merged = dup.ToDto();
             await bus.PublishAsync(RoutingKeys.ReportUpdated, merged, ct);
-            return (merged, true);
+            return (ReportCreatedDto.From(merged), true);
+        }
+
+        // A free-text note is checked (docs/content-safety.md "Report notes"): a rejected note is dropped and the report still goes out.
+        // No answer, or the check off: the note is kept (it is not shown to other drivers).
+        var comment = string.IsNullOrWhiteSpace(req.Comment ?? req.Note) ? null : (req.Comment ?? req.Note)!.Trim();
+        bool? noteDropped = null;
+        IReadOnlyList<string>? noteReasons = null;
+        if (comment is not null)
+        {
+            var outcome = await gate.CheckTextAsync(new ContentInput(ContentKind.ReportNote, comment), PlaceScreening.SyncBudget, ct);
+            if (outcome.Kind is ContentOutcomeKind.Rejected or ContentOutcomeKind.Held)
+            {
+                if (outcome.Kind == ContentOutcomeKind.Rejected) await gate.RecordRejectionAsync(userId, ct);
+                (comment, noteDropped, noteReasons) = (null, true, outcome.Reasons);
+            }
         }
 
         var report = new Report
@@ -56,7 +73,7 @@ public sealed class ReportService(GimanoDbContext db, IEventPublisher bus, GeoLo
             Location = pt,
             EndLocation = req.EndLat is { } elat && req.EndLng is { } elng ? new GeoPoint(elat, elng).ToPoint() : null,
             Heading = req.Heading is { } h ? ((h % 360) + 360) % 360 : null,
-            Comment = string.IsNullOrWhiteSpace(req.Comment) ? null : req.Comment.Trim(),
+            Comment = comment,
             Street = await geo.StreetNameAsync(loc, ct),
             ReporterId = userId,
             Reporter = user,
@@ -69,7 +86,7 @@ public sealed class ReportService(GimanoDbContext db, IEventPublisher bus, GeoLo
 
         var dto = report.ToDto();
         await bus.PublishAsync(RoutingKeys.ReportCreated, dto, ct);
-        return (dto, false);
+        return (ReportCreatedDto.From(dto, noteDropped, noteReasons), false);
     }
 
     /// <summary>"Undo" right after a quick report (docs/driving.md §6.4): within <see cref="UndoWindow"/>, the reporter's own

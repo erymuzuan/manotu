@@ -66,6 +66,11 @@ class DemoRepository(
         p("tol-sgbesi", "Plaza Tol Sungai Besi", "toll_booth", "Lebuhraya Utara-Selatan, 57000 Kuala Lumpur", 3.0560, 101.7080),
         p("penangbridge", "Jambatan Pulau Pinang", "tourism", "Pulau Pinang", 5.3550, 100.3480),
         p("jbciq", "Bangunan Sultan Iskandar CIQ", "government", "Jalan Jim Quee, 80300 Johor Bahru", 1.4630, 103.7650),
+        // Place warnings (docs/content-safety.md): listed and routable, with a banner. Demo data only.
+        p("alehouse", "Ale House Bangsar", "restaurant", "Jalan Telawi 3, Bangsar Baru, 59100 Kuala Lumpur", 3.1296, 101.6700).copy(warnings = listOf("alcohol")),
+        p("genting-casino", "Genting Casino (demo)", "tourism", "Resorts World Genting, 69000 Genting Highlands", 3.4236, 101.7930).copy(warnings = listOf("gambling")),
+        p("kedai-vape", "Kedai Vape & Rokok SS2", "convenience", "Jalan SS 2/66, 47300 Petaling Jaya", 3.1190, 101.6215).copy(warnings = listOf("tobacco")),
+        p("sports-lounge", "Sports Lounge KLCC", "restaurant", "Jalan Pinang, 50450 Kuala Lumpur", 3.1590, 101.7110).copy(warnings = listOf("alcohol", "gambling")),
     )
 
     private val reports = CopyOnWriteArrayList<Report>()
@@ -253,8 +258,11 @@ class DemoRepository(
         latency()
         val now = Instant.now()
         val ttlMin = when (body.type) { "police" -> 30L; "traffic" -> 20L; "closure" -> 24 * 60L; "weather" -> 120L; else -> 60L }
+        // Demo note check (docs/content-safety.md "Report notes"): a note with a phone number, link or offer is dropped; the report goes out.
+        val dropNote = body.comment != null && my.gimano.app.core.safety.ReviewPrefilter.looksLikeAdvert(body.comment)
         val r = Report(UUID.randomUUID().toString(), body.type, body.subtype, body.lat, body.lng, body.heading, null,
-            ReportedBy(user.displayName, user.mood), now.toString(), now.plusSeconds(ttlMin * 60).toString(), 0, 0, body.comment)
+            ReportedBy(user.displayName, user.mood), now.toString(), now.plusSeconds(ttlMin * 60).toString(), 0, 0, if (dropNote) null else body.comment,
+            noteDropped = dropNote, noteReasons = if (dropNote) listOf("external_contact") else emptyList())
         reports += r
         return r
     }
@@ -350,6 +358,14 @@ class DemoRepository(
                 if (kind != null) add(InboxItem("$kind-${p.id}", kind, title, text, now.minusSeconds(if (p.id.startsWith("demo-mine-")) 86_400 else 0).toString(),
                     refType = "place", refId = p.id))
             }
+            // Content safety (docs/content-safety.md "Inbox"): one of each kind, so the three status icons can be seen.
+            add(InboxItem("demo-cs-rejected", "content_rejected", "Your review was not accepted", "A phone number or link can't be in a review. Edit it, or ask a person to look.",
+                now.minusSeconds(3_600).toString(), placeId = "masjidnegara", subjectKind = "review", subjectId = "demo-rv-rej", reasons = listOf("external_contact"),
+                canAppeal = "demo-rv-rej" !in appealedContent))
+            add(InboxItem("demo-cs-held", "content_held", "A person is checking your photo", "Usually within 24 hours.",
+                now.minusSeconds(7_200).toString(), placeId = "masjidnegara", subjectKind = "photo", subjectId = "demo-ph-held", reasons = listOf("unclear")))
+            add(InboxItem("demo-cs-published", "content_published", "Your review is now public", "A person checked it. Thank you.",
+                now.minusSeconds(40_000).toString(), placeId = "klcc", subjectKind = "review", subjectId = "demo-rv-ok"))
             feedbackStore.forEach { add(InboxItem("fb-${it.id}", "feedback_status", "Feedback received", it.message.take(80), it.createdAt)) }
             add(InboxItem("welcome", "announcement", "Welcome to Manotu", "Light theme, planned drives and Share my drive are here.", now.minusSeconds(86_400).toString()))
         }
@@ -379,8 +395,17 @@ class DemoRepository(
     private fun ratingOf(placeId: String): Double? = reviewStore[placeId]?.takeIf { it.isNotEmpty() }?.map { it.rating }?.average()
 
     /** Demo photos are "processing" for 2 s after upload, then "published". */
-    private fun settle(p: Photo): Photo =
-        if (p.status == "processing" && System.currentTimeMillis() - (photoUploadedAt[p.id] ?: 0) > 2_000) p.copy(status = "published") else p
+    private fun settle(p: Photo): Photo {
+        if (p.id in photoAppealed) return p.copy(status = "processing", moderation = ContentModeration("held", listOf("personal_data")))
+        if (p.status != "processing" || System.currentTimeMillis() - (photoUploadedAt[p.id] ?: 0) <= 2_000) return p
+        // Demo image check: every third upload is "not accepted" (plates or faces), so the rejected-photo screen can be tried.
+        return if (p.id in photoRejected) p.copy(status = "rejected", moderation = ContentModeration("rejected", listOf("personal_data"), canAppeal = true))
+        else p.copy(status = "published", moderation = ContentModeration("passed"))
+    }
+
+    private val photoRejected = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val photoAppealed = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private var photoCount = 0
 
     /** The demo user's own community places (My places); the sample ones are seeded on first use. */
     private val mine = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
@@ -413,6 +438,7 @@ class DemoRepository(
             phone = body.phone, website = body.website, openingHours = body.openingHours, amenities = body.amenities.orEmpty(),
             source = "community", status = "pending", description = body.description, addedBy = Author(user.displayName), verifiedCount = 0,
             confirmationsWeighted = 0.0, required = 1.0,
+            warnings = body.warnings.orEmpty().filter { it in setOf("alcohol", "gambling", "tobacco") },
         )
         fun rejected(vararg r: String) = base.copy(status = "rejected", screening = PlaceScreening("rejected", r.toList(), canAppeal = true))
         val p = when {
@@ -527,17 +553,67 @@ class DemoRepository(
 
     override suspend fun reviews(placeId: String, sort: String): ReviewsPage {
         latency()
-        val list = reviewStore[placeId].orEmpty().map { r -> r.copy(photos = r.photos.map(::settle)) }
+        val list = reviewStore[placeId].orEmpty().map { r -> settleReview(r).copy(photos = r.photos.map(::settle)) }
         return ReviewsPage(if (sort == "helpful") list.sortedByDescending { it.helpfulCount } else list.sortedByDescending { it.createdAt })
+    }
+
+    /** A demo review that is "checking" passes 15 s later, as the worker would (the Inbox item is not simulated). */
+    private fun settleReview(r: Review): Review =
+        if (r.moderation?.state == "checking" && Instant.now().isAfter(Instant.parse(r.createdAt).plusSeconds(15)))
+            r.copy(status = "published", moderation = ContentModeration("passed")) else r
+
+    private val appealedContent = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private var reviewRejections = 0
+    private var pausedUntil: Instant? = null
+
+    /**
+     * Demo review check (docs/content-safety.md "Reviews"), reachable by words so every screen can be seen offline:
+     * a phone number, link or offer, "judi" / "casino" → 422 content_rejected with the safe part (3 in a row → 403
+     * posting_paused); "bodoh" / "stupid" → 422 harassment; "polis" / "suspicious" → held for a person;
+     * "lambat" / "slow" → still checking; anything else passes.
+     */
+    private fun screenReview(text: String?): ContentModeration {
+        val t = text.orEmpty()
+        val low = t.lowercase()
+        pausedUntil?.takeIf { it.isAfter(Instant.now()) }?.let {
+            throw demoProblem(403, ProblemDetails(title = "Posting paused", status = 403, code = "posting_paused", pausedUntil = it.toString()))
+        }
+        val reasons = buildList {
+            val tiles = my.gimano.app.core.safety.ReviewPrefilter.tiles(t)
+            if (my.gimano.app.core.safety.AdTile.PHONE in tiles || my.gimano.app.core.safety.AdTile.LINK in tiles) add("external_contact")
+            if (my.gimano.app.core.safety.AdTile.OFFER in tiles) add("spam")
+            if (listOf("judi", "casino", "slot online").any { it in low }) add("gambling_promo")
+            if (listOf("bodoh", "stupid").any { it in low }) add("harassment")
+        }
+        if (reasons.isNotEmpty()) {
+            reviewRejections++
+            if (reviewRejections >= 3) {
+                reviewRejections = 0
+                pausedUntil = Instant.now().plus(24, ChronoUnit.HOURS)
+            }
+            // The safe part: the sentences that are fine on their own.
+            val safe = t.split(Regex("(?<=[.!?\\n])\\s+")).filter { sentence ->
+                val l = sentence.lowercase()
+                my.gimano.app.core.safety.ReviewPrefilter.tiles(sentence).isEmpty() && listOf("judi", "casino", "slot online", "bodoh", "stupid").none { it in l }
+            }.joinToString(" ").trim().takeIf { it.isNotEmpty() }
+            throw demoProblem(422, ProblemDetails(title = "Content rejected", status = 422, code = "content_rejected", reasons = reasons, safeText = safe))
+        }
+        return when {
+            listOf("polis", "suspicious").any { it in low } -> ContentModeration("held", listOf("unclear"))
+            listOf("lambat", "slow").any { it in low } -> ContentModeration("checking")
+            else -> ContentModeration("passed")
+        }
     }
 
     override suspend fun createReview(placeId: String, body: ReviewRequest): Review {
         latency()
         val list = reviewStore.getOrPut(placeId) { CopyOnWriteArrayList() }
         check(list.none { it.mine }) { "one review per place" }
+        val m = screenReview(body.text)
         val photos = body.photoIds.orEmpty().mapNotNull { pid -> photoStore[placeId]?.firstOrNull { it.id == pid } }
         val r = Review(UUID.randomUUID().toString(), placeId, body.rating.coerceIn(1, 5), body.text, photos, Author(user.displayName, user.level, 1),
-            0, Instant.now().toString(), null, "published", mine = true)
+            0, Instant.now().toString(), null, if (m.state == "held" || m.state == "checking") "hidden" else "published", mine = true,
+            heldForReview = m.state == "held", moderation = m)
         list.add(0, r)
         return r
     }
@@ -547,8 +623,10 @@ class DemoRepository(
         reviewStore.values.forEach { list ->
             val i = list.indexOfFirst { it.id == reviewId }
             if (i >= 0) {
+                val m = screenReview(body.text)
                 val photos = body.photoIds.orEmpty().mapNotNull { pid -> photoStore[list[i].placeId]?.firstOrNull { it.id == pid } }
-                val upd = list[i].copy(rating = body.rating.coerceIn(1, 5), text = body.text, photos = photos.ifEmpty { list[i].photos }, editedAt = Instant.now().toString())
+                val upd = list[i].copy(rating = body.rating.coerceIn(1, 5), text = body.text, photos = photos.ifEmpty { list[i].photos }, editedAt = Instant.now().toString(),
+                    status = if (m.state == "held" || m.state == "checking") "hidden" else "published", heldForReview = m.state == "held", moderation = m)
                 list[i] = upd
                 return upd
             }
@@ -569,13 +647,22 @@ class DemoRepository(
         delay(600)
         val id = UUID.randomUUID().toString().take(12)
         val url = photoSink(id, jpeg)
-        val p = Photo(id, url, url, 0, 0, caption, Author(user.displayName), Instant.now().toString(), status = "processing")
+        val p = Photo(id, url, url, 0, 0, caption, Author(user.displayName), Instant.now().toString(), status = "processing", moderation = ContentModeration("checking"))
         photoUploadedAt[id] = System.currentTimeMillis()
+        if (++photoCount % 3 == 0) photoRejected += id
         photoStore.getOrPut(placeId) { CopyOnWriteArrayList() }.add(p)
         return p
     }
 
     override suspend fun photos(placeId: String): PhotosPage = PhotosPage(photoStore[placeId].orEmpty().map(::settle))
+
+    override suspend fun photo(photoId: String): Photo {
+        latency()
+        return photoStore.values.flatten().firstOrNull { it.id == photoId }?.let(::settle) ?: throw demoProblem(404, ProblemDetails(title = "Not found", status = 404))
+    }
+
+    override suspend fun appealReview(reviewId: String, note: String?) { latency(); if (!appealedContent.add(reviewId)) throw demoProblem(409, ProblemDetails(title = "Already appealed", status = 409)) }
+    override suspend fun appealPhoto(photoId: String, note: String?) { latency(); if (!photoAppealed.add(photoId)) throw demoProblem(409, ProblemDetails(title = "Already appealed", status = 409)) }
 
     // --- Share my drive (demo relay: keeps only the latest ciphertext, like the server) ---
     val demoShares = java.util.concurrent.ConcurrentHashMap<String, MutableList<my.gimano.app.data.share.SealedShare>>()

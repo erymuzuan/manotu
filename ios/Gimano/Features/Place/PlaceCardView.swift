@@ -27,6 +27,7 @@ struct PlaceCardView: View {
     @State private var reviews: [Review] = []
     @State private var reviewsLoaded = false
     @State private var writing = false
+    @State private var quickRating = 0
     @State private var showAllReviews = false
     @State private var showAddPhotos = false
     /// Natural heights of the peek's scrolling top (name, rating, address) and its fixed bottom (Routes, actions).
@@ -39,6 +40,24 @@ struct PlaceCardView: View {
     private var isCommunity: Bool { (place?.source ?? summary.source) == .community }
     private var status: PlaceStatus? { place?.status ?? summary.status }
     private var canReview: Bool { !isPrivate && !isPin }
+    /// alcohol / gambling / tobacco warnings (docs/content-safety.md): the place stays listed and routable.
+    private var warnings: [PlaceWarning] { PlaceWarning.parse(place?.warnings ?? summary.warnings) }
+
+    @ViewBuilder private var warningBanner: some View {
+        if !warnings.isEmpty, !isPrivate {
+            WarningBanner(warnings: warnings, onFlag: flagWarning)
+        }
+    }
+
+    /// "Not right? Tell us": POST /places/{id}/flag {reason: other}.
+    private func flagWarning() {
+        Task {
+            do {
+                try await model.repo.flagPlace(id: summary.id, reason: .other)
+                model.showToast(String(localized: "Thanks, we'll take a look"))
+            } catch { model.showToast(error.localizedDescription) }
+        }
+    }
     private var canSuggest: Bool { !isPrivate && !isPin }
 
     private var stats: RatingSummary {
@@ -87,7 +106,7 @@ struct PlaceCardView: View {
             SuggestEditSheet(placeId: summary.id, current: place, fallback: summary)
         }
         .sheet(isPresented: $writing) {
-            WriteReviewSheet(placeId: summary.id, placeName: summary.name, location: summary.location, existing: myReview) { await reloadReviews() }
+            WriteReviewSheet(placeId: summary.id, placeName: summary.name, location: summary.location, existing: myReview, initialRating: quickRating) { await reloadReviews() }
         }
         .sheet(isPresented: $showAddPhotos) {
             AddPlacePhotosSheet(placeId: summary.id, placeName: summary.name, location: summary.location)
@@ -202,6 +221,7 @@ struct PlaceCardView: View {
                     header
                     metaLine
                     peekBadges
+                    warningBanner
                 }
                 .padding(.horizontal, Tokens.Space.gutter)
                 .padding(.bottom, 12)
@@ -231,6 +251,7 @@ struct PlaceCardView: View {
                 header
                 metaLine
                 peekBadges
+                warningBanner
                 routesButton
                 actions.dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 badgesAndVerify
@@ -567,7 +588,10 @@ struct PlaceCardView: View {
                     .font(Tokens.Font.bodyBold)
                     .accessibilityIdentifier("allReviews")
             }
-            Button { writing = true } label: {
+            if myReview == nil {
+                StarRatingRow { n in quickRating = n; writing = true }
+            }
+            Button { quickRating = 0; writing = true } label: {
                 HStack(spacing: 8) {
                     FlatIconView(icon: .review, size: 22)
                     Text(myReview == nil ? "Write a review" : "Edit your review")

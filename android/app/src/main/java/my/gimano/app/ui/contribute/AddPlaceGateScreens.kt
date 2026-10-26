@@ -170,7 +170,7 @@ private fun categoryLine(p: Place, vararg extra: String?): String =
     (listOf(Labels.category(p.category)) + extra.toList()).filterNot { it.isNullOrBlank() }.joinToString(" · ")
 
 /** "9:40 PM, Mon 26 Oct" in Malaysia time (or the phone's zone). */
-private fun untilText(t: Instant, use24h: Boolean): String {
+internal fun untilText(t: Instant, use24h: Boolean): String {
     val z = t.atZone(ZoneId.systemDefault())
     val today = java.time.LocalDate.now(ZoneId.systemDefault())
     val clock = Formatters.clock(z, use24h)

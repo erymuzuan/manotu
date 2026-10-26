@@ -1,0 +1,152 @@
+@page "/brand-watchlist"
+@rendermode InteractiveServer
+@inherits OwningComponentBase<BrandWatchlistService>
+@using Gimano.Core.Community
+@using Microsoft.AspNetCore.Components.Authorization
+
+<PageTitle>Brand watchlist · Manotu back office</PageTitle>
+
+<header class="page-head">
+    <div>
+        <h1>Brand watchlist</h1>
+        <p>Brand names the content check watches (docs/content-safety.md). Spacing and look-alike tricks (m a r l b o r o, 1xB3t) are undone before matching. A match is sent to the model as context: it decides mention versus promotion. Brand names only, nothing private. Every edit is in the audit log.</p>
+    </div>
+</header>
+
+<Messages Error="@error" Notice="@notice" />
+
+<div class="split">
+    <div class="primary">
+        <section class="card flush" aria-labelledby="list">
+            <h2 id="list">Brands (@brands.Count)</h2>
+            <div style="overflow-x: auto;">
+                <table class="grid" style="min-width: 720px;">
+                    <thead><tr><th scope="col">Brand</th><th scope="col">Group</th><th scope="col">Place</th><th scope="col">Text</th><th scope="col">Updated</th><th scope="col"></th></tr></thead>
+                    <tbody>
+                        @foreach (var b in brands)
+                        {
+                            <tr class="@(b.Enabled ? "" : "muted")">
+                                <td><strong>@b.Name</strong>@if (!string.IsNullOrEmpty(b.Aliases)) { <div class="sub">@b.Aliases</div> }</td>
+                                <td class="small">@Wire(b.Group)</td>
+                                <td class="small">@Wire(b.PlaceMode)</td>
+                                <td class="small">@Wire(b.TextMode)</td>
+                                <td class="small nowrap muted">@Fmt.Short(b.UpdatedAt) · @b.UpdatedBy</td>
+                                <td class="nowrap">
+                                    <button class="btn small" @onclick="() => Edit(b)">Edit</button>
+                                    <button class="btn small @(b.Enabled ? "danger" : "")" @onclick="() => Toggle(b)">@(b.Enabled ? "Disable" : "Enable")</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (brands.Count == 0) { <p class="empty">No brands yet.</p> }
+        </section>
+    </div>
+
+    <aside class="aside">
+        <section class="card stack" style="gap: 12px;" aria-labelledby="edit">
+            <h2 id="edit" style="margin: 0;">@(editing is null ? "Add a brand" : "Edit " + editing.Name)</h2>
+            <label class="field">Name
+                <input @bind="name" maxlength="80" placeholder="Brand name" />
+            </label>
+            <label class="field">Other spellings (comma-separated)
+                <input @bind="aliases" maxlength="400" placeholder="Magnum, Magnum4D" />
+            </label>
+            <label class="field">Group
+                <select @bind="group">
+                    @foreach (var g in Enum.GetValues<BrandGroup>())
+                    {
+                        <option value="@g">@Wire(g)</option>
+                    }
+                </select>
+            </label>
+            <label class="field">In a place's name or description
+                <select @bind="placeMode">
+                    <option value="@BrandPlaceMode.Warn">warn: listed with a warning</option>
+                    <option value="@BrandPlaceMode.Hold">hold: a maintainer decides</option>
+                </select>
+            </label>
+            <label class="field">In a review, note or caption
+                <select @bind="textMode">
+                    <option value="@BrandTextMode.MentionOk">mention_ok: the model decides mention or promotion</option>
+                    <option value="@BrandTextMode.Reject">reject: always refused</option>
+                </select>
+            </label>
+            <label class="check"><input type="checkbox" @bind="enabled" /> Enabled</label>
+            <div>
+                <button class="btn primary" @onclick="Save">@(editing is null ? "Add" : "Save")</button>
+                @if (editing is not null) { <button class="btn" @onclick="Reset">Cancel</button> }
+            </div>
+        </section>
+
+        <section class="card stack" style="gap: 12px;" aria-labelledby="test">
+            <h2 id="test" style="margin: 0;">Test a sentence</h2>
+            <label class="field">Text
+                <textarea @bind="sentence" rows="3" maxlength="500" placeholder="Try: promo m a r l b o r o murah, wasap 012…"></textarea>
+            </label>
+            <button class="btn" @onclick="Test">Check the watchlist</button>
+            @if (tested is not null)
+            {
+                if (tested.Count == 0) { <p class="muted small" style="margin: 0;">No brand matched. The model still checks the whole text.</p> }
+                foreach (var m in tested)
+                {
+                    <p class="small" style="margin: 0;"><strong>@m.Name</strong> · @Wire(m.Group) · place: @Wire(m.PlaceMode) · text: @Wire(m.TextMode)</p>
+                }
+                <p class="muted small" style="margin: 0;">This tests the pre-filter only; the model is not called here.</p>
+            }
+        </section>
+    </aside>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private IReadOnlyList<WatchedBrand> brands = [];
+    private WatchedBrand? editing;
+    private string? name, aliases, sentence, error, notice;
+    private BrandGroup group = BrandGroup.Gambling;
+    private BrandPlaceMode placeMode = BrandPlaceMode.Warn;
+    private BrandTextMode textMode = BrandTextMode.MentionOk;
+    private bool enabled = true;
+    private IReadOnlyList<BrandMatch>? tested;
+
+    private static string Wire<T>(T v) where T : struct, Enum => Gimano.Core.Contracts.GimanoJson.ToWire(v);
+
+    protected override async Task OnInitializedAsync() => brands = await Service.ListAsync();
+
+    private async Task<string> MeAsync() => (await AuthState).User.Identity?.Name ?? throw new UnauthorizedAccessException("Not signed in.");
+
+    private void Edit(WatchedBrand b)
+    {
+        editing = b; name = b.Name; aliases = b.Aliases; group = b.Group; placeMode = b.PlaceMode; textMode = b.TextMode; enabled = b.Enabled;
+    }
+
+    private void Reset()
+    {
+        editing = null; name = aliases = null; group = BrandGroup.Gambling; placeMode = BrandPlaceMode.Warn; textMode = BrandTextMode.MentionOk; enabled = true;
+    }
+
+    private async Task Run(Func<Task> action, string success)
+    {
+        error = notice = null;
+        try { await action(); notice = success; brands = await Service.ListAsync(); }
+        catch (Exception ex) when (ex is Gimano.Core.Contracts.ValidationException or Gimano.Core.Contracts.NotFoundException or Gimano.Core.Contracts.ConflictException) { error = ex.Message; }
+    }
+
+    private async Task Save()
+    {
+        var me = await MeAsync();
+        var id = editing?.Id;
+        await Run(() => Service.SaveAsync(id, name, aliases, group, placeMode, textMode, enabled, me), "Saved.");
+        if (error is null) Reset();
+    }
+
+    private async Task Toggle(WatchedBrand b)
+    {
+        var me = await MeAsync();
+        await Run(() => Service.SaveAsync(b.Id, b.Name, b.Aliases, b.Group, b.PlaceMode, b.TextMode, !b.Enabled, me), b.Enabled ? "Disabled." : "Enabled.");
+    }
+
+    private async Task Test() => tested = await Service.TestAsync(sentence);
+}

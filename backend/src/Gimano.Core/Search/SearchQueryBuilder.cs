@@ -1,3 +1,4 @@
+using Gimano.Core.Community;
 using System.Text.Json.Nodes;
 using Gimano.Core.Contracts;
 using Gimano.Core.Domain;
@@ -287,7 +288,7 @@ public static class SearchQueryBuilder
     });
 
     private static JsonArray SourceFields() =>
-        new("id", "name", "category", "address", "location", "brand", "country", "source", "status", "rating", "reviewCount", "thumbKey", "nameKey", "postcode", "openingHours");
+        new("id", "name", "category", "address", "location", "brand", "country", "source", "status", "rating", "reviewCount", "thumbKey", "nameKey", "postcode", "openingHours", "warnings");
 
     private static JsonArray Filters(SearchQuery q)
     {
@@ -400,6 +401,7 @@ public static class SearchQueryBuilder
                 ["reviewCount"] = new JsonObject { ["type"] = "integer" },
                 ["thumbKey"] = new JsonObject { ["type"] = "keyword", ["index"] = false },
                 ["openingHours"] = new JsonObject { ["type"] = "keyword", ["index"] = false },
+                ["warnings"] = new JsonObject { ["type"] = "keyword", ["index"] = false },
             }
         }
     };
@@ -423,6 +425,7 @@ public static class SearchQueryBuilder
         ["reviewCount"] = agg?.ReviewCount ?? 0,
         ["thumbKey"] = agg?.ThumbKey,
         ["openingHours"] = p.OpeningHours,
+        ["warnings"] = Warnings(PlaceWarnings.FromOsmTags(p.Tags)),
     }, p.Name, p.Brand);
 
     public static JsonObject ToDocument(CommunityPlace p, PlaceAggregates? agg = null) => WithKeys(new JsonObject
@@ -444,7 +447,10 @@ public static class SearchQueryBuilder
         ["reviewCount"] = agg?.ReviewCount ?? 0,
         ["thumbKey"] = agg?.ThumbKey,
         ["openingHours"] = p.OpeningHours,
+        ["warnings"] = Warnings(PlaceWarnings.Merge(PlaceWarnings.Split(p.OwnerWarnings), PlaceWarnings.Split(p.Warnings))),
     }, p.Name, null);
+
+    private static JsonArray? Warnings(IReadOnlyList<string>? w) => w is null ? null : new JsonArray(w.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray());
 
     /// <summary>A named street (one document per street name per ~20–40 km cell), on the road, labelled with its area.</summary>
     public static JsonObject StreetDocument(string id, string name, double lat, double lng, string areaLabel, string country) => WithKeys(new JsonObject
