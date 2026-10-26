@@ -7,22 +7,21 @@ import kotlin.math.sin
 
 /**
  * Hold-to-report (docs/driving.md §6.4, canvas NavLaporTahan / NavLaporPilih / NavLaporHantar), free of Android so it
- * is unit-tested: the fan's geometry and hit-testing, the tap / hold / slide / release gesture, and the Undo window.
+ * is unit-tested: the arc's geometry and hit-testing, the tap / hold / slide / release gesture, and the Undo window.
  *
  * Coordinates are dp relative to the report button's centre, x to the right and y DOWN (screen space). The button sits
- * at the bottom right, so the fan opens up and to the left.
+ * at the bottom right, so the arc opens up and to the left.
  */
 object QuickFan {
     /** One quick action. [angleDeg] is maths-style (0 = right, 90 = up, 180 = left). Colours are ARGB. */
-    data class Slot(val type: String, val outer: Boolean, val angleDeg: Double, val color: Long, val ink: Long) {
-        val radiusDp: Float get() = if (outer) OUTER_RADIUS_DP else INNER_RADIUS_DP
-        val sizeDp: Float get() = if (outer) OUTER_SIZE_DP else INNER_SIZE_DP
+    data class Slot(val type: String, val angleDeg: Double, val color: Long, val ink: Long) {
+        val radiusDp: Float get() = ARC_RADIUS_DP
+        val sizeDp: Float get() = SIZE_DP
     }
 
-    const val INNER_RADIUS_DP = 122f
-    const val OUTER_RADIUS_DP = 228f
-    const val INNER_SIZE_DP = 62f
-    const val OUTER_SIZE_DP = 56f
+    /** All five bubbles sit on one arc (docs/driving.md §6.4, canvas RpHold). */
+    const val ARC_RADIUS_DP = 170f
+    const val SIZE_DP = 60f
     /** The slot under the finger grows to this. */
     const val SELECTED_SIZE_DP = 80f
     /** Inside the button itself nothing is selected (release there = cancel). */
@@ -30,19 +29,16 @@ object QuickFan {
     /** Extra reach round each slot so a moving finger doesn't have to be exact. */
     const val SLOP_DP = 14f
 
-    /** Inner ring: Hazard (amber), Police (blue), Accident (red). Outer: Traffic, Closure, Blocked lane, Weather, Animal. */
+    /** Hazard, Police, Crash, Traffic, Closed: the five most reported, from straight up round to the left. */
     val slots: List<Slot> = listOf(
-        Slot("hazard", false, 90.0, 0xFFF2B01E, 0xFF3A2600),
-        Slot("police", false, 135.0, 0xFF2563EB, 0xFFFFFFFF),
-        Slot("accident", false, 180.0, 0xFFC62828, 0xFFFFFFFF),
-        Slot("traffic", true, 90.0, 0xFFF97316, 0xFF2A1200),
-        Slot("closure", true, 112.5, 0xFF4B5563, 0xFFFFFFFF),
-        Slot("blocked_lane", true, 135.0, 0xFF7C3AED, 0xFFFFFFFF),
-        Slot("weather", true, 157.5, 0xFF0F766E, 0xFFFFFFFF),
-        Slot("animal", true, 180.0, 0xFF4D7C0F, 0xFFFFFFFF),
+        Slot("hazard", 90.0, 0xFFF2B01E, 0xFF3A2600),
+        Slot("police", 112.5, 0xFF2563EB, 0xFFFFFFFF),
+        Slot("accident", 135.0, 0xFFC62828, 0xFFFFFFFF),
+        Slot("traffic", 157.5, 0xFFF97316, 0xFF2A1200),
+        Slot("closure", 180.0, 0xFF4B5563, 0xFFFFFFFF),
     )
 
-    /** "Map issue" stays in the full sheet only. */
+    /** Weather, Animal, Blocked lane and Map issue are in the drawer only. */
     val types: List<String> get() = slots.map { it.type }
 
     fun slot(type: String): Slot? = slots.firstOrNull { it.type == type }
@@ -59,7 +55,7 @@ object QuickFan {
      * At least 0.6: on a very small screen the full sheet is still there.
      */
     fun scaleToFit(roomLeftDp: Float, roomUpDp: Float, marginDp: Float = 8f): Float {
-        val need = OUTER_RADIUS_DP + OUTER_SIZE_DP / 2 + marginDp
+        val need = ARC_RADIUS_DP + SELECTED_SIZE_DP / 2 + marginDp
         return minOf(1f, roomLeftDp / need, roomUpDp / need).coerceAtLeast(0.6f)
     }
 
@@ -78,8 +74,8 @@ object QuickFan {
 }
 
 /**
- * The report button's gesture: tap = the full sheet (as before); hold [holdMs] = the fan; slide = select (each new
- * selection asks for a haptic tick); release on a slot = send it at once; release anywhere else = cancel.
+ * The report button's gesture: tap = the drawer; hold [holdMs] = the fan; slide = select (each new
+ * selection asks for a haptic tick); release on a slot = the detail sheet for it; release anywhere else = cancel.
  */
 class HoldToReport(private val holdMs: Long = HOLD_MS, private val tapSlopDp: Float = TAP_SLOP_DP) {
     sealed interface Effect {
@@ -88,7 +84,8 @@ class HoldToReport(private val holdMs: Long = HOLD_MS, private val tapSlopDp: Fl
         data object FanOpened : Effect
         /** The finger moved onto [slot] (tick + banner), or off every slot (null). */
         data class Selected(val slot: QuickFan.Slot?) : Effect
-        data class Send(val type: String) : Effect
+        /** Released on a bubble: go on to the detail sheet for [type] (nothing is sent yet). */
+        data class Continue(val type: String) : Effect
         data object Cancel : Effect
     }
 
@@ -141,7 +138,7 @@ class HoldToReport(private val holdMs: Long = HOLD_MS, private val tapSlopDp: Fl
         return when (was) {
             Phase.IDLE -> Effect.None
             Phase.PRESSED -> if (nowMs - downMs < holdMs && !moved && hypot(dx, dy) <= tapSlopDp) Effect.OpenSheet else Effect.Cancel
-            Phase.FAN -> sel?.let { Effect.Send(it.type) } ?: Effect.Cancel
+            Phase.FAN -> sel?.let { Effect.Continue(it.type) } ?: Effect.Cancel
         }
     }
 
@@ -207,4 +204,28 @@ class QuickReportSession(val type: String, private val startedMs: Long) {
     }
 
     fun onFailed() { if (state == State.SENDING) state = State.FAILED }
+}
+
+/**
+ * The detail sheet both doors end on (tap drawer, hold arc): the default subtype is picked already and the report
+ * sends itself after [AUTO_SEND_MS] unless the driver touches an option or presses Cancel / Report (docs/driving.md §6.4).
+ */
+object ReportDefaults {
+    const val AUTO_SEND_MS = 3_000L
+
+    /** Subtypes per type, same order as the sheet; the first is the default except Traffic (heavy). */
+    private val subtypes = mapOf(
+        "traffic" to listOf("moderate", "heavy", "standstill"),
+        "police" to listOf("visible", "hidden", "roadblock"),
+        "accident" to listOf("minor", "major", "other_side"),
+        "hazard" to listOf("object_on_road", "pothole", "stopped_vehicle", "roadkill", "construction", "flood", "oil_spill"),
+        "blocked_lane" to listOf("left", "center", "right"),
+        "weather" to listOf("heavy_rain", "fog", "flood", "haze"),
+        "animal" to listOf("on_road", "on_shoulder"),
+    )
+
+    fun defaultSubtype(type: String): String? = if (type == "traffic") "heavy" else subtypes[type]?.first()
+
+    /** Map issue has its own sheet (road problems) and is never sent by a timer. */
+    fun autoSends(type: String): Boolean = type != "map_issue"
 }

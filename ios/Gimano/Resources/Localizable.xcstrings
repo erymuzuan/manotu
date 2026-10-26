@@ -6222,16 +6222,6 @@
         }
       }
     },
-    "Just tap = full list · release outside = cancel" : {
-      "localizations" : {
-        "ms" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ketik sahaja = senarai penuh · lepas di luar = batal"
-          }
-        }
-      }
-    },
     "Kampung" : {
       "localizations" : {
         "ms" : {
@@ -9750,16 +9740,6 @@
         }
       }
     },
-    "Release to report at your position" : {
-      "localizations" : {
-        "ms" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lepas untuk lapor di lokasi anda sekarang"
-          }
-        }
-      }
-    },
     "Remove" : {
       "localizations" : {
         "ms" : {
@@ -11758,16 +11738,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Langkau"
-          }
-        }
-      }
-    },
-    "Slide to an option, release to report" : {
-      "localizations" : {
-        "ms" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Leret ke pilihan, lepas untuk lapor"
           }
         }
       }
@@ -15760,6 +15730,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tamatkan perjalanan anda sebelum membuka tempat yang dikongsi."
+          }
+        }
+      }
+    },
+    "Slide to an option" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leret ke pilihan"
+          }
+        }
+      }
+    },
+    "Let go to continue · slide to ✕ to cancel" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lepas untuk teruskan · leret ke ✕ untuk batal"
+          }
+        }
+      }
+    },
+    "Let go to continue" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lepas untuk teruskan"
+          }
+        }
+      }
+    },
+    "Sends in %lld s · tap an option to choose first" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dihantar dalam %lld s · ketik pilihan untuk memilih dahulu"
+          }
+        }
+      }
+    },
+    "%@ · %@ ahead" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@ di hadapan"
           }
         }
       }

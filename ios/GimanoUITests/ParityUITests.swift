@@ -293,9 +293,9 @@ final class ParityUITests: XCTestCase {
         // Road problem report while driving.
         if app.buttons["reportButton"].exists {
             app.buttons["reportButton"].tap()
-            if app.buttons["reportType.roadProblem"].waitForExistence(timeout: 10) {
+            if app.buttons["reportType.map_issue"].waitForExistence(timeout: 10) {
                 shot("05-report-grid-driving")
-                app.buttons["reportType.roadProblem"].tap()
+                app.buttons["reportType.map_issue"].tap()
                 if app.buttons["roadProblem.road_closed_temp"].waitForExistence(timeout: 5) {
                     app.buttons["roadProblem.road_closed_temp"].tap()
                     if app.buttons["closureDuration.days"].waitForExistence(timeout: 5) { app.buttons["closureDuration.days"].tap() }

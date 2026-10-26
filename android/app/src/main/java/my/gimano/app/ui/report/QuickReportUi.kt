@@ -68,18 +68,18 @@ class QuickFanState {
 }
 
 /**
- * The driving report button (docs/driving.md §6.4): tap = the full sheet as before; hold ~300 ms = the fan of 8
- * quick actions; slide onto one (haptic tick) and release to send it at once; release elsewhere = cancel.
+ * The driving report button (docs/driving.md §6.4): tap = the drawer; hold ~300 ms = the arc of 5
+ * bubbles; slide onto one (haptic tick) and release to go on to its detail sheet; release elsewhere = cancel.
  * TalkBack / Switch Access users get the full sheet on a plain activation (no gesture needed).
  */
 @Composable
-fun HoldReportFab(fan: QuickFanState, onTap: () -> Unit, onSend: (String) -> Unit, modifier: Modifier = Modifier) {
+fun HoldReportFab(fan: QuickFanState, onTap: () -> Unit, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
     val c = Gimano.colors
     val view = LocalView.current
     val density = LocalDensity.current
     val label = stringResource(R.string.report_fab_desc)
     val tap by rememberUpdatedState(onTap)
-    val send by rememberUpdatedState(onSend)
+    val pick by rememberUpdatedState(onPick)
     val statusTopPx = WindowInsets.statusBars.getTop(density)
     Box(
         modifier.size(Sizes.reportFab)
@@ -124,10 +124,10 @@ fun HoldReportFab(fan: QuickFanState, onTap: () -> Unit, onSend: (String) -> Uni
                                 fan.selected = e.slot
                                 if (e.slot != null) view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                             }
-                            is HoldToReport.Effect.Send -> {
+                            is HoldToReport.Effect.Continue -> {
                                 fan.open = false; fan.selected = null
                                 view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                                send(e.type)
+                                pick(e.type)
                             }
                             HoldToReport.Effect.Cancel -> { fan.open = false; fan.selected = null }
                         }
@@ -156,7 +156,7 @@ fun HoldReportFab(fan: QuickFanState, onTap: () -> Unit, onSend: (String) -> Uni
     }
 }
 
-/** The fan over the dimmed map (canvas NavLaporTahan / NavLaporPilih): 8 slots, the top banner, and the close button. */
+/** The arc over the dimmed map (canvas RpHold): 5 bubbles, the top banner, and the close button. */
 @Composable
 fun QuickFanOverlay(fan: QuickFanState) {
     val density = LocalDensity.current
@@ -230,11 +230,11 @@ private fun FanBanner(sel: QuickFan.Slot?, modifier: Modifier) {
 }
 
 /**
- * "Hazard reported · Jalan SS 2/55 · just now" with Details and a 5 s Undo (canvas NavLaporHantar). When the 5 s run
+ * "Hazard reported · Jalan SS 2/55 · just now" with a 5 s Undo (canvas RpSent). When the 5 s run
  * out the card closes and the report stays.
  */
 @Composable
-fun QuickReportSentCard(card: QuickReportCard, onDetails: () -> Unit, onUndo: () -> Unit, onTimeout: () -> Unit, modifier: Modifier = Modifier) {
+fun QuickReportSentCard(card: QuickReportCard, onUndo: () -> Unit, onTimeout: () -> Unit, modifier: Modifier = Modifier) {
     val c = Gimano.colors
     val slot = QuickFan.slot(card.type)
     val color = slot?.let { Color(it.color) } ?: c.report
@@ -256,12 +256,6 @@ fun QuickReportSentCard(card: QuickReportCard, onDetails: () -> Unit, onUndo: ()
             Text(listOfNotNull(card.street?.takeIf { it.isNotBlank() }, stringResource(R.string.qr_just_now)).joinToString(" · "),
                 fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.textMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        Spacer(Modifier.width(8.dp))
-        Box(
-            Modifier.height(48.dp).clip(RoundedCornerShape(14.dp)).border(BorderStroke(2.dp, c.outline), RoundedCornerShape(14.dp))
-                .background(c.surface).clickable(role = Role.Button, onClick = onDetails).padding(horizontal = 12.dp),
-            contentAlignment = Alignment.Center,
-        ) { Text(stringResource(R.string.details), fontSize = 15.sp, fontWeight = FontWeight.Black, color = c.brandInk) }
         Spacer(Modifier.width(8.dp))
         Row(
             Modifier.height(48.dp).clip(RoundedCornerShape(14.dp)).background(c.brand)

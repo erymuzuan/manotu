@@ -126,7 +126,13 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
             val still = ui.stillClosed
             if (still != null && !nav.arrived && alert == null) my.gimano.app.ui.issues.StillClosedCard(still, vm::answerStillClosed,
                 Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
-            AnimatedVisibility(alert != null && !nav.arrived) {
+            // Far: a chip (the voice said it once). Within 150 m before to 100 m after the spot: the question.
+            val asks = alert != null && my.gimano.app.core.nav.LiveAlertsOnRoute.asks(nav.alertDistanceM ?: Double.MAX_VALUE)
+            AnimatedVisibility(alert != null && !asks && !nav.arrived) {
+                if (alert != null) my.gimano.app.ui.report.AlertAheadChip(alert.toReport(), (nav.alertDistanceM ?: 0.0).coerceAtLeast(0.0),
+                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+            }
+            AnimatedVisibility(asks && !nav.arrived) {
                 if (alert != null) {
                     // "Still there?" confirm card (docs/driving.md §6.1): not sure / 10 s timeout = no vote.
                     my.gimano.app.ui.report.StillThereCard(
@@ -136,9 +142,9 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
                     )
                 }
             }
-            // After a hold-to-report: "Hazard reported · street · just now", Details, 5 s Undo (docs/driving.md §6.4).
+            // After a report: "Hazard reported · street · just now" with a 5 s Undo (docs/driving.md §6.4).
             ui.quickReport?.let { q ->
-                my.gimano.app.ui.report.QuickReportSentCard(q, onDetails = vm::quickReportDetails, onUndo = vm::undoQuickReport,
+                my.gimano.app.ui.report.QuickReportSentCard(q, onUndo = vm::undoQuickReport,
                     onTimeout = { vm.closeQuickReport(q.key) }, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
             }
             // Hidden while the trip sheet is expanded so it can't ride up over the sound/End buttons.
@@ -155,7 +161,7 @@ fun NavigationOverlay(nav: NavState, ui: UiState, settings: AppSettings, vm: Mai
                 }
                 Spacer(Modifier.weight(1f))
                 // Tap = the full sheet; hold = the quick fan (docs/driving.md §6.4).
-                my.gimano.app.ui.report.HoldReportFab(fan, onTap = { vm.openReport(true) }, onSend = vm::quickReport)
+                my.gimano.app.ui.report.HoldReportFab(fan, onTap = { vm.openReport(true) }, onPick = vm::openReportType)
             }
             when {
                 nav.arrived -> ArrivedCard(nav, vm)

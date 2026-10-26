@@ -121,6 +121,9 @@ class NavigationController(
     private val batcher = LocationBatcher()
     private val announcedAlerts = HashSet<String>()
     private val dismissedAlerts = HashSet<String>()
+    /** Live reports (reported after this route was calculated) that lie on the road ahead, with their along-route distance. */
+    private var liveOnRoute: List<AlertOnRoute> = emptyList()
+    private var liveReports: List<Report> = emptyList()
     private var lastRequest: RouteRequest? = null
 
     /** Stops of [lastRequest] already reached → `nextStopIndex` for reroutes. */
@@ -154,7 +157,7 @@ class NavigationController(
         tolls = my.gimano.app.core.nav.TollTracker(route, tracker!!.geometry)
         snap.reset(); cameraModes.reset(); cameraModes.setRoute(route, tracker!!.geometry)
         planner = VoicePromptPlanner(mode.wire)
-        offRoute.reset(); announcedAlerts.clear(); dismissedAlerts.clear()
+        offRoute.reset(); announcedAlerts.clear(); dismissedAlerts.clear(); liveOnRoute = emptyList()
         deviation.reset(); lastOnRoute = null; trace.clear()
         _state.value = NavState(active = true, route = route, destination = destination, stops = stops, simulated = simulate, startedAt = Instant.now(), mode = mode, tripId = tripId,
             tollsPaidMyr = tollsCarried, tollsCarriedMyr = tollsCarried)
@@ -165,6 +168,7 @@ class NavigationController(
             voice.speak(ManeuverFormatter.spokenNow(first, lang, mode.wire), lang, flush = true)
         }
         service.start()
+        setLiveAlerts(liveReports)
         job = scope.launch { fixes(route, simulate, mode).collect { onFix(it) } }
     }
 
@@ -236,11 +240,12 @@ class NavigationController(
             }
         }
 
-        val alerts = _state.value.route?.alerts.orEmpty()
+        // Alerts on the route when it was calculated, plus reports made since (matched on the phone, see setLiveAlerts).
+        val alerts = _state.value.route?.alerts.orEmpty() + liveOnRoute.filter { l -> _state.value.route?.alerts.orEmpty().none { it.id == l.id } }
         val ahead = alerts
-            .filter { it.id !in dismissedAlerts }
+            .filter { it.id !in dismissedAlerts && it.subtype != "other_side" }
             .map { it to (it.distanceAlongRouteM - p.distanceAlongM) }
-            .filter { it.second in -60.0..800.0 }
+            .filter { it.second in -my.gimano.app.core.nav.LiveAlertsOnRoute.ASK_AFTER_M..my.gimano.app.core.nav.LiveAlertsOnRoute.ANNOUNCE_M }
             .minByOrNull { it.second }
         if (ahead != null && sound != SoundMode.OFF && announcedAlerts.add(ahead.first.id)) {
             voice.speak(alertPhrase(ahead.first.type, lang), lang)
@@ -380,6 +385,17 @@ class NavigationController(
         } catch (e: Exception) {
             false
         }
+    }
+
+    /**
+     * The live feed's alerts for the map area (AlertCreated / AlertUpdated / AlertExpired): the ones on the road ahead
+     * join this trip, so a crash reported after the route was calculated is announced and asked about too. Matching
+     * is on the phone; the route is never sent to the server.
+     */
+    fun setLiveAlerts(reports: List<Report>) {
+        liveReports = reports
+        val t = tracker ?: run { liveOnRoute = emptyList(); return }
+        liveOnRoute = my.gimano.app.core.nav.LiveAlertsOnRoute.match(t.geometry, reports)
     }
 
     fun dismissAlert(id: String) {

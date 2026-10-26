@@ -12,7 +12,7 @@ object CarRules {
     /** "Masih ada?" alert: 8 s, at most one per 2 km driven. */
     const val STILL_THERE_MS = 8_000L
     const val STILL_THERE_EVERY_M = 2_000.0
-    const val STILL_THERE_WITHIN_M = 800.0
+    const val STILL_THERE_WITHIN_M = 150.0
     const val TOLL_ALERT_MS = 8_000L
 
     /**

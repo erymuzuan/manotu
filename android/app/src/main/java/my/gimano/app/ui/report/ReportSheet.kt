@@ -1,5 +1,6 @@
 package my.gimano.app.ui.report
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -29,7 +30,9 @@ import my.gimano.app.ui.theme.Radius
 import my.gimano.app.ui.theme.ReportColors
 import my.gimano.app.ui.theme.Sizes
 import my.gimano.app.ui.theme.GimanoType
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import my.gimano.app.core.report.ReportDefaults
 
 /** "What do you see?" — 3×3 grid of report types, then one-tap subtypes. */
 @Composable
@@ -67,7 +70,7 @@ fun ReportSheet(
                         val label = stringResource(Labels.shortType(rt))
                         Column(
                             Modifier.clip(RoundedCornerShape(Radius.md)).semantics(mergeDescendants = true) {}.clickable(onClickLabel = label) {
-                                if (Labels.subtypes[rt] == null && rt != "closure" && rt != "map_issue") onSubmit(rt, null, null) else type = rt
+                                type = rt
                             }.padding(vertical = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
@@ -76,7 +79,6 @@ fun ReportSheet(
                         }
                     }
                 }
-                if (onRoadProblem != null) my.gimano.app.ui.issues.RoadProblemGroup { road = it }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
                     IconButton(onClick = { if (initialType != null) onDismiss() else type = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = c.text) }
@@ -85,34 +87,76 @@ fun ReportSheet(
                     Text(stringResource(Labels.reportType(t)), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = c.text)
                 }
                 val subs = Labels.subtypes[t].orEmpty()
-                if (subs.isNotEmpty()) {
-                    LazyVerticalGrid(
-                        GridCells.Fixed(2), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.heightIn(max = 420.dp),
-                    ) {
-                        items(subs) { (sub, label) ->
-                            Button(
-                                onClick = { onSubmit(t, sub, null) },
-                                modifier = Modifier.fillMaxWidth().height(64.dp),
-                                shape = RoundedCornerShape(Radius.md),
-                                colors = ButtonDefaults.buttonColors(containerColor = ReportColors.duotone(t).tile, contentColor = ReportColors.duotone(t).stroke),
-                            ) { Text(stringResource(label), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center) }
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
+                if (t == "map_issue" && onRoadProblem != null) {
+                    // Map issue and the road problems: their own sheet, never sent by a timer.
+                    my.gimano.app.ui.issues.RoadProblemGroup { road = it }
                 } else {
-                    OutlinedTextField(
-                        comment, { comment = it }, Modifier.fillMaxWidth(),
-                        placeholder = { Text(stringResource(R.string.comment_hint)) }, minLines = 2, maxLines = 4,
-                        shape = RoundedCornerShape(Radius.md),
-                    )
-                    Spacer(Modifier.height(12.dp))
+                    DetailBody(t, subs, comment, { comment = it }, onSubmit, onDismiss = { if (initialType != null) onDismiss() else type = null })
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The sheet both doors end on (docs/driving.md §6.4, canvas RpDetail): the default subtype is picked, and Report sends
+ * itself after [ReportDefaults.AUTO_SEND_MS] (the button fills as it runs). Touching an option or the comment stops the
+ * timer; Cancel closes without sending.
+ */
+@Composable
+private fun DetailBody(
+    t: String, subs: List<Pair<String, Int>>, comment: String, onComment: (String) -> Unit,
+    onSubmit: (String, String?, String?) -> Unit, onDismiss: () -> Unit,
+) {
+    val c = Gimano.colors
+    var picked by remember(t) { mutableStateOf(ReportDefaults.defaultSubtype(t)) }
+    var timerOn by remember(t) { mutableStateOf(ReportDefaults.autoSends(t) && comment.isBlank()) }
+    val fill = remember(t) { androidx.compose.animation.core.Animatable(0f) }
+    val send by rememberUpdatedState { onSubmit(t, picked, comment.takeIf { it.isNotBlank() }) }
+    LaunchedEffect(timerOn) {
+        if (!timerOn) { fill.snapTo(0f); return@LaunchedEffect }
+        fill.animateTo(1f, androidx.compose.animation.core.tween(ReportDefaults.AUTO_SEND_MS.toInt(), easing = androidx.compose.animation.core.LinearEasing))
+        send()
+    }
+    if (subs.isNotEmpty()) {
+        LazyVerticalGrid(
+            GridCells.Fixed(2), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.heightIn(max = 420.dp),
+        ) {
+            items(subs) { (sub, label) ->
+                val on = picked == sub
+                val tone = ReportColors.duotone(t)
                 Button(
-                    onClick = { onSubmit(t, null, comment) },
-                    modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(Radius.md),
-                    colors = ButtonDefaults.buttonColors(containerColor = c.report, contentColor = c.reportOn),
-                ) { Text(stringResource(R.string.send), fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+                    onClick = { picked = sub; timerOn = false },
+                    modifier = Modifier.fillMaxWidth().height(64.dp),
+                    shape = RoundedCornerShape(Radius.md),
+                    border = if (on) androidx.compose.foundation.BorderStroke(3.dp, tone.stroke) else null,
+                    colors = ButtonDefaults.buttonColors(containerColor = if (on) tone.tile else c.surfaceAlt, contentColor = if (on) tone.stroke else c.text),
+                ) { Text(stringResource(label), fontSize = 16.sp, fontWeight = if (on) FontWeight.Black else FontWeight.SemiBold, textAlign = TextAlign.Center) }
+            }
+        }
+    } else {
+        OutlinedTextField(
+            comment, { onComment(it); timerOn = false }, Modifier.fillMaxWidth(),
+            placeholder = { Text(stringResource(R.string.comment_hint)) }, minLines = 2, maxLines = 4,
+            shape = RoundedCornerShape(Radius.md),
+        )
+    }
+    if (timerOn) {
+        val secs = (ReportDefaults.AUTO_SEND_MS / 1000 * (1f - fill.value)).let { kotlin.math.ceil(it).toInt().coerceAtLeast(1) }
+        Text(stringResource(R.string.report_sends_in, secs), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.textMuted,
+            modifier = Modifier.padding(top = 10.dp).semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
+    }
+    Spacer(Modifier.height(12.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(56.dp), shape = RoundedCornerShape(Radius.md)) {
+            Text(stringResource(R.string.cancel), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Box(Modifier.weight(1.4f).height(56.dp).clip(RoundedCornerShape(Radius.md)).background(c.report)) {
+            // The sweep shows the time left before it sends itself.
+            if (timerOn) Box(Modifier.fillMaxHeight().fillMaxWidth(fill.value).background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.22f)))
+            TextButton(onClick = { send() }, modifier = Modifier.fillMaxSize(), colors = ButtonDefaults.textButtonColors(contentColor = c.reportOn)) {
+                Text(stringResource(R.string.report_action), fontSize = 17.sp, fontWeight = FontWeight.Black)
             }
         }
     }

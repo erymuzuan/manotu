@@ -1,7 +1,7 @@
 import XCTest
 
-/// Hold-to-report (docs/driving.md §6.4) in a simulated drive. Simulator only (gestures). The live test sends a real
-/// quick report to the dev API and withdraws it with Undo, checking `/live` before and after.
+/// Reporting while driving (docs/driving.md §6.4) in a simulated drive: tap = drawer, hold = arc of 5, both end on the
+/// detail sheet. Simulator only (gestures). The live test sends a real report to the dev API and withdraws it with Undo, checking `/live` before and after.
 /// Environment: GIMANO_LANG (en|ms), GIMANO_DATA_MODE (default live = dev server).
 final class QuickReportUITests: XCTestCase {
     var app: XCUIApplication!
@@ -73,26 +73,32 @@ final class QuickReportUITests: XCTestCase {
         return ids
     }
 
-    func test_1_TapOpensFullSheet() {
+    func test_1_TapOpensDrawer() {
         launch()
         startDrive()
         wait(app.descendants(matching: .any).matching(identifier: "reportButton").firstMatch).tap()
-        XCTAssertTrue(app.buttons["reportType.hazard"].waitForExistence(timeout: 5), "tap = the full report sheet")
-        XCTAssertTrue(app.buttons["reportType.map_issue"].exists, "Map issue stays in the full sheet")
-        shot("1-tap-full-sheet")
+        XCTAssertTrue(app.buttons["reportType.hazard"].waitForExistence(timeout: 5), "tap = the drawer")
+        XCTAssertTrue(app.buttons["reportType.map_issue"].exists, "Map issue is a drawer tile")
+        app.buttons["reportType.accident"].tap()
+        XCTAssertTrue(app.buttons["reportSubtype.minor"].waitForExistence(timeout: 5), "the detail sheet, default picked")
+        XCTAssertTrue(app.staticTexts["reportSendsIn"].exists || app.buttons["sendReport"].exists)
+        shot("1-tap-drawer-detail")
+        app.buttons["cancelReport"].tap()                  // Cancel: nothing sent
+        sleep(1)
+        XCTAssertEqual(log, "", "nothing sent")
     }
 
-    func test_2_FanScreens() {
+    func test_2_ArcScreens() {
         launch(["-GimanoQuickFan", "open"])
         startDrive()
         XCTAssertTrue(app.otherElements["quickFanBanner"].waitForExistence(timeout: 15) || app.staticTexts.count > 0)
         sleep(5)
-        shot("2-fan-open")
+        shot("2-arc-open")
         app.terminate()
         launch(["-GimanoQuickFan", "hazard"])
         startDrive()
         sleep(6)
-        shot("3-fan-hazard-selected")
+        shot("3-arc-hazard-selected")
         app.terminate()
         launch(["-GimanoQuickReportCard", "hazard"])
         startDrive()
@@ -107,7 +113,7 @@ final class QuickReportUITests: XCTestCase {
         holdAndSlide(dx: -60, dy: 60)            // below-left of the button: no bubble there
         sleep(2)
         XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "quickReportCard").firstMatch.exists)
-        XCTAssertFalse(app.buttons["reportType.hazard"].exists, "a hold never opens the full sheet")
+        XCTAssertFalse(app.buttons["reportType.hazard"].exists, "a cancelled hold never opens the drawer")
         XCTAssertEqual(log, "", "nothing sent")
         // A hold released back on the button: cancelled too.
         holdAndSlide(dx: 0, dy: 0)
@@ -121,7 +127,9 @@ final class QuickReportUITests: XCTestCase {
         launch()
         startDrive()
         sleep(3)
-        holdAndSlide(dx: 0, dy: -122)            // Hazard, straight up on the inner ring
+        holdAndSlide(dx: 0, dy: -170)            // Hazard, straight up on the arc
+        // Release opens its detail sheet (default picked); Report sends it (or it sends itself after 3 s).
+        wait(app.buttons["sendReport"], 10).tap()
         agreeIfAsked()
         let card = app.descendants(matching: .any).matching(identifier: "quickReportCard").firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 10), "sent card")

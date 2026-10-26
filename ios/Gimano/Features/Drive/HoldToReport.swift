@@ -9,13 +9,13 @@ struct QuickFanState: Equatable {
     var center: CGPoint = .zero
 }
 
-/// Report button while driving (docs/driving.md §6.4, board NavDilalui): tap = the full report sheet, as before;
-/// hold ~300 ms = the fan of 8 quick actions; slide onto one and release to send it at once; release elsewhere cancels.
-/// VoiceOver: the button's action opens the full sheet (the fan needs no gesture to be reachable).
+/// Report button while driving (docs/driving.md §6.4, boards RpDrawer / RpHold): tap = the drawer of 9 tiles;
+/// hold ~300 ms = the arc of 5 bubbles; slide onto one and release to go on to its detail sheet; release elsewhere cancels.
+/// VoiceOver: the button's action opens the drawer (the arc needs no gesture to be reachable).
 struct HoldReportButton: View {
     @Binding var fan: QuickFanState
     let onTap: () -> Void
-    let onSend: (ReportType) -> Void
+    let onPick: (ReportType) -> Void
 
     @State private var pressStart: Date?
     @State private var holdTask: Task<Void, Never>?
@@ -71,7 +71,7 @@ struct HoldReportButton: View {
             withAnimation(.snappy(duration: 0.2)) { fan.isOpen = false; fan.selected = nil }
             if let chosen {
                 UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                onSend(chosen)
+                onPick(chosen)
             }
         } else if hypot(v.translation.width, v.translation.height) < 20 {
             onTap()
@@ -91,7 +91,7 @@ struct HoldReportButton: View {
     }
 }
 
-/// The open fan (boards NavLaporTahan / NavLaporPilih): dimmed map, the top banner, 8 coloured bubbles around the
+/// The open arc (board RpHold): dimmed map, the top banner, 5 coloured bubbles on one arc round the
 /// button and a dark close button in its place. Drawn by DriveView over everything; it takes no touches itself (the
 /// finger is still on the report button's gesture).
 struct QuickFanOverlay: View {
@@ -127,10 +127,10 @@ struct QuickFanOverlay: View {
         return VStack(alignment: .leading, spacing: 2) {
             if let sel {
                 Text(sel.fanTitle).font(Tokens.Font.nunito(22, .black))
-                Text("Release to report at your position").font(Tokens.Font.nunito(14, .bold)).opacity(0.9)
+                Text("Let go to continue").font(Tokens.Font.nunito(14, .bold)).opacity(0.9)
             } else {
-                Text("Slide to an option, release to report").font(Tokens.Font.nunito(22, .black))
-                Text("Just tap = full list · release outside = cancel").font(Tokens.Font.nunito(14, .bold)).opacity(0.9)
+                Text("Slide to an option").font(Tokens.Font.nunito(22, .black))
+                Text("Let go to continue · slide to ✕ to cancel").font(Tokens.Font.nunito(14, .bold)).opacity(0.9)
             }
         }
         .foregroundStyle(colors.map { Color(uiColor: UIColor(hex: $0.ink)) } ?? .white)
@@ -168,7 +168,7 @@ struct QuickFanOverlay: View {
     }
 }
 
-/// "Hazard reported · Jalan SS 2/55 · just now" with Details and Undo (5 s ring), board NavLaporHantar.
+/// "Hazard reported · Jalan SS 2/55 · just now" with Undo (5 s ring), board RpSent.
 struct QuickReportCard: View {
     @Environment(AppModel.self) private var model
     let q: QuickReportUndo
@@ -195,17 +195,6 @@ struct QuickReportCard: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
-                Button { model.openQuickReportDetails() } label: {
-                    Text("Details").font(Tokens.Font.nunito(15, .black))
-                        .lineLimit(1).fixedSize()
-                        .foregroundStyle(Color.brandInk)
-                        .padding(.horizontal, 12).frame(minHeight: 48)
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.outline, lineWidth: 2))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(q.reportId == nil)
-                .accessibilityIdentifier("quickReportDetails")
                 Button { model.undoQuickReport() } label: {
                     HStack(spacing: 6) {
                         ZStack {
@@ -243,37 +232,8 @@ struct QuickReportCard: View {
     }
 }
 
-/// Details on the card: the subtypes of the report just sent (optional).
-struct QuickReportDetailsSheet: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
-    let q: QuickReportUndo
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: Tokens.Space.gridGap), count: 3)
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(q.type.title).font(Tokens.Font.title)
-            if q.type.subtypes.isEmpty {
-                Text("Nothing more to add for this report.").font(Tokens.Font.body).foregroundStyle(Color.textMuted)
-            }
-            LazyVGrid(columns: columns, spacing: Tokens.Space.gridGap + 4) {
-                ForEach(q.type.subtypes) { s in
-                    Button { model.setQuickReportSubtype(s.id); dismiss() } label: {
-                        ReportTile(icon: q.type.gIcon, title: s.title, type: q.type, badge: s.systemImage)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("\(String(localized: q.type.title)): \(String(localized: s.title))"))
-                    .accessibilityIdentifier("quickSubtype.\(s.id)")
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(20)
-    }
-}
-
 extension ReportType {
-    /// Label on the fan and the sent card: the inner ring's full names, the outer ring's short ones.
+    /// Label on the arc and the sent card: Hazard, Police, Crash keep their full names, the rest their short ones.
     var fanTitle: LocalizedStringResource {
         switch self {
         case .hazard, .police, .accident: title

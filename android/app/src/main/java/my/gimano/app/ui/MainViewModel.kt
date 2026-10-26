@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -337,6 +338,10 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
             }
         }
         viewModelScope.launch { c.liveHub.events.collect(::onLiveEvent) }
+        // A crash reported after the route was calculated still reaches this trip (matched on the phone only).
+        viewModelScope.launch {
+            _ui.map { it.alerts }.distinctUntilChanged().collect { list -> c.navigation.setLiveAlerts(list.filterNot { it.id in ownReportIds }) }
+        }
         viewModelScope.launch {
             c.navigation.state.collect { s ->
                 // Arrived at an unnamed pin → "Nak namakan tempat ini?" once.
@@ -598,35 +603,30 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         _ui.update { it.copy(reportOpen = open) }
     }
 
+    /** Both doors (tap drawer, hold arc) end here: the detail sheet's Report, or its 3 s auto-send. */
     fun submitReport(type: String, subtype: String?, comment: String?) {
-        val fix = nav.value.fix ?: _ui.value.myLocation
-        // A report is about where the user is: never place it at the map centre.
-        val p = myFreshLocation() ?: run { _ui.update { it.copy(reportOpen = false) }; _events.tryEmit(UiEvent.Toast(R.string.report_needs_location)); return }
-        _ui.update { it.copy(reportOpen = false) }
-        // docs/safety.md §4: inside a restricted area (≤ blockM) a road report is never sent.
-        if (reportRefusedHere(p)) return
-        viewModelScope.launch {
-            runCatching { repo.createReport(CreateReportRequest(type, subtype, p.lat, p.lng, fix?.bearing?.toDouble(), comment?.takeIf { it.isNotBlank() })) }
-                .onSuccess { r ->
-                    runCatching { my.gimano.app.data.places.ContributionLog(c.db.outbox()).report(r.id, r.type) }
-                    _ui.update { s -> s.copy(alerts = s.alerts.filterNot { it.id == r.id } + r) }
-                    _events.tryEmit(UiEvent.Toast(R.string.report_sent))
-                }
-                .onFailure { e -> _events.tryEmit(reportError(e)) }
-        }
+        _ui.update { it.copy(reportOpen = false, quickDetails = null) }
+        sendReport(type, subtype, comment)
     }
 
-    // --- Hold-to-report (docs/driving.md §6.4) ---------------------------------------------------------
+    // --- Reporting (docs/driving.md §6.4) ---------------------------------------------------------
 
     private var quickSession: my.gimano.app.core.report.QuickReportSession? = null
     private var quickAt: Pair<GeoPoint, Double?>? = null
     private var quickKey = 0L
 
-    /** Released on a fan slot: sent at once at the current position with the default subtype. */
-    fun quickReport(type: String) {
-        if (!termsOk { quickReport(type) }) return
+    /** Released on an arc bubble: the detail sheet for that type (default subtype picked, auto-send in 3 s). */
+    fun openReportType(type: String) {
+        if (!termsOk { openReportType(type) }) return
+        _ui.update { it.copy(reportOpen = false, quickDetails = type) }
+    }
+
+    /** Sends at the current position and raises the "reported" card with Undo (5 s). */
+    private fun sendReport(type: String, subtype: String?, comment: String?) {
+        if (!termsOk { sendReport(type, subtype, comment) }) return
         val fix = nav.value.fix ?: _ui.value.myLocation
         val p = myFreshLocation() ?: run { _events.tryEmit(UiEvent.Toast(R.string.report_needs_location)); return }
+        // docs/safety.md §4: inside a restricted area (≤ blockM) a road report is never sent.
         if (reportRefusedHere(p)) return
         val now = android.os.SystemClock.elapsedRealtime()
         val session = my.gimano.app.core.report.QuickReportSession(type, now)
@@ -635,9 +635,10 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
         val key = ++quickKey
         _ui.update { it.copy(quickReport = QuickReportCard(key, type, null, now)) }
         viewModelScope.launch {
-            runCatching { repo.createReport(CreateReportRequest(type, null, p.lat, p.lng, fix?.bearing?.toDouble(), null)) }
+            runCatching { repo.createReport(CreateReportRequest(type, subtype, p.lat, p.lng, fix?.bearing?.toDouble(), comment?.takeIf { it.isNotBlank() })) }
                 .onSuccess { r ->
                     runCatching { my.gimano.app.data.places.ContributionLog(c.db.outbox()).report(r.id, r.type) }
+                    ownReportIds += r.id
                     when (val a = session.onSent(r.id)) {
                         is my.gimano.app.core.report.QuickReportSession.Action.Delete -> retractQuick(a.reportId, toast = false)
                         else -> _ui.update { s ->
@@ -645,6 +646,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                                 quickReport = s.quickReport?.let { q -> if (q.key == key) q.copy(street = r.street, sent = true) else q })
                         }
                     }
+                    if (!nav.value.active) _events.tryEmit(UiEvent.Toast(R.string.report_sent))
                 }
                 .onFailure { e ->
                     session.onFailed()
@@ -653,6 +655,9 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                 }
         }
     }
+
+    /** Reports this phone sent: never asked "still there?" about its own. */
+    private val ownReportIds = HashSet<String>()
 
     /** Undo on the card: deletes the report on the server, or cancels it while it is still being sent. */
     fun undoQuickReport() {
@@ -679,39 +684,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
     /** The card's 5 s ran out: the report stays. */
     fun closeQuickReport(key: Long) = _ui.update { s -> s.copy(quickReport = s.quickReport?.takeUnless { it.key == key }) }
 
-    /** "Details": the subtype sheet for that report. */
-    fun quickReportDetails() {
-        val card = _ui.value.quickReport ?: return
-        _ui.update { it.copy(quickReport = null, quickDetails = card.type) }
-    }
-
     fun closeQuickDetails() = _ui.update { it.copy(quickDetails = null) }
-
-    /**
-     * A subtype (or comment) picked in Details: the quick report is replaced by one with that detail, at the same
-     * place (there is no PATCH: it is undone within the server's 2 min window, then sent again).
-     */
-    fun refineQuickReport(type: String, subtype: String?, comment: String?) {
-        _ui.update { it.copy(quickDetails = null) }
-        val session = quickSession ?: return
-        val (p, heading) = quickAt ?: return
-        if (subtype == null && comment.isNullOrBlank()) return
-        val old = session.reportId
-        // Still being sent: the quick one is deleted as soon as the server answers (onSent), this one replaces it.
-        if (old == null) session.undo(android.os.SystemClock.elapsedRealtime())
-        viewModelScope.launch {
-            if (old != null && session.state != my.gimano.app.core.report.QuickReportSession.State.UNDONE) {
-                if (runCatching { repo.deleteReport(old) }.isFailure) { _events.tryEmit(UiEvent.Toast(R.string.report_failed)); return@launch }
-                _ui.update { s -> s.copy(alerts = s.alerts.filterNot { it.id == old }) }
-            }
-            runCatching { repo.createReport(CreateReportRequest(type, subtype, p.lat, p.lng, heading, comment?.takeIf { it.isNotBlank() })) }
-                .onSuccess { r ->
-                    _ui.update { s -> s.copy(alerts = s.alerts.filterNot { it.id == r.id } + r) }
-                    _events.tryEmit(UiEvent.Toast(R.string.report_sent))
-                }
-                .onFailure { e -> _events.tryEmit(reportError(e)) }
-        }
-    }
 
     /** Restricted area (the server's own words), rate limit (429), or a plain failure. */
     private fun reportError(e: Throwable): UiEvent = when {

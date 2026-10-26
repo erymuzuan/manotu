@@ -142,17 +142,40 @@ S24 drive: the "Still closed?" buttons were cut off, and the sound button toggle
 - After a reroute, only the new route shows (the old one, travelled or not, is removed).
 - Traffic colours apply only to the part ahead.
 
-### 6.4 Hold-to-report
+### 6.4 Reporting while driving: tap drawer, hold arc, one detail sheet
 
-- **Tap** the report button: opens the full report sheet, as today.
-- **Hold** it (~300 ms): 8 coloured quick actions fan out around the button.
-  - Inner ring: Hazard (amber), Police (blue), Accident (red).
-  - Outer ring: Traffic (orange), Closure (grey), Blocked lane (purple), Weather (teal), Animal (green).
-- **Slide** onto one: it grows, its label shows in a banner at the top ("Hazard · release to report at your position"),
-  and the phone gives a haptic tick. **Release** on it to send at once at the current position (default subtype);
-  **release outside** to cancel. "Map issue" stays in the full sheet only.
-- After sending: a card "Hazard reported · Jalan SS 2/55 · just now" with **Details** (opens the subtype sheet for
-  that report, optional) and **Undo** for **5 s** (Undo deletes the report on the server, or cancels it if not yet sent).
+Redesigned 26 Oct 2026 (owner-approved; canvas page **Driving**, row "Reporting while driving, redesigned 26 Oct",
+boards RpFlow, RpDrawer, RpDetail, RpHold, RpSent, RpAhead1, RpAhead2). It replaces the 8-bubble fan that sent at once.
+Two ways in, one ending, so a tap and a hold no longer behave differently.
+
+- **Tap** the report button: the **drawer** "What do you see?", 9 tiles: Traffic, Police, Crash, Hazard, Closed, Lane,
+  Map issue, Weather, Animal. Pick one: the **detail sheet**.
+- **Hold** (~300 ms): **5 bubbles on one arc** up and left of the button: Hazard, Police, Crash, Traffic, Closed.
+  **Slide** onto one: it grows, haptic tick, banner shows its name ("Let go to continue · slide to ✕ to cancel").
+  **Let go** on it: the detail sheet. Let go anywhere else, or on ✕: cancel. Weather, Animal, Lane and Map issue are
+  in the drawer only.
+- **Detail sheet** (both doors end here): the type's subtypes with the **default already picked** (Traffic: heavy;
+  others: the first; Closed has none), **Cancel** and **Report**. It **sends itself after 3 s** (the Report button fills
+  as the timer runs, "Sends in 3 s · tap an option to choose first"); touching an option or typing stops the timer.
+  **Map issue** has its own sheet (road problems) and never auto-sends.
+- After sending: the card "Crash reported · Jalan SS 2/55 · just now" with **Undo** for **5 s** (Undo deletes the
+  report on the server, or cancels it if not yet sent). There is no Details button any more: the choice was made
+  before sending.
 - The existing rules still apply: restricted areas refuse reports (docs/safety.md), rate limits, signed requests.
-- Accessibility: the fan is also reachable without a gesture (the full sheet); VoiceOver/TalkBack users get the sheet
-  on tap.
+- Accessibility: TalkBack/VoiceOver users get the drawer on a plain activation (no gesture needed).
+- Android Auto / CarPlay: no hold; the report grid sends the chosen type at once with its default subtype.
+
+#### Getting a report to the next driver ("is it still there?")
+
+- Server (unchanged): a report is stored, merged with the same type within 150 m and 45° of heading, broadcast on the
+  live feed (AlertCreated / AlertUpdated / AlertExpired) and expires by type (Crash/Hazard 60 min, Police/Animal
+  30 min, Traffic 20 min, Weather 120 min, Closure 24 h, Blocked lane 60 min); "still there" extends it, two "not
+  there" votes remove it.
+- Phone (new): `route.alerts` is only a snapshot from when the route was calculated, so a crash reported after the
+  driver set off was never announced. The phone already listens to the live feed for its map area; it now **matches
+  those alerts to its own road ahead on the device** (within 40 m of the route line, not facing the other way, never
+  `other_side`) and adds them to the trip. Reports this phone sent are never asked about. **The server never learns
+  the route.**
+- Driver: voice once and a chip "Crash · 1 km ahead" from **1 km**; the **"Still there?" card from 150 m before to
+  100 m after** the spot (10 s ring; no answer = no vote); Still there / Gone / Not sure extend or expire the alert as
+  in §6.1. The car uses the same trigger (150 m, at most one per 2 km).

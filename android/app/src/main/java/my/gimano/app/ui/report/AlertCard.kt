@@ -66,6 +66,23 @@ fun StillThereCard(report: Report, distanceAheadM: Double?, onAnswer: (Boolean?)
 }
 
 /**
+ * "Crash ahead · 1 km" while the spot is still far (docs/driving.md §6.1): the voice said it once, the question comes
+ * later, inside [my.gimano.app.core.nav.LiveAlertsOnRoute.ASK_BEFORE_M].
+ */
+@Composable
+fun AlertAheadChip(report: Report, distanceAheadM: Double, modifier: Modifier = Modifier) {
+    val c = Gimano.colors
+    val text = stringResource(Labels.reportType(report.type)) + " · " + stringResource(R.string.ahead, Formatters.navDistance(distanceAheadM))
+    FloatingSurface(modifier, RoundedCornerShape(Radius.lg)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            ReportTile(report.type, 36.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(text, fontSize = 17.sp, fontWeight = FontWeight.Black, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/**
  * "Still there? / Not there" card for a community report. Shows age, reporter, distance and a
  * shrinking bar for the remaining TTL.
  */

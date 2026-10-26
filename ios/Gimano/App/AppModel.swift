@@ -926,6 +926,8 @@ final class AppModel {
     /// Pushes live data into the map (called when the live store changes).
     func syncLiveLayers() {
         map.alerts = Array(live.alerts.values)
+        // A crash reported after the route was calculated still reaches this trip (matched on the phone only).
+        navigation?.setLiveAlerts(live.alerts.values.filter { !ownReportIds.contains($0.id) })
         map.jams = live.jams.values.map { JamLine(id: $0.id, level: $0.level, points: Polyline.decode($0.polyline)) }
         map.drivers = screen == .navigating ? [] : live.drivers
     }
@@ -1293,6 +1295,7 @@ final class AppModel {
         #endif
         let session = NavigationSession(destination: planner.destination, route: route, stops: planner.stops, vehicle: planner.vehicle,
                                         avoid: planner.avoid, repo: repo, voice: voice)
+        session.setLiveAlerts(live.alerts.values.filter { !ownReportIds.contains($0.id) })
         Task {
             await loadTripIssues(for: route)
             #if DEBUG
@@ -1855,42 +1858,32 @@ final class AppModel {
         return nil
     }
 
+    /// Both doors (tap drawer, hold arc) end here: the detail sheet's Report, or its 3 s auto-send.
     func submitReport(type: ReportType, subtype: String?, comment: String?) {
-        guard let position = reportPosition else {
-            showToast(String(localized: "Waiting for your location. Try again in a moment."))
-            return
-        }
-        let new = NewReport(type: type, subtype: subtype, lat: position.lat, lng: position.lng,
-                            heading: heading, comment: comment?.isEmpty == true ? nil : comment)
         showReport = false
-        if refuseReportInRestrictedArea(position) { return }
-        Task {
-            guard await ensureRulesAccepted() else { return }
-            do {
-                let r = try await repo.createReport(new)
-                live.upsert(r)
-                syncLiveLayers()
-                showToast(isDemo ? String(localized: "Demo mode: kept on this phone, not sent") : String(localized: "Thanks! Your report is live."))
-            } catch let e as APIError where e.isRestrictedArea {
-                showToast(e.localizedDescription)
-            } catch {
-                showToast(String(localized: "Couldn't send report"))
-            }
-        }
+        sendReport(type, subtype: subtype, comment: comment)
     }
 
-    // MARK: hold-to-report (docs/driving.md §6.4)
+    /// Released on an arc bubble: the detail sheet for that type (default subtype picked, auto-send in 3 s).
+    func openReportType(_ type: ReportType) {
+        reportInitialType = type
+        showReport = true
+    }
+
+    // MARK: reporting (docs/driving.md §6.4)
 
     /// The "Hazard reported · street · just now" card with Undo (5 s) after a quick report from the fan.
     var quickReport: QuickReportUndo?
-    /// Details on that card: the subtype sheet for the report just sent.
-    var quickReportDetails: QuickReportUndo?
+    /// Set by the hold arc: the report sheet opens straight on this type's detail sheet.
+    var reportInitialType: ReportType?
+    /// Reports this phone sent: never asked "still there?" about its own.
+    @ObservationIgnored private var ownReportIds: Set<String> = []
     @ObservationIgnored private var quickReportCloseTask: Task<Void, Never>?
     /// UI tests: "sent=<id>" / "withdrawn=<id>" / "replaced=<id>" for the last quick report (public report ids only).
     var quickReportLog = ""
 
     #if DEBUG
-    /// `-GimanoQuickReportCard`: a sample card that stays up (screenshots); Undo/Details on it send nothing.
+    /// `-GimanoQuickReportCard`: a sample card that stays up (screenshots); Undo on it sends nothing.
     func debugShowQuickReportCard(_ t: ReportType) {
         var q = QuickReportUndo(type: t, position: position, startedAt: .now.addingTimeInterval(-1.5))
         _ = q.sent(id: "debug-quick")
@@ -1899,15 +1892,15 @@ final class AppModel {
     }
     #endif
 
-    /// Released on a fan bubble: send at once at the current position (no subtype). The same rules as the sheet apply:
-    /// a fresh fix, restricted areas refused, community rules, rate limits and signing (server side).
-    func sendQuickReport(_ type: ReportType) {
+    /// Sends at the current position and raises the "reported" card with Undo (5 s). Rules: a fresh fix, restricted
+    /// areas refused, community rules, rate limits and signing (server side).
+    func sendReport(_ type: ReportType, subtype: String?, comment: String?) {
         guard let position = reportPosition else {
             showToast(String(localized: "Waiting for your location. Try again in a moment."))
             return
         }
         if refuseReportInRestrictedArea(position) { return }
-        let new = QuickReportFan.newReport(type, at: position, heading: heading)
+        let new = QuickReportFan.newReport(type, subtype: subtype, comment: comment, at: position, heading: heading)
         Task {
             guard await ensureRulesAccepted() else { return }
             let card = QuickReportUndo(type: type, position: position, startedAt: .now)
@@ -1916,6 +1909,8 @@ final class AppModel {
             do {
                 let r = try await repo.createReport(new)
                 quickReportLog = "sent=\(r.id)"
+                ownReportIds.insert(r.id)
+                if screen != .navigating { showToast(isDemo ? String(localized: "Demo mode: kept on this phone, not sent") : String(localized: "Thanks! Your report is live.")) }
                 if quickReport?.startedAt == card.startedAt {
                     let action = quickReport!.sent(id: r.id)
                     quickReport?.street = r.street
@@ -1973,36 +1968,6 @@ final class AppModel {
                 if !quiet { showToast(String(localized: "Report withdrawn")) }
             } catch {
                 showToast(String(localized: "Couldn't undo the report"))
-            }
-        }
-    }
-
-    /// Details on the card: pick a subtype for the report just sent.
-    func openQuickReportDetails() {
-        guard let q = quickReport, q.reportId != nil, !q.isUndone else { return }
-        quickReportCloseTask?.cancel()
-        quickReport = nil
-        quickReportDetails = q
-    }
-
-    /// A subtype chosen in Details: the quick report is replaced by one with that subtype at the same spot (there is no
-    /// PATCH for reports; the replacement happens within the 2 min undo window).
-    func setQuickReportSubtype(_ subtype: String) {
-        guard let q = quickReportDetails, let id = q.reportId else { return }
-        quickReportDetails = nil
-        if id.hasPrefix("debug-") { return }
-        let new = NewReport(type: q.type, subtype: subtype, lat: q.position.lat, lng: q.position.lng, heading: heading, comment: nil)
-        Task {
-            do {
-                try await repo.deleteReport(id: id)
-                live.remove(reportId: id)
-                let r = try await repo.createReport(new)
-                quickReportLog = "replaced=\(id);sent=\(r.id)"
-                live.upsert(r)
-                syncLiveLayers()
-                showToast(String(localized: "Thanks! Your report is live."))
-            } catch {
-                showToast(String(localized: "Couldn't update the report"))
             }
         }
     }

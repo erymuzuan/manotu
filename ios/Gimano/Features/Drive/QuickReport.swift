@@ -1,17 +1,16 @@
 import CoreGraphics
 import Foundation
 
-/// Hold-to-report (docs/driving.md §6.4, boards NavLaporTahan / NavLaporPilih / NavLaporHantar): the fan of 8 quick
-/// actions around the report button, which one the finger is on, and the 5 s Undo after sending. Pure logic, no UI.
+/// Reporting while driving (docs/driving.md §6.4, boards RpHold / RpDetail / RpSent): the arc of 5 bubbles around the
+/// report button, which one the finger is on, the detail sheet's defaults and 3 s auto-send, and the 5 s Undo after
+/// sending. Pure logic, no UI.
 enum QuickReportFan {
-    /// Hold this long on the report button to open the fan (a shorter touch is a tap: the full sheet).
+    /// Hold this long on the report button to open the arc (a shorter touch is a tap: the drawer).
     static let holdS = 0.3
-    /// Ring radii from the button centre (board: 68 pt button, inner ring 122 pt, outer ring 228 pt).
-    static let innerRadius: CGFloat = 122
-    static let outerRadius: CGFloat = 228
-    /// Bubble diameters (inner, outer); the bubble under the finger grows to `selectedDiameter`.
-    static let innerDiameter: CGFloat = 62
-    static let outerDiameter: CGFloat = 56
+    /// All five bubbles sit on one arc this far from the button centre.
+    static let arcRadius: CGFloat = 170
+    static let diameter: CGFloat = 60
+    /// The bubble under the finger grows to this.
     static let selectedDiameter: CGFloat = 80
     /// A finger within this distance of a bubble's centre is on it (bigger than the bubble: easy to hit at speed).
     static let hitRadius: CGFloat = 44
@@ -20,11 +19,10 @@ enum QuickReportFan {
 
     struct Item: Equatable, Identifiable {
         let type: ReportType
-        let ring: Int           // 0 inner, 1 outer
         let angleDeg: Double    // 90 = straight up, 180 = straight left (the button sits on the right edge)
         var id: String { type.rawValue }
-        var radius: CGFloat { ring == 0 ? QuickReportFan.innerRadius : QuickReportFan.outerRadius }
-        var diameter: CGFloat { ring == 0 ? QuickReportFan.innerDiameter : QuickReportFan.outerDiameter }
+        var radius: CGFloat { QuickReportFan.arcRadius }
+        var diameter: CGFloat { QuickReportFan.diameter }
         /// Offset of the bubble centre from the button centre, in screen points (y grows downwards).
         var offset: CGVector {
             let a = angleDeg * .pi / 180
@@ -32,20 +30,17 @@ enum QuickReportFan {
         }
     }
 
-    /// Inner ring: Hazard, Police, Accident. Outer ring: Traffic, Closure, Blocked lane, Weather, Animal.
-    /// "Map issue" stays in the full sheet only.
+    /// Hazard, Police, Crash, Traffic, Closed: the five most reported, from straight up round to the left.
+    /// Weather, Animal, Blocked lane and Map issue are in the drawer only.
     static let items: [Item] = [
-        Item(type: .hazard, ring: 0, angleDeg: 90),
-        Item(type: .police, ring: 0, angleDeg: 135),
-        Item(type: .accident, ring: 0, angleDeg: 180),
-        Item(type: .traffic, ring: 1, angleDeg: 90),
-        Item(type: .closure, ring: 1, angleDeg: 112.5),
-        Item(type: .blockedLane, ring: 1, angleDeg: 135),
-        Item(type: .weather, ring: 1, angleDeg: 157.5),
-        Item(type: .animal, ring: 1, angleDeg: 180),
+        Item(type: .hazard, angleDeg: 90),
+        Item(type: .police, angleDeg: 112.5),
+        Item(type: .accident, angleDeg: 135),
+        Item(type: .traffic, angleDeg: 157.5),
+        Item(type: .closure, angleDeg: 180),
     ]
 
-    /// The bubble under the finger at `translation` from the button centre, or nil (on the button, or outside the fan).
+    /// The bubble under the finger at `translation` from the button centre, or nil (on the button, or outside the arc).
     static func hit(_ translation: CGVector) -> ReportType? {
         let d = hypot(translation.dx, translation.dy)
         guard d > deadZone else { return nil }
@@ -73,10 +68,56 @@ enum QuickReportFan {
         }
     }
 
-    /// Sent at once from the fan: no subtype (Details can add one afterwards).
-    static func newReport(_ t: ReportType, at p: LatLng, heading: Double?) -> NewReport {
-        NewReport(type: t, subtype: nil, lat: p.lat, lng: p.lng, heading: heading, comment: nil)
+    static func newReport(_ t: ReportType, subtype: String? = nil, comment: String? = nil, at p: LatLng, heading: Double?) -> NewReport {
+        NewReport(type: t, subtype: subtype, lat: p.lat, lng: p.lng, heading: heading, comment: comment?.isEmpty == true ? nil : comment)
     }
+}
+
+/// The detail sheet both doors end on (tap drawer, hold arc): the default subtype is picked already and the report sends
+/// itself after `autoSendS` unless the driver touches an option or presses Cancel / Report (docs/driving.md §6.4).
+enum ReportDefaults {
+    static let autoSendS: Double = 3
+
+    /// The first subtype, except Traffic (heavy); none for Closed and Map issue.
+    static func defaultSubtype(_ t: ReportType) -> String? { t == .traffic ? "heavy" : t.subtypes.first?.id }
+
+    /// Map issue has its own sheet (road problems) and is never sent by a timer.
+    static func autoSends(_ t: ReportType) -> Bool { t != .mapIssue }
+}
+
+/// Alerts reported after the route was calculated (docs/driving.md §6.1): the phone already listens to the live feed for
+/// its map area, so it matches those reports to its own road ahead. The server never learns the route.
+enum LiveAlertMatcher {
+    /// A report counts as "on the road" within this distance of the route line.
+    static let lateralM = 40.0
+    /// Voice once + chip from this far ahead.
+    static let announceM = 1000.0
+    /// "Still there?" window: from `askBeforeM` before the spot to `askAfterM` after it.
+    static let askBeforeM = 150.0
+    static let askAfterM = 100.0
+
+    /// Reports that sit on the route in the driver's direction, with their along-route distance.
+    static func match(points: [LatLng], reports: [Report]) -> [AlertOnRoute] {
+        guard points.count > 1 else { return [] }
+        let cum = Geo.cumulativeDistances(points)
+        return reports.compactMap { r in
+            if r.subtype == "other_side" { return nil }
+            var best = (d: Double.infinity, along: 0.0, bearing: 0.0)
+            for k in 0..<(points.count - 1) {
+                let pr = Geo.project(r.location, onto: points[k], points[k + 1])
+                if pr.distanceM < best.d {
+                    best = (pr.distanceM, cum[k] + (cum[k + 1] - cum[k]) * pr.t, Geo.bearing(points[k], points[k + 1]))
+                }
+            }
+            guard best.d <= lateralM else { return nil }
+            // A report facing the other way is for the other carriageway.
+            if let h = r.heading, abs(Geo.angleDelta(h, best.bearing)) > 100 { return nil }
+            return AlertOnRoute(report: r, distanceAlongRouteM: best.along)
+        }
+    }
+
+    /// Ask "still there?" only when the spot is within the window: `deltaM` = alert along-distance minus ours.
+    static func asks(_ deltaM: Double) -> Bool { deltaM >= -askAfterM && deltaM <= askBeforeM }
 }
 
 /// The "Hazard reported · street · just now" card: Undo for 5 s. Undo withdraws the report on the server

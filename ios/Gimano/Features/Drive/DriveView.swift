@@ -144,7 +144,13 @@ struct DriveView: View {
                             .padding(.horizontal, Tokens.Space.gutter)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    if let alert = nav.approachingAlert {
+                    // Far: a chip (the voice said it once). 150 m before to 100 m after the spot: the question.
+                    if let alert = nav.approachingAlert, !LiveAlertMatcher.asks(nav.alertDeltaM(alert)) {
+                        AlertAheadChip(report: alert.report, distanceM: nav.distanceToAlert(alert))
+                            .padding(.horizontal, Tokens.Space.gutter)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    if let alert = nav.approachingAlert, LiveAlertMatcher.asks(nav.alertDeltaM(alert)) {
                         StillThereCard(report: alert.report, distanceM: nav.distanceToAlert(alert),
                                        onStillThere: { Task { if await model.ensureRulesAccepted() { nav.vote(stillThere: true) } } },
                                        onGone: { Task { if await model.ensureRulesAccepted() { nav.vote(stillThere: false) } } },
@@ -156,7 +162,7 @@ struct DriveView: View {
                     HStack(alignment: .bottom) {
                         Speedometer(speedKmh: nav.speedKmh)
                         Spacer()
-                        HoldReportButton(fan: $fan, onTap: { model.showReport = true }, onSend: { model.sendQuickReport($0) })
+                        HoldReportButton(fan: $fan, onTap: { model.showReport = true }, onPick: { model.openReportType($0) })
                     }
                     .padding(.horizontal, Tokens.Space.gutter)
                     HStack {
@@ -207,11 +213,6 @@ struct DriveView: View {
             #endif
             // Glanceable while driving: the largest text sizes are capped so the banner, sound button, cards and Stop stay on screen.
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-            .sheet(isPresented: Binding(get: { model.quickReportDetails != nil }, set: { if !$0 { model.quickReportDetails = nil } })) {
-                if let q = model.quickReportDetails {
-                    QuickReportDetailsSheet(q: q).presentationDetents([.medium])
-                }
-            }
             .sheet(isPresented: Binding(get: { model.showShareSheet }, set: { model.showShareSheet = $0 })) {
                 if let s = model.driveShare { ShareDriveSheet(session: s, nav: nav).presentationDetents([.medium]) }
             }
@@ -489,6 +490,32 @@ struct StillThereCard: View {
             onTimeout: onDismiss)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("alertCard")
+    }
+}
+
+/// "Crash · 1 km ahead" while the spot is still far (docs/driving.md §6.1): the voice said it once, the question comes
+/// later, inside `LiveAlertMatcher.askBeforeM`.
+struct AlertAheadChip: View {
+    let report: Report
+    let distanceM: Double
+
+    var body: some View {
+        HStack(spacing: 10) {
+            GimanoIcon(icon: report.type.gIcon, size: 22, stroke: report.type.strokeColor, fill: report.type.fillColor)
+                .frame(width: 36, height: 36)
+                .background(report.type.tileColor, in: Circle())
+                .accessibilityHidden(true)
+            Text("\(String(localized: report.type.title)) · \(ManeuverFormatter.distance(distanceM)) ahead")
+                .font(Tokens.Font.nunito(17, .black))
+                .lineLimit(1).minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Color.textPrimary)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Color.surface, in: Capsule())
+        .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("alertAheadChip")
     }
 }
 

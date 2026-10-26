@@ -1298,9 +1298,9 @@
     <!-- docs/driving.md §6.1 / §6.4 -->
     <string name="confirm_still_there">Still there</string>
     <string name="confirm_gone">Gone</string>
-    <string name="qr_hint_title">Slide to an option, release to report</string>
-    <string name="qr_hint_sub">Tap only = full list · release outside = cancel</string>
-    <string name="qr_release_sub">Release to report at your position</string>
+    <string name="qr_hint_title">Slide to an option</string>
+    <string name="qr_hint_sub">Let go to continue · slide to ✕ to cancel</string>
+    <string name="qr_release_sub">Let go to continue</string>
     <string name="qr_reported">%1$s reported</string>
     <string name="qr_just_now">just now</string>
     <string name="qr_undo">Undo</string>
@@ -1357,4 +1357,6 @@
     <string name="search_this_area">Search this area</string>
     <string name="search_area_scope">Searching only the selected map area. Move the map to choose another area.</string>
     <string name="no_results_area">No matching places in this area</string>
+    <string name="report_sends_in">Sends in %1$d s · tap an option to choose first</string>
+    <string name="report_action">Report</string>
 </resources>

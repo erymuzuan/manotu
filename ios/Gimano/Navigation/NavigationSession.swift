@@ -215,13 +215,26 @@ final class NavigationSession {
         onTollAhead?(announce)
     }
 
+    /// Reports made after the route was calculated, matched to this route on the phone (the route never leaves it).
+    @ObservationIgnored private var liveReports: [Report] = []
+    @ObservationIgnored private var liveOnRoute: [AlertOnRoute] = []
+
+    /// The live feed's alerts for the map area: the ones on the road ahead join this trip, so a crash reported after
+    /// the route was calculated is announced and asked about too.
+    func setLiveAlerts(_ reports: some Collection<Report>) {
+        liveReports = Array(reports)
+        liveOnRoute = LiveAlertMatcher.match(points: tracker.geometry.points, reports: liveReports)
+    }
+
     private func updateAlerts(along: Double) {
-        if let current = approachingAlert, current.distanceAlongRouteM < along - 30 {
+        if let current = approachingAlert, current.distanceAlongRouteM < along - LiveAlertMatcher.askAfterM {
             approachingAlert = nil
         }
         guard approachingAlert == nil else { return }
-        let ahead = (route.alerts ?? [])
-            .filter { !handledAlerts.contains($0.id) && $0.distanceAlongRouteM - along > 0 && $0.distanceAlongRouteM - along < 600 }
+        let known = Set((route.alerts ?? []).map(\.id))
+        let ahead = ((route.alerts ?? []) + liveOnRoute.filter { !known.contains($0.id) })
+            .filter { !handledAlerts.contains($0.id) && $0.report.subtype != "other_side"
+                && $0.distanceAlongRouteM - along > -LiveAlertMatcher.askAfterM && $0.distanceAlongRouteM - along <= LiveAlertMatcher.announceM }
             .min { $0.distanceAlongRouteM < $1.distanceAlongRouteM }
         if let ahead {
             handledAlerts.insert(ahead.id)
@@ -229,6 +242,9 @@ final class NavigationSession {
             voice.speak(String(localized: "\(String(localized: ahead.report.type.title)) reported ahead"), kind: .alert)
         }
     }
+
+    /// Alert along-distance minus ours (negative once passed).
+    func alertDeltaM(_ a: AlertOnRoute) -> Double { a.distanceAlongRouteM - (progress?.snap.distanceAlongM ?? 0) }
 
     func distanceToAlert(_ a: AlertOnRoute) -> Double {
         max(0, a.distanceAlongRouteM - (progress?.snap.distanceAlongM ?? 0))
@@ -260,6 +276,7 @@ final class NavigationSession {
         if let newStops { stops = newStops }
         if newRequest { originalStopOffset = 0 }
         tracker = RouteTracker(route: r)
+        liveOnRoute = LiveAlertMatcher.match(points: tracker.geometry.points, reports: liveReports)
         tollsPaidBeforeRoute = tollTracker.paidMyr
         tollTracker = TollTracker(route: r, geometry: tracker.geometry, announced: tollTracker.announced, passed: tollTracker.passed,
                                   paidMyr: tollTracker.paidMyr)

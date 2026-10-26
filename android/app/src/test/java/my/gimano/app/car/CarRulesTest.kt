@@ -34,11 +34,11 @@ class CarRulesTest {
 
     @Test fun stillThereAtMostOncePer2kmAndOncePerReport() {
         val g = StillThereGate()
-        assertFalse("too far ahead", g.shouldAsk("a", 900.0, 0.0))
-        assertTrue(g.shouldAsk("a", 700.0, 100.0))
-        assertFalse("same report", g.shouldAsk("a", 300.0, 2_500.0))
-        assertFalse("another report within 2 km", g.shouldAsk("b", 500.0, 1_900.0))
-        assertTrue(g.shouldAsk("b", 500.0, 2_100.0))
+        assertFalse("too far ahead", g.shouldAsk("a", 400.0, 0.0))
+        assertTrue(g.shouldAsk("a", 140.0, 100.0))
+        assertFalse("same report", g.shouldAsk("a", 100.0, 2_500.0))
+        assertFalse("another report within 2 km", g.shouldAsk("b", 120.0, 1_900.0))
+        assertTrue(g.shouldAsk("b", 120.0, 2_100.0))
     }
 
     @Test fun odometerKeepsCountingAcrossReroutes() {

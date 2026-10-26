@@ -158,8 +158,8 @@ struct RootView: View {
             .zIndex(20)
         }
         .animation(.snappy(duration: 0.25), value: model.showMenu)
-        .sheet(isPresented: $model.showReport) {
-            ReportSheet()
+        .sheet(isPresented: $model.showReport, onDismiss: { model.reportInitialType = nil }) {
+            ReportSheet(initialType: model.reportInitialType)
                 .presentationDetents([.fraction(0.62), .large])
                 .presentationCornerRadius(Tokens.Radius.sheetTop)
         }

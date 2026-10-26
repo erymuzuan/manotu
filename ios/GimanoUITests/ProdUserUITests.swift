@@ -176,8 +176,8 @@ final class ProdUserUITests: XCTestCase {
         wait(app.buttons["reportType.hazard"]).tap()
         sleep(1)
         shot("04-report-hazard")
-        let subtype = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Hazard:'")).firstMatch
-        if subtype.waitForExistence(timeout: 3) { subtype.tap() } else { wait(app.buttons["sendReport"]).tap() }
+        // The default subtype is picked: Report (or the 3 s auto-send) sends it.
+        wait(app.buttons["sendReport"]).tap()
         sleep(4)
         shot("04-report-sent")
         // "Still there?": tap the report on the map (it sits at our position, the centre of the followed map).
