@@ -149,6 +149,7 @@
 		B6D56C4C7DCDCFC5C0D452D1 /* NavigationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 713DFCE9A4F204DE831154F1 /* NavigationSession.swift */; };
 		B6E2C6BFF61567EF072392D5 /* VettingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B4338B4089BA06ED2E5A9CC /* VettingUITests.swift */; };
 		BA1E2852EC05C6323FEEE5F8 /* GimanoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E10D2741068A818F9DD4A47 /* GimanoApp.swift */; };
+		BA36A25DF8A8CFBB71DC6598 /* TmpFacebookPostUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE44ADC0350835D47F757E4B /* TmpFacebookPostUITests.swift */; };
 		BA3AC40F42E39A1903F04047 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 772D34481946F68ADAFB62B9 /* GoogleSignIn */; };
 		BA55F3266EB6DD75AF40F8BE /* CarPlayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DECA86CBF8E1232D9EB30901 /* CarPlayTests.swift */; };
 		BD15B74BBCB4A15DDE9A4A20 /* RouteBuilderMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF0F975BDE241B83BC412CA /* RouteBuilderMapView.swift */; };
@@ -430,6 +431,7 @@
 		EA233B3BA33673EDC5CA48C0 /* BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManager.swift; sourceTree = "<group>"; };
 		EC922B0C3EE98133DEA0C55A /* RouteStartUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteStartUITests.swift; sourceTree = "<group>"; };
 		ECA91DAABB4645382F9EE45C /* negative-missing-polyline.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "negative-missing-polyline.json"; sourceTree = "<group>"; };
+		EE44ADC0350835D47F757E4B /* TmpFacebookPostUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TmpFacebookPostUITests.swift; sourceTree = "<group>"; };
 		EEBE29304DF119F04E43590B /* ProdHooksUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProdHooksUITests.swift; sourceTree = "<group>"; };
 		F02B1DA475700AC288966776 /* RouteBuilderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteBuilderService.swift; sourceTree = "<group>"; };
 		F05911F984BB3D0A8BDFE891 /* PlaceCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceCardView.swift; sourceTree = "<group>"; };
@@ -539,6 +541,7 @@
 				27108E49D369D2E7E847F2D5 /* SearchRetestUITests.swift */,
 				9FC71DDB18170AAF1C8D8BAE /* ServerCheckUITests.swift */,
 				2E3DF46400A5C1C4B11374FC /* StoreBackupUITests.swift */,
+				EE44ADC0350835D47F757E4B /* TmpFacebookPostUITests.swift */,
 				3B4338B4089BA06ED2E5A9CC /* VettingUITests.swift */,
 			);
 			path = GimanoUITests;
@@ -1324,6 +1327,7 @@
 				EDA8B6E97E3C0F522E00C99D /* SearchRetestUITests.swift in Sources */,
 				C88431528C9339DBAB8C532E /* ServerCheckUITests.swift in Sources */,
 				AC5957FAE17AF21C50492785 /* StoreBackupUITests.swift in Sources */,
+				BA36A25DF8A8CFBB71DC6598 /* TmpFacebookPostUITests.swift in Sources */,
 				B6E2C6BFF61567EF072392D5 /* VettingUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
