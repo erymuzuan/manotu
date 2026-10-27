@@ -99,6 +99,14 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
 
     private static CreateReviewRequest Review(string text, int rating = 5) => new(rating, text, null);
 
+    private static void AssertModeration(ContentState state, string[] reasons, bool canAppeal, ContentModerationDto? actual)
+    {
+        Assert.NotNull(actual);
+        Assert.Equal(state, actual.State);
+        Assert.Equal(reasons, actual.Reasons);
+        Assert.Equal(canAppeal, actual.CanAppeal);
+    }
+
     // ---- reviews ------------------------------------------------------------------------------------
 
     [Fact]
@@ -110,7 +118,7 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
         var screener = Answer("publish", "high", null, "ok");
         var r = await Reviews(db, screener).CreateAsync(_alice, "n77", Review("Parking mudah, kedai bersih."), ct);
         Assert.Equal(ReviewStatus.Published, r.Status);
-        Assert.Equal(new ContentModerationDto(ContentState.Passed, [], false), r.Moderation);
+        AssertModeration(ContentState.Passed, [], false, r.Moderation);
         // The model saw the text and the public place name, nothing about the author.
         var seen = Assert.Single(screener.Inputs);
         Assert.Equal((ContentKind.Review, "Parking mudah, kedai bersih.", "99 Speedmart Bangi"), (seen.Kind, seen.Text, seen.PlaceName));
@@ -125,7 +133,7 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
         await using var db = NewDb();
         var r = await Reviews(db, Answer("hold", "medium", null, "unclear")).CreateAsync(_alice, "n77", Review("Hmm, tengok sendiri."), ct);
         Assert.Equal((ReviewStatus.Hidden, true), (r.Status, r.HeldForReview));
-        Assert.Equal(new ContentModerationDto(ContentState.Held, ["unclear"], false), r.Moderation);
+        AssertModeration(ContentState.Held, ["unclear"], false, r.Moderation);
         Assert.Contains(Screened, e => e.SubjectKind == "review" && e.SubjectId == r.Id.ToString() && e.State == ContentState.Held);
 
         // Others see nothing; the author sees their own review in the list.
@@ -216,6 +224,7 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
         var reject = Answer("reject", "high", null, "scam");
         for (var i = 0; i < 3; i++)
             await Assert.ThrowsAsync<ContentRejectedException>(() => Reviews(db, reject).CreateAsync(_alice, "n77", Review("scam " + i), ct));
+        Assert.Equal(T0.AddHours(24), db.Users.Local.Single(u => u.Id == _alice).SuspendedUntil);
         var paused = await Assert.ThrowsAsync<PostingPausedException>(() => Reviews(db, Answer("publish")).CreateAsync(_alice, "n77", Review("fine"), ct));
         Assert.Equal(T0.AddHours(24), paused.Until);
         // Photos and the place pause share it (SuspendedUntil); another account is unaffected.
@@ -271,7 +280,7 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
         await Gate(db, null).ApplyReviewAsync(row, new ContentOutcome(ContentOutcomeKind.Rejected, ["harassment"]), late: true, ct);
         Assert.Contains(Screened, e => e.SubjectId == r.Id.ToString() && e.State == ContentState.Rejected);
         var mine = Assert.Single((await Reviews(db, null).ListAsync("n77", ReviewSort.Recent, null, ct, _alice)).Reviews);
-        Assert.Equal(new ContentModerationDto(ContentState.Rejected, ["harassment"], true), mine.Moderation);
+        AssertModeration(ContentState.Rejected, ["harassment"], true, mine.Moderation);
         // Not in the maintainers' queue until appealed.
         Assert.Empty(await Moderators(db).QueueAsync(ModerationKind.Review, hidden: true, ct));
 
@@ -338,14 +347,14 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
         Assert.Equal((PhotoStatus.Processing, ContentState.Held), (held.Status, held.ModerationState));
         await Assert.ThrowsAsync<NotFoundException>(() => photos.GetAsync(held.Id, ct, _bob));       // not visible to others
         var mine = await photos.GetAsync(held.Id, ct, _alice);
-        Assert.Equal(new ContentModerationDto(ContentState.Held, ["unclear"], false), mine.Moderation);
+        AssertModeration(ContentState.Held, ["unclear"], false, mine.Moderation);
         Assert.Null(mine.Url);
         Assert.Contains(Assert.Single(await Moderators(db).QueueAsync(ModerationKind.Photo, hidden: true, ct)).Reasons!, r => r == "unclear");
 
         var bad = await Uploaded();
         await gate.ApplyPhotoAsync(bad, new ContentOutcome(ContentOutcomeKind.Rejected, ["adult"]), late: false, ct);
         Assert.Equal((PhotoStatus.Rejected, ContentState.Rejected), (bad.Status, bad.ModerationState));
-        Assert.Equal(new ContentModerationDto(ContentState.Rejected, ["adult"], true), (await photos.GetAsync(bad.Id, ct, _alice)).Moderation);
+        AssertModeration(ContentState.Rejected, ["adult"], true, (await photos.GetAsync(bad.Id, ct, _alice)).Moderation);
         Assert.Contains(Screened, e => e.SubjectKind == "photo" && e.SubjectId == bad.Id.ToString() && e.State == ContentState.Rejected);
 
         // Appeal once; a maintainer approves it and the photo goes live.

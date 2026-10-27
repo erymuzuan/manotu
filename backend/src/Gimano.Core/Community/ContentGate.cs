@@ -81,6 +81,9 @@ public sealed class ContentGate(GimanoDbContext db, IContentScreener screener, B
         if (!ContentScreening.ShouldPause(recent)) return;
         await db.Users.Where(u => u.Id == userId && (u.SuspendedUntil == null || u.SuspendedUntil < now + PlaceScreening.PauseFor))
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.SuspendedUntil, now + PlaceScreening.PauseFor), ct);
+        // Bulk updates bypass tracking. Later checks in this scope must see the persisted pause.
+        if (db.Users.Local.FirstOrDefault(u => u.Id == userId) is { } tracked)
+            await db.Entry(tracked).ReloadAsync(ct);
     }
 
     /// <summary>Applies an outcome to a stored review (the worker after "checking", a retry, or a maintainer's decision elsewhere). Saves and announces.</summary>
