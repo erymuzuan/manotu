@@ -162,6 +162,7 @@ public sealed class SearchPipeline(PlaceSearchIndex index, Func<AliasTable> alia
             {
                 var restVariants = table.Rewrites(rest);
                 hits = await QueryAsync(r, SearchQueryBuilder.Build(new SearchQuery(rest, anchorLat, anchorLng, limit, r.Category, r.Country, r.Viewer, restVariants, RadiusM: r.Viewport is null ? 10_000 : null)), ct, r.Viewport is null ? null : area);
+                hits = await IncludeNearbySpellingAsync(hits, rest, r, anchorLat, anchorLng, ct, r.Viewport is null ? null : area);
                 kind = "brand_area";
             }
             if (hits.Count > 0 || r.Viewport is not null)
@@ -169,7 +170,30 @@ public sealed class SearchPipeline(PlaceSearchIndex index, Func<AliasTable> alia
                     LiteralTexts: restCats is { Length: > 0 } ? null : table.Rewrites(rest).Prepend(rest).ToList(), AreaCorrection: areaCorrection);
         }
 
+        general = await IncludeNearbySpellingAsync(general, norm, r, oLat, oLng, ct);
         return new Ranked(general, new SearchInterpretation("text", norm), oLat, oLng, LiteralTexts: variants.Prepend(norm).ToList());
+    }
+
+    /// <summary>Keep exact names, but offer a substantially nearer one-edit alternative even when exact hits fill the page.</summary>
+    private async Task<IReadOnlyList<PlaceHit>> IncludeNearbySpellingAsync(IReadOnlyList<PlaceHit> hits, string text,
+        SearchRequest r, double? lat, double? lng, CancellationToken ct, AreaRef? area = null)
+    {
+        var words = TextNormalizer.Tokens(text);
+        var key = TextNormalizer.Compact(text);
+        if (r.Exact || lat is not { } la || lng is not { } lo || words.Length < 2 || key.Length < 5 || key.Any(char.IsDigit)) return hits;
+        double Distance(PlaceHit h) => GeoMath.HaversineM(la, lo, h.Lat, h.Lng);
+        var literals = hits.Where(h => LiterallyMatches(text, h.Name, h.Brand, null)).ToList();
+        var exactDistance = literals.Select(Distance).DefaultIfEmpty(double.MaxValue).Min();
+        var candidates = await QueryAsync(r, SearchQueryBuilder.Build(new SearchQuery(text, la, lo, 10, r.Category, r.Country, r.Viewer,
+            RadiusM: MaxCorrectionDistanceM, SortNearest: true)), ct, area);
+        var nearby = candidates.Where(h => h.Category is not (PlaceCategory.Area or PlaceCategory.Street)
+                && Levenshtein(key, TextNormalizer.Compact(h.Name)) == 1
+                && IsCloseSpelling(key, h.Name, words.Length, text)
+                && Distance(h) < exactDistance / 2)
+            .OrderBy(Distance).ThenBy(h => h.Id, StringComparer.Ordinal).Take(2).ToList();
+        if (nearby.Count == 0) return hits;
+        // Keep the best literal hit first. Alternatives are additions, never aliases or replacements for genuine names.
+        return literals.Take(1).Concat(nearby).Concat(hits).DistinctBy(h => h.Id).ToList();
     }
 
     /// <summary>Longest area phrase at the end (or start) of the query, leaving at least one word: "kfc ss2" → (SS2, "kfc").</summary>
@@ -213,6 +237,8 @@ public sealed class SearchPipeline(PlaceSearchIndex index, Func<AliasTable> alia
         double? FromOrigin(PlaceHit h) => ranked.OriginLat is { } a && ranked.OriginLng is { } b ? GeoMath.HaversineM(a, b, h.Lat, h.Lng) : null;
 
         var list = SearchResults.Dedupe(ranked.Hits, h => h.Name, h => (h.Lat, h.Lng), ranked.Hits.Count);
+        if (r.Exact && ranked.LiteralTexts is { } literalTexts)
+            list = list.Where(h => literalTexts.Any(t => LiterallyMatches(t, h.Name, h.Brand, h.Address))).ToList();
         if (!ranked.KeepOrder) list = SearchResults.ChainsNearestFirst(list, h => SearchResults.ChainKey(h.Name, h.Brand), FromOrigin);
         if (ranked.Interpretation.Kind is "category" or "category_area" && ranked.Interpretation.Categories is { Count: > 1 } cats)
             list = list.OrderBy(h => SurauOrder(CategoryOrder(FromOrigin(h) ?? 0, h.Category, cats), h.Name, h.Category, cats)).ToList();

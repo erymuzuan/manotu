@@ -58,7 +58,7 @@ public class LocalitySearchRegressionTests
             var places = Enumerable.Range(0, 35).Select(i => Mosque($"exact{i}", "Masjid Ar-Rahman", 3.105 - i * .001, 101.655)).ToList();
             places.Add(Mosque("near-variant", "Masjid Ar-Rahmah", 3.12915, 101.63160));
             places.Add(Mosque("unrelated", "Masjid Al-Hidayah", 3.1292, 101.6316));
-            await index.BulkIndexAsync(places.Select(SearchQueryBuilder.ToDocument));
+            await index.BulkIndexAsync(places.Select(p => SearchQueryBuilder.ToDocument(p)));
             await index.RefreshAsync();
             var pipeline = new SearchPipeline(index, AliasTable.Embedded);
             foreach (var suffix in new[] { "", " SS17A", " SS 17A", " PJ17A", " Seksyen17A" })
@@ -73,6 +73,10 @@ public class LocalitySearchRegressionTests
             var (exact, _, _) = await pipeline.RunAsync(new("Masjid Ar-Rahman", 3.1292, 101.6316, Exact: true), null, Areas(), default);
             Assert.NotEmpty(exact);
             Assert.All(exact, h => Assert.Equal("Masjid Ar-Rahman", h.Name));
+            Assert.True(SearchViewport.TryParse("101.62,3.12;101.64,3.12;101.64,3.14;101.62,3.14", out var localViewport));
+            var (inside, _, _) = await pipeline.RunAsync(new("Masjid Ar-Rahman PJ17A", 3.05, 101.58, Viewport: localViewport), null, Areas(), default);
+            Assert.Contains(inside, h => h.Id == "near-variant");
+            Assert.All(inside, h => Assert.True(localViewport!.Contains(h.Lat, h.Lng)));
             Assert.True(SearchViewport.TryParse("101.65,3.06;101.67,3.06;101.67,3.11;101.65,3.11", out var viewport));
             var (bounded, _, _) = await pipeline.RunAsync(new("Masjid Ar-Rahman PJ17A", 3.1292, 101.6316, Viewport: viewport), null, Areas(), default);
             Assert.DoesNotContain(bounded, h => h.Id == "near-variant");
