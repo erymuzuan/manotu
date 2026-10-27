@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Navigasi dikongsi · Manotu</title>
+  <link rel="stylesheet" href="nav.css">
+  <script type="module" src="nav.mjs"></script>
+</head>
+<body><main>
+  <a class="brand" href="https://manotu.app/">Manotu</a>
+
+  <section id="valid" hidden>
+    <div class="pin">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#db4f27" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.6" fill="#fff"/></svg>
+      <h1 id="label">Destinasi dikongsi · Shared destination</h1>
+    </div>
+    <p class="coords" id="coords"></p>
+    <p>Manotu akan minta anda sahkan sebelum mula; ia tidak bermula sendiri. Manotu will ask you to confirm first and never starts by itself.</p>
+    <a id="open" class="button">Buka dalam Manotu · Open in Manotu</a>
+  </section>
+
+  <section id="invalid">
+    <div class="pin">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#8a1c0f"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+      <h1 class="error">Pautan tidak sah · Invalid link</h1>
+    </div>
+    <p>Pautan navigasi ini tidak boleh dibuka. Minta pengirim menghantar pautan baharu.</p>
+    <p lang="en">This navigation link cannot be opened. Ask the sender for a new link.</p>
+  </section>
+
+  <div class="steps">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0047ab" d="M12 3v10.2l3.6-3.6L17 11l-5 5-5-5 1.4-1.4 3.6 3.6V3zM5 18h14v2H5z"/></svg>
+    <div>
+      <p>Belum ada Manotu? <a href="https://manotu.app/download/">Muat turun aplikasi</a>, kemudian kembali ke pautan ini.</p>
+      <p lang="en">If Manotu does not open, install or update the app, then return to this link and tap Open in Manotu.</p>
+    </div>
+  </div>
+  <noscript>JavaScript diperlukan untuk membuka pautan ini. JavaScript is required to open this link.</noscript>
+</main></body>
+</html>

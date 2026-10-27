@@ -171,6 +171,8 @@ data class UiState(
     val searchedOnce: Boolean = false,
     val activeCategory: String? = null,
     val place: PlaceSel? = null,
+    /** A navigate link from another app waiting for the user's Confirm (never routed before that). */
+    val navLink: my.gimano.app.core.links.NavLink? = null,
     val plan: RoutePlan? = null,
     val alerts: List<Report> = emptyList(),
     val jams: List<Pair<Jam, List<GeoPoint>>> = emptyList(),
@@ -1297,6 +1299,27 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                 _events.emit(UiEvent.Toast(R.string.place_link_unavailable))
             }
         }
+    }
+
+    /** A navigate link (docs/place-links.md): only asks; the route opens on [confirmNavLink]. A newer link replaces a pending one. */
+    fun offerNavLink(link: my.gimano.app.core.links.NavLink) {
+        if (nav.value.active) {
+            _ui.update { it.copy(navLink = my.gimano.app.core.links.NavLinkPending.cancel(it.navLink)) }
+            _events.tryEmit(UiEvent.Toast(R.string.nav_link_finish_drive))
+            return
+        }
+        _ui.update { it.copy(navLink = my.gimano.app.core.links.NavLinkPending.offer(it.navLink, link)) }
+    }
+
+    fun cancelNavLink() = _ui.update { it.copy(navLink = my.gimano.app.core.links.NavLinkPending.cancel(it.navLink)) }
+
+    fun confirmNavLink() {
+        val (link, rest) = my.gimano.app.core.links.NavLinkPending.confirm(_ui.value.navLink, nav.value.active)
+        _ui.update { it.copy(navLink = rest) }
+        if (link == null) { if (nav.value.active) _events.tryEmit(UiEvent.Toast(R.string.nav_link_finish_drive)); return }
+        // eventStop = the label stays on this phone: not in the routing request, recents, planned drives or shared drives.
+        val name = link.label ?: "%.4f, %.4f".format(java.util.Locale.US, link.lat, link.lng)
+        routeTo(NavDestination(name, "", GeoPoint(link.lat, link.lng), null, eventStop = true))
     }
 
     fun showPlace(p: PlaceSummary) {

@@ -1363,4 +1363,9 @@
     <string name="store_update_required">Update required</string>
     <string name="store_update_forced_body">Update Manotu to carry on. Your places stay on your phone.</string>
     <string name="store_update_debug">Debug: store update check (Play card)</string>
+    <string name="nav_link_title">Route to this spot?</string>
+    <string name="nav_link_confirm">Route</string>
+    <string name="nav_link_cancel">Cancel</string>
+    <string name="nav_link_finish_drive">Finish your drive before routing to a link from another app.</string>
+    <string name="nav_link_pin_desc">Pin at %1$s</string>
 </resources>

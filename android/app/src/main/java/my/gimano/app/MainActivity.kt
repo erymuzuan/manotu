@@ -90,6 +90,15 @@ class MainActivity : AppCompatActivity() {
                 return
             }
         }
+        if (sent == null) {
+            val raw = uri.toString()
+            if (my.gimano.app.core.links.NavLinkParser.isNavTarget(raw)) {
+                // Valid: ask the user first. Invalid: dropped silently, never handed to the event importer.
+                my.gimano.app.core.links.NavLinkParser.parse(raw)?.let { vm.offerNavLink(it) }
+                i.data = null
+                return
+            }
+        }
         val importer = (application as GimanoApp).container.eventImporter
         when (uri.scheme?.lowercase()) {
             // `manotu://event?drop=<id>#<secret>` (§5.6) is fetched; `manotu://event#1.…` opens directly (§5.3).

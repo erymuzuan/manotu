@@ -10,6 +10,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="manotu" android:host="place" />
             </intent-filter>
+            <!-- Navigate link from other apps (docs/place-links.md): always asks the user before routing. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="manotu" android:host="navigate" />
+            </intent-filter>
             <!-- Web viewer hand-off (§5.3): manotu://event#1.<key>.<data>, manotu://event?stop=<id>#…; short links (§5.6)
                  manotu://event?drop=<dropId>#<secret>; gimano:// accepted too. -->
             <intent-filter>
@@ -37,6 +44,8 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
                 <data android:host="manotu.app" />
+                <data android:path="/nav/" />
+                <data android:path="/nav" />
                 <data android:path="/p/" />
                 <data android:path="/p" />
                 <data android:path="/a/" />

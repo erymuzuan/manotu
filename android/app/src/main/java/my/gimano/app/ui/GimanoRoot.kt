@@ -421,6 +421,7 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
         }
     }
 
+    ui.navLink?.let { my.gimano.app.ui.sheets.NavLinkSheet(it, onConfirm = vm::confirmNavLink, onCancel = vm::cancelNavLink) }
     ui.favoriteSheet?.let { my.gimano.app.ui.sheets.FavoriteSheet(it, vm) }
     // "Ask a person": one screen for every appeal (refused text, held or rejected review / photo). The reason is required.
     appealUi?.let { a ->

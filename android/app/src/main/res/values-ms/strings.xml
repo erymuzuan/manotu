@@ -1354,4 +1354,9 @@
     <string name="store_update_required">Kemas kini diperlukan</string>
     <string name="store_update_forced_body">Kemas kini Manotu untuk terus guna. Tempat anda kekal dalam telefon anda.</string>
     <string name="store_update_debug">Nyahpepijat: semakan kemas kini kedai (kad Play)</string>
+    <string name="nav_link_title">Laluan ke tempat ini?</string>
+    <string name="nav_link_confirm">Laluan</string>
+    <string name="nav_link_cancel">Batal</string>
+    <string name="nav_link_finish_drive">Tamatkan perjalanan anda sebelum membuat laluan dari pautan aplikasi lain.</string>
+    <string name="nav_link_pin_desc">Pin di %1$s</string>
 </resources>

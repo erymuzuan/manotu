@@ -79,12 +79,13 @@ struct GimanoApp: App {
                 }
                 // Universal Links (https://manotu.app/j/#…, /a/#…), when the Associated Domains entitlement is on.
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-                    if let url = activity.webpageURL, !model.openPlaceLink(url) { model.events.handleIncoming(url: url) }
+                    if let url = activity.webpageURL, !model.openPlaceLink(url), !model.openNavigateLink(url) { model.events.handleIncoming(url: url) }
                 }
                 .onOpenURL { url in
                     // Google sign-in redirects exist only in builds with Drive backup (GIMANO_DRIVE = YES).
                     if GoogleDriveBackupDestination.isEnabled && GIDSignIn.sharedInstance.handle(url) { return }
                     if model.openPlaceLink(url) { return }
+                    if model.openNavigateLink(url) { return }
                     // Event invitations: manotu://event#…, manotu://event?drop=…#…, gimano://event#…, …/a/#1.… and …/j/#…
                     // links, and .manotu-event files.
                     if model.events.handleIncoming(url: url) { return }
@@ -225,6 +226,13 @@ struct RootView: View {
             SelectOnMapView(request: req) { picked in
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { model.handlePicked(picked, purpose: req.purpose) }
             }
+        }
+        .sheet(item: Binding(get: { model.pendingNavigate }, set: { if $0 == nil { model.cancelNavigateLink() } })) { r in
+            NavigateLinkSheet(request: r, onConfirm: {
+                model.confirmNavigateLink()
+            }, onCancel: { model.cancelNavigateLink() })
+            .presentationDetents([.height(380)])
+            .presentationCornerRadius(Tokens.Radius.sheetTop)
         }
         .sheet(item: $model.pinActions) { p in
             PinActionsSheet(point: p).presentationDetents([.height(380), .medium])

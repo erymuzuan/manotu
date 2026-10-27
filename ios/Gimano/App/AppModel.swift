@@ -1064,6 +1064,32 @@ final class AppModel {
         return true
     }
 
+    /// Navigate links from other apps (docs/navigate-links.md): confirm first, never start by themselves.
+    private(set) var navigateLink = NavigateLinkState()
+    var pendingNavigate: NavigateRequest? { navigateLink.pending }
+
+    @discardableResult
+    func openNavigateLink(_ url: URL) -> Bool {
+        guard let request = NavigateLink.parse(url) else { return false }
+        if navigateLink.offer(request, driving: screen == .navigating) == .finishDriveFirst {
+            showToast(String(localized: "Finish your drive before opening a shared place."))
+        }
+        return true
+    }
+
+    func confirmNavigateLink() {
+        guard let r = navigateLink.confirm(driving: screen == .navigating) else {
+            if screen == .navigating { showToast(String(localized: "Finish your drive before opening a shared place.")) }
+            return
+        }
+        let d = Destination(name: r.label ?? String(localized: "Dropped pin"),
+                            address: String(format: "%.5f, %.5f", r.lat, r.lng),
+                            location: LatLng(lat: r.lat, lng: r.lng), placeId: nil)
+        planRoute(to: d, remember: false)
+    }
+
+    func cancelNavigateLink() { navigateLink.cancel() }
+
     func openPlace(_ p: PlaceSummary) {
         go(.place(p))
     }

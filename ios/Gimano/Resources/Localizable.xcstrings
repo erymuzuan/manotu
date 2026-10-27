@@ -16723,6 +16723,26 @@
           }
         }
       }
+    },
+    "Route to this spot?" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laluan ke tempat ini?"
+          }
+        }
+      }
+    },
+    "Confirm" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sahkan"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

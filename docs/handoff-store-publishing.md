@@ -44,6 +44,20 @@ repeatable and boring.
 - Debug builds are DEV-badged (red "DEV" icon, "Manotu DEV") and point at the dev stack on WS556. They share the real
   bundle id, so never upload a Debug build.
 
+### 2a. Production backend (owner's statement, 27 Oct 2026)
+
+The owner states that these features are all implemented in the **production** backend (172.30.30.150): public content
+safety (reviews, photos, notes, place warnings, brand watchlist), appeals and the OSM place flag, feedback spam flag,
+`GET /api/v1/app/versions` and the Apple poller. **Verify it before you ship, do not assume it.** When this prompt was
+written, the Claude session that wrote it had only deployed these to the dev stack on WS556 and had no confirmation from
+SERVER.Manotu about production. Check against production: `GET https://gimano-api.bukitbunga.com/api/v1/app/versions`
+returns 200 (not 404), `/readyz` is healthy, the migrations `ContentSafety`, `AppealsOsmFlagsFeedbackSpam` and `AppVersions` are
+applied, and a search result carries `warnings` after the reindex. If anything is missing, finish step 1 below before the
+apps reach users.
+
+A new store version is expected **today (27 Oct 2026)**; the owner has you working on it, so the Facebook announcement
+(driving reports and place warnings, worded "coming soon") must not say "out now" until the store rollout is live.
+
 ### 3. Order of operations for every release (backend first)
 
 The new apps call endpoints that **production does not have yet** (`/appeals`, `/app/versions`, new reason codes,
