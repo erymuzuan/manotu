@@ -145,19 +145,34 @@ if (args is ["invite", var inviteEmail, ..])
             throw new InvalidOperationException("Set BackOffice:PublicUrl to the public HTTPS back office before sending invitations.");
         if (sendEmail && !emailOptions.CanSend)
             throw new InvalidOperationException("Configure BackOffice:EmailCode:AcsConnectionString before sending invitations.");
-        if (await scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>().FindByEmailAsync(inviteEmail.Trim()) is not null)
-            throw new InvalidOperationException("This maintainer already has an account. Sign in with the existing account; no new invitation was created.");
-        var token = await scope.ServiceProvider.GetRequiredService<MaintainerInvites>().CreateAsync(inviteEmail);
-        var link = $"{baseUrl}/Account/Register?invite={Uri.EscapeDataString(token)}";
+        if (!scope.ServiceProvider.GetRequiredService<MaintainerAllowlist>().Allows(inviteEmail))
+            throw new InvalidOperationException("The email is not listed in BackOffice:Maintainers.");
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var existing = await users.FindByEmailAsync(inviteEmail.Trim());
+        var resetExisting = args.Contains("--reset-existing", StringComparer.Ordinal);
+        if (existing is not null && !(sendEmail && resetExisting))
+            throw new InvalidOperationException("This maintainer already has an account. Use --send --reset-existing to email a password reset link without changing the account.");
+        string link;
+        if (existing is not null)
+        {
+            var code = await users.GeneratePasswordResetTokenAsync(existing);
+            code = Microsoft.AspNetCore.WebUtilities.WebEncoders.Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(code));
+            link = $"{baseUrl}/Account/ResetPassword?code={Uri.EscapeDataString(code)}";
+        }
+        else
+        {
+            var token = await scope.ServiceProvider.GetRequiredService<MaintainerInvites>().CreateAsync(inviteEmail);
+            link = $"{baseUrl}/Account/Register?invite={Uri.EscapeDataString(token)}";
+        }
         if (sendEmail)
         {
-            var content = MaintainerInvitationEmail.Create(link);
+            var content = MaintainerInvitationEmail.Create(link, existing is not null);
             var client = new Azure.Communication.Email.EmailClient(emailOptions.AcsConnectionString);
             var operation = await client.SendAsync(Azure.WaitUntil.Completed,
                 new Azure.Communication.Email.EmailMessage(emailOptions.From, inviteEmail.Trim(), content));
             if (operation.Value.Status != Azure.Communication.Email.EmailSendStatus.Succeeded)
                 throw new InvalidOperationException("Invitation email was not accepted. Retry the invite command.");
-            Console.WriteLine("Invitation email accepted by the email service. The single-use link expires in 24 hours.");
+            Console.WriteLine("Account setup email accepted by the email service. The single-use link expires in 24 hours.");
         }
         else
         {

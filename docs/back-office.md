@@ -159,7 +159,8 @@ docker compose -f deploy/docker-compose.yml run --rm backoffice invite me@exampl
 
 It prints `…/Account/Register?invite=inv_…` (base URL from `BackOffice:PublicUrl`, default `https://backoffice.manotu.app`).
 Add `--send` to email the invitation through the configured ACS sender instead of printing a secret link.
-The public URL must be HTTPS. Existing accounts are rejected without changing them. For production, use
+The public URL must be HTTPS. Existing accounts are rejected without changing them unless `--reset-existing` is also supplied with `--send`;
+then the email contains an Identity password-reset link, preserving the account. The recipient chooses the password. For production, use
 `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod run --rm --no-deps backoffice invite <email> --send`.
 Add future maintainers to `BACKOFFICE_MAINTAINERS` and `DIGEST_TO`, recreate backoffice/worker, then send their invites.
 The invite works once, only for that email, expires after 24 hours, and only its sha256 is stored
