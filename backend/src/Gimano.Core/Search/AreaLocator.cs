@@ -15,12 +15,14 @@ public sealed class AreaLocator
     private static readonly HashSet<string> Town = ["city", "town"];
     private readonly Dictionary<(int, int), List<AreaRef>> _grid = new();
     private readonly Dictionary<string, List<AreaRef>> _byName = new();
+    private readonly Dictionary<string, List<AreaRef>> _sectionShorthands = new();
 
     public int Count { get; }
 
     public AreaLocator(IEnumerable<AreaRef> areas)
     {
-        foreach (var a in areas)
+        var all = areas.ToList();
+        foreach (var a in all)
         {
             Count++;
             var key = Cell(a.Lat, a.Lng);
@@ -32,6 +34,27 @@ public sealed class AreaLocator
                 named.Add(a);
             }
         }
+        foreach (var a in all)
+        {
+            var name = TextNormalizer.Compact(a.Name);
+            var prefix = new[] { "seksyen", "section" }.FirstOrDefault(p => name.StartsWith(p, StringComparison.Ordinal));
+            if (prefix is null) continue;
+            var code = name[prefix.Length..];
+            if (code.Length == 0 || !code.Any(char.IsDigit) || !code.All(char.IsLetterOrDigit)) continue;
+            AddShorthand("ss" + code, a);
+            // Derive city initials from imported geography, not a hand-maintained POI/city alias.
+            if (Nearest(a.Lat, a.Lng, Town, 20_000) is { } town)
+            {
+                var words = TextNormalizer.Tokens(town.Name);
+                if (words.Length >= 2) AddShorthand(string.Concat(words.Select(w => w[0])) + code, a);
+            }
+        }
+    }
+
+    private void AddShorthand(string key, AreaRef area)
+    {
+        if (!_sectionShorthands.TryGetValue(key, out var list)) _sectionShorthands[key] = list = [];
+        list.Add(area);
     }
 
     private static (int, int) Cell(double lat, double lng) => ((int)Math.Floor(lat * 10), (int)Math.Floor(lng * 10));
@@ -83,9 +106,10 @@ public sealed class AreaLocator
     private AreaRef? FuzzyFind(string phrase, double? lat, double? lng)
     {
         var key = TextNormalizer.Compact(phrase);
-        if (key.Length < 5) return null;
+        // A locality code is an identifier: SS17A must never lose its A or become SS18A.
+        if (key.Length < 5 || key.Any(char.IsDigit)) return null;
         var budget = key.Length >= 10 ? 2 : 1;
-        var matches = _byName.Keys.Where(k => Math.Abs(k.Length - key.Length) <= budget)
+        var matches = _byName.Keys.Where(k => !k.Any(char.IsDigit) && Math.Abs(k.Length - key.Length) <= budget)
             .Select(k => (Key: k, Distance: EditDistance(key, k))).Where(x => x.Distance <= budget).ToList();
         if (matches.Count == 0) return null;
         var best = matches.Min(x => x.Distance);
@@ -111,7 +135,14 @@ public sealed class AreaLocator
 
     public AreaRef? Find(string phrase, double? lat, double? lng)
     {
-        if (!_byName.TryGetValue(TextNormalizer.Compact(phrase), out var list)) return null;
+        var key = TextNormalizer.Compact(phrase);
+        if (!_byName.TryGetValue(key, out var list))
+        {
+            // Exact imported names always win (SS17 stays SS17). Inferred section shorthand needs nearby context.
+            if (lat is not { } nearbyLat || lng is not { } nearbyLng || !_sectionShorthands.TryGetValue(key, out var sections)) return null;
+            list = sections.Where(a => GeoMath.HaversineM(nearbyLat, nearbyLng, a.Lat, a.Lng) <= 5_000).ToList();
+            if (list.Count == 0) return null;
+        }
         return lat is { } la && lng is { } lo
             ? list.OrderBy(a => GeoMath.HaversineM(la, lo, a.Lat, a.Lng) / 1000 - a.Popularity * 5).First()
             : list.OrderByDescending(a => a.Popularity).First();
