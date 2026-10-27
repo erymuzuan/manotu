@@ -25,6 +25,12 @@ enum DataMode: String, CaseIterable, Identifiable, Sendable {
 @Observable
 final class AppConfig {
     static let fallbackAPIBaseURL = "http://localhost:5080/api/v1/"
+    nonisolated static let productionAPIBaseURL = "https://gimano-api.bukitbunga.com/api/v1/"
+    nonisolated static let productionHosts: Set<String> = ["gimano-api.bukitbunga.com", "api.manotu.app"]
+    nonisolated static func isProductionHost(_ url: String) -> Bool {
+        guard let u = URL(string: url), u.scheme == "https", let h = u.host else { return false }
+        return productionHosts.contains(h)
+    }
     static let fallbackStyleURL = "https://tiles.openfreemap.org/styles/liberty"
     /// "Belum ada Manotu? Muat turun: …" in event invitation messages. On iOS this becomes the App Store URL once
     /// Manotu is published there.
@@ -46,7 +52,13 @@ final class AppConfig {
         self.defaults = defaults
         let plistAPI = (bundle.object(forInfoDictionaryKey: "GimanoAPIBaseURL") as? String)?.trimmingCharacters(in: .whitespaces)
         let plistStyle = (bundle.object(forInfoDictionaryKey: "GimanoMapStyleURL") as? String)?.trimmingCharacters(in: .whitespaces)
-        bundleAPIBaseURL = (plistAPI?.isEmpty == false && !(plistAPI!.contains("$("))) ? plistAPI! : Self.fallbackAPIBaseURL
+        let configuredAPI = (plistAPI?.isEmpty == false && !(plistAPI!.contains("$("))) ? plistAPI! : Self.fallbackAPIBaseURL
+        #if DEBUG
+        bundleAPIBaseURL = configuredAPI
+        #else
+        // A store/TestFlight build never talks to a dev or Tailscale host, whatever the build setting says.
+        bundleAPIBaseURL = Self.isProductionHost(configuredAPI) ? configuredAPI : Self.productionAPIBaseURL
+        #endif
         bundleStyleURL = (plistStyle?.isEmpty == false && !(plistStyle!.contains("$("))) ? plistStyle! : Self.fallbackStyleURL
         #if DEBUG
         apiBaseURLOverride = defaults.string(forKey: Keys.api) ?? ""

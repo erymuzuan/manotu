@@ -21,6 +21,10 @@ val demoMode = prop("gimano.demoMode", "false").toBoolean()
 // Release builds talk to the public server (HTTPS only); debug keeps the Tailscale dev backend.
 val releaseApiBaseUrl = prop("gimano.releaseApiBaseUrl", "https://gimano-api.bukitbunga.com/api/v1/").let { if (it.endsWith("/")) it else "$it/" }
 require(releaseApiBaseUrl.startsWith("https://")) { "gimano.releaseApiBaseUrl must be https" }
+// A release can never ship a dev/Tailscale/private host: only the production names (alias included) are accepted.
+require(java.net.URI(releaseApiBaseUrl).host in setOf("gimano-api.bukitbunga.com", "api.manotu.app")) {
+    "gimano.releaseApiBaseUrl must be gimano-api.bukitbunga.com or api.manotu.app"
+}
 
 // Release signing: git-ignored android/keystore.properties (see keystore.properties.example).
 // The password comes from the macOS Keychain (or GIMANO_KEYSTORE_PASSWORD), never from the repo.
