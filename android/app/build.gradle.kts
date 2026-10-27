@@ -22,7 +22,7 @@ val demoMode = prop("gimano.demoMode", "false").toBoolean()
 val releaseApiBaseUrl = prop("gimano.releaseApiBaseUrl", "https://gimano-api.bukitbunga.com/api/v1/").let { if (it.endsWith("/")) it else "$it/" }
 require(releaseApiBaseUrl.startsWith("https://")) { "gimano.releaseApiBaseUrl must be https" }
 // A release can never ship a dev/Tailscale/private host: only the production names (alias included) are accepted.
-require(java.net.URI(releaseApiBaseUrl).host in setOf("gimano-api.bukitbunga.com", "api.manotu.app")) {
+require(URI(releaseApiBaseUrl).host in setOf("gimano-api.bukitbunga.com", "api.manotu.app")) {
     "gimano.releaseApiBaseUrl must be gimano-api.bukitbunga.com or api.manotu.app"
 }
 
