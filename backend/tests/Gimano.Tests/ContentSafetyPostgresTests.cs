@@ -257,7 +257,7 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
         await using var db = NewDb();
         var r = await Reviews(db, Answer("publish", "high", null, "ok")).CreateAsync(_alice, "n77", Review("Bagus."), ct);
         await Assert.ThrowsAsync<ContentRejectedException>(() => Reviews(db, Answer("reject", "high", null, "gambling_promo"))
-            .PatchAsync(_alice, r.Id, new PatchReviewRequest(1, "Judi online di sini", null), ct));
+            .PatchAsync(_alice, r.Id, new PatchReviewRequest(1, "Teks promosi untuk disemak", null), ct));
         var unchanged = await db.Reviews.AsNoTracking().SingleAsync(x => x.Id == r.Id, ct);
         Assert.Equal(("Bagus.", 5, ReviewStatus.Published), (unchanged.Text, unchanged.Rating, unchanged.Status));
 
@@ -403,7 +403,8 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
         var bad = new CreateReportRequest(ReportType.Hazard, "pothole", Lat, Lng, 0, "Lubang. Jual vape wasap 0123456789");
         var (report, merged) = await Reports(db, Answer("reject", "high", null, "tobacco_promo", "external_contact")).CreateAsync(_alice, bad, ct);
         Assert.False(merged);
-        Assert.Equal((true, new[] { "tobacco_promo", "external_contact" }), (report.NoteDropped, report.NoteReasons!.ToArray()));
+        Assert.True(report.NoteDropped);
+        Assert.Equal(["tobacco_promo", "external_contact"], report.NoteReasons);
         Assert.Null((await db.Reports.AsNoTracking().SingleAsync(r => r.Id == report.Id, ct)).Comment);
 
         var good = new CreateReportRequest(ReportType.Hazard, "pothole", Lat + 0.05, Lng, 0, null, Note: "Lubang besar lorong kiri");
@@ -439,7 +440,7 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
         await BrandWatchlistService.EnsureSeededAsync(db, ct);
         TestGates.Screener Place(string decision, params string[] reasons) => new(_ => new ScreeningResult(PlaceScreening.Normalize(decision, "high", reasons), false));
         CreatePlaceRequest Req(string name, double d, IReadOnlyList<string>? warnings = null) =>
-            new(name, PlaceCategory.Restaurant, Lat + d, Lng, null, "Makan", null, null, null, null, null, warnings);
+            new(name, PlaceCategory.Restaurant, Lat, Lng + d, null, "Makan", null, null, null, null, null, warnings);
 
         // The AI check adds the warning on a place that otherwise passes; the owner's tags are merged in; unknown tags are ignored.
         var pub = await Places(db, Place("publish", "sensitive_alcohol")).CreateAsync(_alice, Req("Kedai Minuman Ali", 0.001, ["tobacco", "nonsense"]), ct);

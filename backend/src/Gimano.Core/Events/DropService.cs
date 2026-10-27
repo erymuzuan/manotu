@@ -32,6 +32,9 @@ public sealed class EfDropStore(GimanoDbContext db) : IDropStore
         try
         {
             await db.SaveChangesAsync(ct);
+            // Reads and mutations below bypass tracking; retain no stale instance after insertion.
+            // A later ID collision in this scope must reach the database uniqueness check.
+            db.Entry(drop).State = EntityState.Detached;
             return true;
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })

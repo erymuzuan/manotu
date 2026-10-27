@@ -78,6 +78,7 @@ public sealed class PostgresIntegrationDropTests : IAsyncLifetime
         // Collision on the primary key is reported, not thrown.
         var store = new EfDropStore(db);
         Assert.False(await store.TryInsertAsync(new Drop { Id = c.DropId, Blob = blob, WriteTokenHash = new byte[32], OwnerHash = new byte[32] }, default));
+        Assert.Equal(blob.Length + 2, (await svc.GetAsync(c.DropId)).Item2!.Length);
 
         // Quota.
         for (var i = 1; i < DropService.MaxLivePerUser; i++) Assert.Equal(R.Ok, (await svc.CreateAsync(me, blob, clock.Now.AddDays(3).ToString("O"))).Item1);
