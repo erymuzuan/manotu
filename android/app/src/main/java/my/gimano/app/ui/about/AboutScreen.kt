@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -62,6 +63,24 @@ fun AboutScreen(c: AppContainer, live: Boolean, onBack: () -> Unit, onLicences: 
             Text(stringResource(R.string.about_server, host, stringResource(if (live) R.string.mode_live else R.string.mode_demo)), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = col.textMuted)
             // Google Play build: Play delivers updates, so no in-app updater card, just where the app came from.
             if (!BuildConfig.SELF_UPDATE) Text(stringResource(R.string.about_distribution_play), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = col.textMuted)
+            val su by c.storeUpdater.ui.collectAsState()
+            val storeLatest = (su.decision as? my.gimano.app.core.update.StoreUpdateDecision.Soft)?.latest
+                ?: (su.decision as? my.gimano.app.core.update.StoreUpdateDecision.Forced)?.latest
+            if (storeLatest != null) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(col.surface).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Filled.SystemUpdate, null, tint = col.brandInk, modifier = Modifier.size(28.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.update_available), fontWeight = FontWeight.Black, color = col.text)
+                    Text(storeLatest, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = col.brand)
+                }
+                Button(onClick = c.storeUpdater::openStore, colors = ButtonDefaults.buttonColors(containerColor = col.brand, contentColor = col.brandOn)) { Text(stringResource(R.string.update_now), fontWeight = FontWeight.ExtraBold) }
+            }
+            if (BuildConfig.DEBUG) {
+                var dbg by remember { mutableStateOf(c.storeUpdater.debugToggle()) }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.store_update_debug), Modifier.weight(1f), fontSize = 13.sp, color = col.textMuted)
+                    Switch(checked = dbg, onCheckedChange = { dbg = it; c.storeUpdater.setDebugToggle(it); scope.launch { c.storeUpdater.check() } })
+                }
+            }
             else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(col.surface).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val latest = when (val d = u.decision) { is UpdateDecision.Available -> d.manifest.versionName; is UpdateDecision.Required -> d.manifest.versionName; else -> null }
                 Text(if (latest != null) stringResource(R.string.update_latest, latest) else stringResource(R.string.update_up_to_date), fontWeight = FontWeight.Black, color = if (latest != null) col.brand else col.text)

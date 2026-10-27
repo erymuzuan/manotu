@@ -67,6 +67,17 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     var updateSheetOpen by remember { mutableStateOf(true) }
     var forceUpdateSheet by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { container.updater.check() }   // on launch; at most every 6 h
+    // Play build: store-update check at launch and whenever the app returns to the foreground (throttled to 30 min inside).
+    val storeUpd by container.storeUpdater.ui.collectAsStateWithLifecycle()
+    val storeScope = rememberCoroutineScope()
+    val rootLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(rootLifecycle) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_START) storeScope.launch { container.storeUpdater.check() }
+        }
+        rootLifecycle.lifecycle.addObserver(obs)
+        onDispose { rootLifecycle.lifecycle.removeObserver(obs) }
+    }
     LaunchedEffect(Unit) { container.crashes.onAppStart() }
     // data objects' toString() is a compile-time constant (survives R8); data classes → "Search(purpose=…)".
     LaunchedEffect(ui.screen) { container.crashes.screen = ui.screen.toString().substringBefore('(').lowercase() }
@@ -434,6 +445,10 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
         else -> Unit
     }
     my.gimano.app.ui.update.UpdateDialogs(container.updater, upd)
+    // Play build: full-screen store-update card; deferred while a trip is active (shows when it ends).
+    if (my.gimano.app.core.update.StoreUpdatePolicy.visible(storeUpd.decision, navigating = nav.active || screen == Screen.Navigating, laterThisLaunch = storeUpd.laterThisLaunch)) {
+        my.gimano.app.ui.update.StoreUpdateCard(storeUpd.decision, onUpdate = container.storeUpdater::openStore, onLater = container.storeUpdater::later)
+    }
     LaunchedEffect(upd.justUpdatedTo) {
         upd.justUpdatedTo?.let { v -> snackbar.showSnackbar(context.getString(R.string.updated_to, v)); container.updater.dismissUpdatedNote() }
     }

@@ -57,6 +57,8 @@ public sealed class GimanoDbContext(DbContextOptions<GimanoDbContext> options) :
     public DbSet<ReplyDraft> ReplyDrafts => Set<ReplyDraft>();
     public DbSet<AppBuild> AppBuilds => Set<AppBuild>();
     public DbSet<Events.Drop> Drops => Set<Events.Drop>();
+    public DbSet<AppVersions.AppRelease> AppReleases => Set<AppVersions.AppRelease>();
+    public DbSet<AppVersions.AppVersionConfig> AppVersionConfigs => Set<AppVersions.AppVersionConfig>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -595,6 +597,25 @@ public sealed class GimanoDbContext(DbContextOptions<GimanoDbContext> options) :
             e.Property(x => x.OwnerHash).HasMaxLength(32);
             e.HasIndex(x => x.OwnerHash);
             e.HasIndex(x => x.ExpiresAt);
+        });
+
+
+        // Store versions (docs/app-updates.md): public facts only.
+        b.Entity<AppVersions.AppRelease>(e =>
+        {
+            e.ToTable("app_releases");
+            e.HasKey(x => new { x.Platform, x.Version });
+            e.Property(x => x.Platform).HasMaxLength(16);
+            e.Property(x => x.Version).HasMaxLength(30);
+        });
+        b.Entity<AppVersions.AppVersionConfig>(e =>
+        {
+            e.ToTable("app_version_config");
+            e.HasKey(x => x.Platform);
+            e.Property(x => x.Platform).HasMaxLength(16);
+            e.Property(x => x.MinVersion).HasMaxLength(30);
+            e.Property(x => x.StoreUrl).HasMaxLength(300);
+            e.Property(x => x.MaxBehind).HasDefaultValue(3);
         });
 
         b.Entity<TollRate>(e =>

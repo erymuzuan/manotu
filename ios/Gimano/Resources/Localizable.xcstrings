@@ -16673,6 +16673,56 @@
           }
         }
       }
+    },
+    "Update needed" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kemas kini diperlukan"
+          }
+        }
+      }
+    },
+    "New version" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versi baharu"
+          }
+        }
+      }
+    },
+    "Update" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kemas kini"
+          }
+        }
+      }
+    },
+    "Later" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nanti"
+          }
+        }
+      }
+    },
+    "Update available" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kemas kini tersedia"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

@@ -91,6 +91,8 @@ final class AppModel {
     let config: AppConfig
     let location = LocationService()
     let live = LiveMapStore()
+    /// "New version" nudge / forced update (docs/app-updates.md).
+    let updates = UpdateCenter()
     let map: MapState
     @ObservationIgnored let voice = VoiceGuide()
     @ObservationIgnored private let simulator = DriveSimulator()

@@ -26,6 +26,65 @@ namespace Gimano.Core.Data.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Gimano.Core.AppVersions.AppRelease", b =>
+                {
+                    b.Property<string>("Platform")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("platform");
+
+                    b.Property<string>("Version")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("version");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at");
+
+                    b.HasKey("Platform", "Version")
+                        .HasName("pk_app_releases");
+
+                    b.ToTable("app_releases", (string)null);
+                });
+
+            modelBuilder.Entity("Gimano.Core.AppVersions.AppVersionConfig", b =>
+                {
+                    b.Property<string>("Platform")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("platform");
+
+                    b.Property<int>("MaxBehind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3)
+                        .HasColumnName("max_behind");
+
+                    b.Property<string>("MinVersion")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("min_version");
+
+                    b.Property<string>("StoreUrl")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("store_url");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Platform")
+                        .HasName("pk_app_version_config");
+
+                    b.ToTable("app_version_config", (string)null);
+                });
+
             modelBuilder.Entity("Gimano.Core.Domain.AdminArea", b =>
                 {
                     b.Property<long>("Id")

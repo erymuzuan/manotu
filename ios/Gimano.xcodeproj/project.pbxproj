@@ -27,6 +27,7 @@
 		12C0483DE6032187524DDA08 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E4FA99DFCD83AC93051F13 /* APIClient.swift */; };
 		12E4EBF975FFF3BE07CD2CC3 /* CarMapViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B808992354F3382A4401441A /* CarMapViewController.swift */; };
 		1411F07311E084B2270AD2FE /* Polyline.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBED0F8FE579F3B5F1450975 /* Polyline.swift */; };
+		144265B59C20CC3A853A941C /* AppUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D358257FDCCFE0E928D1B6C /* AppUpdateTests.swift */; };
 		15BA7DFEA6610ADA6C379D33 /* RefusedContentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A73329DA84717566B84D8336 /* RefusedContentViews.swift */; };
 		167305D4048DDF1691A858AF /* LocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D72CA1FD99C025348465D00 /* LocalStore.swift */; };
 		16E1F0632C338D1D39F83478 /* negative-drop-link.json in Resources */ = {isa = PBXBuildFile; fileRef = 98E0234EF2B405A7CFEB37DD /* negative-drop-link.json */; };
@@ -85,6 +86,7 @@
 		55F21CB9D1D3FD030C305CE6 /* Issues.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15D166F80F9F3A6ACB804638 /* Issues.swift */; };
 		57AE74F18DB7444722A5FCAD /* Backup.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEBD1CA04E9BD6F194DF4D43 /* Backup.swift */; };
 		59248EFA8DE8BE5366318037 /* EventImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 097C283DEC62883C913FC1BD /* EventImport.swift */; };
+		5A6D75DB19EE19EBDB7756E4 /* AppUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F47B66257F635EAB16ED2B /* AppUpdate.swift */; };
 		5A78E4B3E12FABB9FD67D168 /* negative-wrong-secret-code.json in Resources */ = {isa = PBXBuildFile; fileRef = F8626B15E0A19CE2A4B91C3E /* negative-wrong-secret-code.json */; };
 		5B6B50819F757ED067640922 /* QuickReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2075C59A0DFAA836D2F335C4 /* QuickReport.swift */; };
 		5BCBFF798E9A1E4512A78D68 /* TravelledRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3380B1E2A6F41D7744B2B934 /* TravelledRoute.swift */; };
@@ -377,6 +379,7 @@
 		99FD5679349BEB4A15317F1B /* SafetyUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyUITests.swift; sourceTree = "<group>"; };
 		9A036FEB486539C0CE10B8E9 /* ReviewsAndPhotos.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewsAndPhotos.swift; sourceTree = "<group>"; };
 		9A722110659E231FED8F3BBE /* CloudBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackup.swift; sourceTree = "<group>"; };
+		9D358257FDCCFE0E928D1B6C /* AppUpdateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateTests.swift; sourceTree = "<group>"; };
 		9D7D08318C4045FBC2B3C28F /* ThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeTests.swift; sourceTree = "<group>"; };
 		9FC71DDB18170AAF1C8D8BAE /* ServerCheckUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerCheckUITests.swift; sourceTree = "<group>"; };
 		A02085C06D9DA6B742E31157 /* RouteListViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteListViews.swift; sourceTree = "<group>"; };
@@ -458,6 +461,7 @@
 		F91F00B133314DFEC95215A9 /* TravelledRouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TravelledRouteTests.swift; sourceTree = "<group>"; };
 		F9864475842D29F8CEEB633E /* ContentSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSafety.swift; sourceTree = "<group>"; };
 		F99C09F6978E54EEB6DE9E0E /* negative-oversized-fragment.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "negative-oversized-fragment.json"; sourceTree = "<group>"; };
+		F9F47B66257F635EAB16ED2B /* AppUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdate.swift; sourceTree = "<group>"; };
 		FBED0F8FE579F3B5F1450975 /* Polyline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Polyline.swift; sourceTree = "<group>"; };
 		FCB4A8EBDBFD3D3E30CD851F /* InboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxTests.swift; sourceTree = "<group>"; };
 		FD2F548D8B08143E9D7D735A /* TollAheadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TollAheadTests.swift; sourceTree = "<group>"; };
@@ -521,6 +525,7 @@
 				5B3D04CFBE0642FAADD143B9 /* Route */,
 				4E329A7E10BDFE41876954AE /* Search */,
 				98175BC9A93CC329DAE96FD0 /* Settings */,
+				9559D57E5960170D558404C8 /* Update */,
 				C78DDC1FE8B566C0DF8C171A /* Vetting */,
 			);
 			path = Features;
@@ -653,6 +658,7 @@
 			isa = PBXGroup;
 			children = (
 				DDE33DEBD2BF370A032B2A2F /* AddPlaceGateTests.swift */,
+				9D358257FDCCFE0E928D1B6C /* AppUpdateTests.swift */,
 				558CE18CBB3768B6E4DFB5E6 /* ArrivalTests.swift */,
 				DECA86CBF8E1232D9EB30901 /* CarPlayTests.swift */,
 				C7F590A7A960137F55169445 /* CommunityTests.swift */,
@@ -781,6 +787,14 @@
 				28F8D8E468983421C5B7ED97 /* Nunito.ttf */,
 			);
 			path = Fonts;
+			sourceTree = "<group>";
+		};
+		9559D57E5960170D558404C8 /* Update */ = {
+			isa = PBXGroup;
+			children = (
+				F9F47B66257F635EAB16ED2B /* AppUpdate.swift */,
+			);
+			path = Update;
 			sourceTree = "<group>";
 		};
 		97CD2F31BB35B58717C381DE = {
@@ -1169,6 +1183,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				39419F7EABFB41EF8214FCA3 /* AddPlaceGateTests.swift in Sources */,
+				144265B59C20CC3A853A941C /* AppUpdateTests.swift in Sources */,
 				1B0490A9855B187F58AA9ACC /* ArrivalTests.swift in Sources */,
 				BA55F3266EB6DD75AF40F8BE /* CarPlayTests.swift in Sources */,
 				E7F47A07EC130E67C081FBC9 /* CommunityTests.swift in Sources */,
@@ -1224,6 +1239,7 @@
 				2CFBF3FEC7B1D49DB651C850 /* AddPlaceGateViews.swift in Sources */,
 				CCB345D1D908EA86AA8B12B6 /* AppConfig.swift in Sources */,
 				AC660909C29CEC1666DB4070 /* AppModel.swift in Sources */,
+				5A6D75DB19EE19EBDB7756E4 /* AppUpdate.swift in Sources */,
 				0DEDE26D12AE6D17A6527BC1 /* Arrival.swift in Sources */,
 				57AE74F18DB7444722A5FCAD /* Backup.swift in Sources */,
 				1D8EAB42EBD51399D21C66F9 /* BackupManager.swift in Sources */,

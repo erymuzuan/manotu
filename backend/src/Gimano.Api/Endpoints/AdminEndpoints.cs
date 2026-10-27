@@ -75,6 +75,10 @@ public static class AdminEndpoints
         dev.MapPost("/issues", SeedIssue);
         dev.MapDelete("/issues/{id:guid}", DeleteSeededIssue);
         g.MapPost("/osm-queue/{id:guid}/exported", MarkExported);
+        // Store versions (docs/app-updates.md): mark a Google Play release live and set the forced-update floor. Idempotent.
+        g.MapGet("/app-versions", async (Gimano.Core.AppVersions.AppVersionService v, CancellationToken ct) =>
+            TypedResults.Ok(new { versions = await v.GetAsync(ct), config = await v.ConfigsAsync(ct) }));
+        g.MapPut("/app-versions/{platform}", SetAppVersion);
         g.MapPost("/search/aliases/reload", (Services.AliasStore store) => TypedResults.Ok(new { rows = store.Reload() }));
 
         // Curated restricted areas (docs/api.md "Restricted areas"): sites OSM doesn't tag. public=false (shelters, safe
@@ -83,6 +87,28 @@ public static class AdminEndpoints
         g.MapPost("/restricted-areas", AddCurated);
         g.MapDelete("/restricted-areas/{id:long}", DeleteCurated);
         return api;
+    }
+
+    public sealed record AppVersionRequest(string? Version, string? MinVersion, int? MaxBehind);
+
+    /// <summary>Records {version} as released (when given) and updates minVersion / maxBehind (when given; minVersion "" clears the floor).</summary>
+    private static async Task<IResult> SetAppVersion(string platform, AppVersionRequest req, HttpContext http, Gimano.Core.AppVersions.AppVersionService v,
+        ILogger<AdminKeyFilter> log, CancellationToken ct)
+    {
+        if (!Gimano.Core.AppVersions.AppVersionPolicy.IsPlatform(platform)) return Validation.Problem("platform", "platform must be ios or android-play.");
+        if (string.IsNullOrWhiteSpace(req.Version) && req.MinVersion is null && req.MaxBehind is null)
+            return Validation.Problem("version", "Give a version to record, a minVersion or a maxBehind.");
+        try
+        {
+            var created = !string.IsNullOrWhiteSpace(req.Version) && await v.RecordReleaseAsync(platform, req.Version, null, ct);
+            if (req.MinVersion is not null || req.MaxBehind is not null) await v.SetConfigAsync(platform, req.MinVersion, req.MaxBehind, null, ct);
+            log.LogInformation("AUDIT app version {Platform} {Version} min={Min} behind={Behind} new={New} by admin key {KeyFingerprint}",
+                platform, req.Version, req.MinVersion, req.MaxBehind, created, AdminKeyFilter.Fingerprint(http));
+            var all = await v.GetAsync(ct);
+            return TypedResults.Ok(new { recorded = created, platform = all.Platforms.TryGetValue(platform, out var p) ? p : null,
+                config = (await v.ConfigsAsync(ct)).First(c => c.Platform == platform) });
+        }
+        catch (ValidationException ex) { return Validation.Problem(ex.Field, ex.Message); }
     }
 
     public sealed record CuratedAreaRequest(IReadOnlyList<double[]> Ring, bool Public);

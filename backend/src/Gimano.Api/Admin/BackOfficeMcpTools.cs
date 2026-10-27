@@ -14,7 +14,7 @@ namespace Gimano.Api.Admin;
 /// fenced as untrusted data. There is deliberately no tool to unseal contacts, merge, release or contact a reporter.
 /// </summary>
 [McpServerToolType]
-public sealed class BackOfficeMcpTools(TriageService triage, IHttpContextAccessor http)
+public sealed class BackOfficeMcpTools(TriageService triage, IHttpContextAccessor http, Gimano.Core.AppVersions.AppVersionService versions)
 {
     private Actor Actor => (http.HttpContext ?? throw new UnauthorizedAccessException("No request.")).User.ToActor();
 
@@ -104,6 +104,14 @@ public sealed class BackOfficeMcpTools(TriageService triage, IHttpContextAccesso
     {
         Actor.Require(AgentScopes.Read);
         return await triage.ResolveBuildAsync(platform, build, version, ct) is { } b ? Out(b) : "No build registered; ask a maintainer to add it under Releases.";
+    });
+
+    [McpServerTool(Name = "app_versions", ReadOnly = true),
+     Description("Latest store version, forced-update floor (forceBelow) and policy per platform (ios, android-play). Changing it is maintainer-only (back office or X-Admin-Key).")]
+    public Task<string> AppVersions(CancellationToken ct = default) => Guard(async () =>
+    {
+        Actor.Require(AgentScopes.Read);
+        return Out(new { versions = await versions.GetAsync(ct), config = await versions.ConfigsAsync(ct) });
     });
 
     // ---- triage ------------------------------------------------------------------------------------------------

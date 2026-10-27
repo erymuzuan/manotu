@@ -1350,4 +1350,8 @@
     <string name="no_results_area">Tiada tempat sepadan dalam kawasan ini</string>
     <string name="report_sends_in">Dihantar dalam %1$d s · ketik pilihan untuk memilih dahulu</string>
     <string name="report_action">Lapor</string>
+    <string name="store_update_new">Versi baharu</string>
+    <string name="store_update_required">Kemas kini diperlukan</string>
+    <string name="store_update_forced_body">Kemas kini Manotu untuk terus guna. Tempat anda kekal dalam telefon anda.</string>
+    <string name="store_update_debug">Nyahpepijat: semakan kemas kini kedai (kad Play)</string>
 </resources>

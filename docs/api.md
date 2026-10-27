@@ -948,6 +948,20 @@ place_held, place_not_accepted, place_live, content_published, content_held, con
   its own text from `kind` + `count`.
 - Newest first, keyset-paged with `cursor` (30 per page). `unread` counts everything newer than the read mark.
 
+## App updates (`GET /app/versions`)
+
+Public, anonymous, no body or query; `Cache-Control: public, max-age=300`. Tells an installed store app the newest store
+version and the floor below which it must update. It collects nothing (same answer for everyone). Full contract and the
+client rules: [`app-updates.md`](app-updates.md).
+
+```
+GET /app/versions
+→ 200 { "platforms": { "ios": {"latest":"0.4.2","forceBelow":"0.4.0","storeUrl":"https://apps.apple.com/app/id6826478029","releasedAt":"2026-10-26T03:04:05+00:00"},
+                       "android-play": {"latest":"0.4.2","forceBelow":null,"storeUrl":"https://play.google.com/store/apps/details?id=my.manotu.app","releasedAt":"…"} } }
+```
+
+A platform is absent until a release is known; `forceBelow` is `null` when nothing is forced.
+
 ## Back office & AI agents (not for the apps)
 
 `/admin/v1/*` and the MCP endpoint `POST /mcp` (server `gimano-backoffice`) are for maintainers' AI agents. They take

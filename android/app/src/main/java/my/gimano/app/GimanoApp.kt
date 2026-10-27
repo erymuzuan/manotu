@@ -211,6 +211,8 @@ class AppContainer(val app: Application) {
     /** Complaints v1 (hidden until the server has /issues). */
     val issues = my.gimano.app.data.issues.IssueGate(repo)
     val updater = my.gimano.app.data.update.AppUpdater(app).also { it.onAppStart() }
+    /** Google Play build (and a debug toggle): "new version in the store" card. See docs/app-updates.md. */
+    val storeUpdater = my.gimano.app.data.update.StoreUpdater(app) { settings.current.apiBaseUrl }.also { it.refreshFromCache() }
     /** Effective theme (set by MainActivity) for the device block of feedback / crash reports. */
     @Volatile var darkTheme: Boolean = false
     /** Accuracy of the most recent fix (set by the UI and navigation), for support info only. */

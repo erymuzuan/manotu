@@ -271,6 +271,7 @@ struct SettingsView: View {
                 NavigationLink { AboutView() } label: { Label("About Gimano", systemImage: "info.circle") }
                     .accessibilityIdentifier("settingsAbout")
                 LabeledContent("Version", value: AppInfo.versionString)
+                UpdateAvailableRow()
                 LabeledContent("Server", value: model.config.serverLabel)
                     .accessibilityIdentifier("serverHost")
                 if let name = model.user?.displayName {
@@ -645,7 +646,8 @@ struct AboutView: View {
                     Text(verbatim: "\(model.config.serverLabel) · \(statusText)")
                 }
                 .accessibilityIdentifier("aboutServer")
-                LabeledContent("Latest version", value: AppInfo.version)
+                LabeledContent("Latest version", value: model.updates.latestVersion)
+                UpdateAvailableRow()
                 #if DEBUG
                 if let s = UserDefaults.standard.string(forKey: "crash.lastSent") {
                     Text(verbatim: "crash: \(s)").font(Tokens.Font.small).accessibilityIdentifier("debugCrashLastSent")

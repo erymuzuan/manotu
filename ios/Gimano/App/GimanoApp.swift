@@ -65,6 +65,7 @@ struct GimanoApp: App {
                     // First launches: offer to paste an invitation link copied before installing (§5.6). Once per launch.
                     model.events.checkDeferredLink()
                     await model.bootstrap()
+                    await model.updates.checkIfDue(apiBase: model.config.apiBaseURL, demo: model.isDemo)
                     if let id = AppDelegate.pendingDriveId { AppDelegate.pendingDriveId = nil; model.openPlannedDrive(id: id) }
                 }
                 .onChange(of: scenePhase) { _, phase in
@@ -73,6 +74,7 @@ struct GimanoApp: App {
                         model.events.refresh()
                         // Restricted areas: re-checked at most daily (ETag), cached in a file.
                         Task { await model.refreshRestrictedAreas() }
+                        Task { await model.updates.checkIfDue(apiBase: model.config.apiBaseURL, demo: model.isDemo) }
                     }
                 }
                 // Universal Links (https://manotu.app/j/#…, /a/#…), when the Associated Domains entitlement is on.
@@ -102,6 +104,11 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.colorScheme) private var colorScheme
     @State private var menuDestination: MenuDestination?
+
+    private var updatePresentation: UpdateDecision {
+        if model.showOnboarding || model.safetyAgreement != nil { return .none }
+        return model.updates.presentation(busy: model.navigation != nil)
+    }
 
     var body: some View {
         @Bindable var model = model
@@ -244,6 +251,15 @@ struct RootView: View {
             RestrictedAreaInfoSheet()
                 .presentationDetents([.height(400), .large])
                 .presentationCornerRadius(Tokens.Radius.sheetTop)
+        }
+        // New version (soft, once per launch) or update required (blocking). Never during navigation; not over onboarding/agreement.
+        .fullScreenCover(isPresented: Binding(
+            get: { updatePresentation != .none },
+            set: { if !$0 { model.updates.later() } }
+        )) {
+            UpdateCardView(forced: updatePresentation == .forced, current: AppInfo.version, latest: model.updates.latestVersion,
+                           onUpdate: { model.updates.open() }, onLater: { model.updates.later() })
+                .interactiveDismissDisabled()
         }
         .preferredColorScheme(model.preferredScheme)
         .onAppear { model.schemeChanged(colorScheme) }

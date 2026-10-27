@@ -226,6 +226,22 @@ watches (groups `gambling`, `online_gambling`, `tobacco`, `high_risk_investment`
 is not called). Brand names only, nothing private; every change is in the audit log (`brand.add|edit|enable|disable`). A starter
 set is seeded once into an empty table at API startup.
 
+## App versions (store update nudges)
+
+The **App versions** page (and, with the maintainer key, `GET /api/v1/admin/app-versions`) shows `latest` / `forceBelow` per
+platform (`ios`, `android-play`) and lets a maintainer mark a Google Play release live and set the min version / max releases
+behind. iOS is detected hourly by the worker (App Store lookup). Same action over the API (X-Admin-Key, LAN/Tailscale only):
+
+```
+PUT /api/v1/admin/app-versions/android-play
+{ "version": "0.4.2", "minVersion": "0.4.0", "maxBehind": 3 }     // every field optional, at least one; minVersion "" clears the floor
+→ 200 { "recorded": true, "platform": {latest, forceBelow, storeUrl, releasedAt}, "config": {platform, minVersion, maxBehind, storeUrl, updatedAt} }
+```
+
+Idempotent (`recorded:false` when the version was already known). Agents get a read-only MCP tool `app_versions` (scope `read`);
+there is deliberately no agent tool to change the policy, since it can force every installed app to update. Changes made in the
+back office are in the audit log (`app_version.set`). Details: [`app-updates.md`](app-updates.md).
+
 ## Maintainer digest (worker)
 
 Without it, nobody would know that feedback or reported content is waiting. `MaintainerDigestJob` checks every 15 minutes

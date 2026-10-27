@@ -102,6 +102,7 @@ builder.Services.AddAuthorization(o => o.AddPolicy(AgentTokenAuthenticationHandl
 
 // Back office for AI agents (docs/back-office.md): /admin/v1 REST + the MCP server at /mcp, same rules as the Blazor app.
 builder.Services.AddScoped<TriageService>();
+builder.Services.AddScoped<Gimano.Core.AppVersions.AppVersionService>();
 builder.Services.Configure<AdminOptions>(config.GetSection(AdminOptions.Section));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMcpServer(o => o.ServerInfo = new() { Name = "gimano-backoffice", Title = "Manotu back office", Version = "1.0.0" })
@@ -183,7 +184,7 @@ app.MapHealthChecks("/healthz", new HealthCheckOptions { Predicate = _ => false,
 app.MapHealthChecks("/readyz", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready"), ResponseWriter = HealthWriter.WriteAsync });
 
 var api = app.MapGroup("/api/v1");
-api.MapAuthAndMe().MapPlaces().MapRoutes().MapLive().MapFeedback().MapPrivacy().MapCommunity().MapShares().MapDrops().MapInbox().MapIdentity().MapCrashReports().MapAdmin().MapIssues();
+api.MapAuthAndMe().MapPlaces().MapRoutes().MapLive().MapFeedback().MapPrivacy().MapCommunity().MapShares().MapDrops().MapAppVersions().MapInbox().MapIdentity().MapCrashReports().MapAdmin().MapIssues();
 app.MapMedia();
 app.MapAgentAdmin();
 app.MapMcp("/mcp").RequireAuthorization(AgentTokenAuthenticationHandler.Policy);

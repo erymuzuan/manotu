@@ -1,0 +1,87 @@
+@page "/app-versions"
+@rendermode InteractiveServer
+@using Gimano.Core.AppVersions
+@inherits BackOfficePage
+
+<PageTitle>App versions · Manotu back office</PageTitle>
+
+<header class="page-head">
+    <div>
+        <h1>App versions</h1>
+        <p>What installed store apps are told: the latest version, and the floor below which they must update. iOS is detected hourly from the App Store; mark a Google Play release live here.</p>
+    </div>
+</header>
+
+<Messages Error="@Error" Notice="@Notice" />
+
+<div class="split">
+    <div class="primary">
+        <section class="table-box">
+            <table class="grid">
+                <thead><tr><th scope="col">Platform</th><th scope="col">Latest</th><th scope="col">Force below</th><th scope="col">Min version</th><th scope="col">Max behind</th><th scope="col">Live since</th></tr></thead>
+                <tbody>
+                    @foreach (var c in configs)
+                    {
+                        versions.Platforms.TryGetValue(c.Platform, out var v);
+                        <tr>
+                            <td><strong>@c.Platform</strong></td>
+                            <td>@(v?.Latest ?? "—")</td>
+                            <td>@(v?.ForceBelow ?? "—")</td>
+                            <td>@(c.MinVersion ?? "—")</td>
+                            <td>@c.MaxBehind</td>
+                            <td class="small muted nowrap">@(v?.ReleasedAt is { } at ? Fmt.Short(at) : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    </div>
+    <aside class="aside">
+        <section class="card stack" style="gap: 12px;">
+            <h2 style="margin: 0;">Update a platform</h2>
+            <label class="field">Platform
+                <select @bind="platform"><option value="android-play">Google Play</option><option value="ios">iOS</option></select>
+            </label>
+            <label class="field">Release now live (optional) <input @bind="version" placeholder="0.4.2" /></label>
+            <label class="field">Min version (optional; empty keeps, - clears) <input @bind="minVersion" placeholder="0.4.0" /></label>
+            <label class="field">Max releases behind (optional) <input type="number" @bind="maxBehind" /></label>
+            <button class="btn primary" @onclick="Save">Save</button>
+        </section>
+    </aside>
+</div>
+
+@code {
+    private AppVersionsResponse versions = new(new Dictionary<string, PlatformVersion>());
+    private IReadOnlyList<AppVersionConfigView> configs = [];
+    private string platform = "android-play";
+    private string? version, minVersion;
+    private int? maxBehind;
+
+    private AppVersionService Service => ScopedServices.GetRequiredService<AppVersionService>();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        versions = await Service.GetAsync();
+        configs = await Service.ConfigsAsync();
+    }
+
+    private async Task Save()
+    {
+        var me = await MeAsync();
+        var min = string.IsNullOrWhiteSpace(minVersion) ? null : minVersion.Trim() == "-" ? "" : minVersion.Trim();
+        if (string.IsNullOrWhiteSpace(version) && min is null && maxBehind is null) { Error = "Give a version, a min version or max behind."; Notice = null; return; }
+        if (await TryAsync(async () =>
+        {
+            if (!string.IsNullOrWhiteSpace(version)) await Service.RecordReleaseAsync(platform, version.Trim());
+            if (min is not null || maxBehind is not null) await Service.SetConfigAsync(platform, min, maxBehind);
+            await Triage.AuditAsync(me, "app_version.set", "app_version", platform, $"version={version} min={min} behind={maxBehind}");
+        }, "Saved."))
+        {
+            version = minVersion = null;
+            maxBehind = null;
+            await Load();
+        }
+    }
+}

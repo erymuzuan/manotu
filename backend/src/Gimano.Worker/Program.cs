@@ -35,6 +35,8 @@ builder.Services.AddHostedService<Gimano.Worker.Inbox.InboxRetention>();
 builder.Services.AddHostedService<Gimano.Worker.Vetting.VettingMaintenance>();
 builder.Services.AddHostedService<Gimano.Worker.Support.ReportRetentionJob>();
 builder.Services.AddHostedService<Gimano.Worker.Events.DropPurge>();
+builder.Services.AddHttpClient(Gimano.Worker.AppUpdates.AppStorePoller.ClientName);
+builder.Services.AddHostedService<Gimano.Worker.AppUpdates.AppStorePoller>();
 
 builder.Services.Configure<GitHubFeedbackOptions>(builder.Configuration.GetSection(GitHubFeedbackOptions.Section));
 if (builder.Configuration.GetSection(GitHubFeedbackOptions.Section).Get<GitHubFeedbackOptions>() is { } gh && gh.EnabledIn(builder.Environment.EnvironmentName))

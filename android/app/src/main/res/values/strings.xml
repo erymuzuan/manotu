@@ -1359,4 +1359,8 @@
     <string name="no_results_area">No matching places in this area</string>
     <string name="report_sends_in">Sends in %1$d s · tap an option to choose first</string>
     <string name="report_action">Report</string>
+    <string name="store_update_new">New version</string>
+    <string name="store_update_required">Update required</string>
+    <string name="store_update_forced_body">Update Manotu to carry on. Your places stay on your phone.</string>
+    <string name="store_update_debug">Debug: store update check (Play card)</string>
 </resources>
