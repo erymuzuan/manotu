@@ -246,8 +246,11 @@ struct DriveMotionTests {
 
     @Test("A jam 4 km ahead on the highway starts Tinjau once, with its banner text")
     func tinjauFromRoute() throws {
-        let (r0, _) = cameraRoute()
-        let r = r0.withDebugJam(atM: 4000)
+        // Construct test traffic directly so Release tests do not depend on a DEBUG-only demo helper.
+        let (_, baseGeometry) = cameraRoute()
+        let from = try #require(baseGeometry.cumulative.firstIndex { $0 >= 4000 })
+        let to = try #require(baseGeometry.cumulative.firstIndex { $0 >= 5200 })
+        let (r, _) = cameraRoute(traffic: [TrafficSegment(fromIndex: from, toIndex: to, level: 4)])
         let g = RouteGeometry(route: r)
         let m = DriveMotion(route: r, geometry: g)
         var now = 0.0
