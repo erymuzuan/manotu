@@ -157,7 +157,11 @@ docker compose -f deploy/docker-compose.yml run --rm backoffice invite me@exampl
 # (locally: dotnet run --project backend/src/Gimano.BackOffice -- invite me@example.com)
 ```
 
-It prints `…/Account/Register?invite=inv_…` (base URL from `BackOffice:PublicUrl`, default `http://100.101.150.9:5090`).
+It prints `…/Account/Register?invite=inv_…` (base URL from `BackOffice:PublicUrl`, default `https://backoffice.manotu.app`).
+Add `--send` to email the invitation through the configured ACS sender instead of printing a secret link.
+The public URL must be HTTPS. Existing accounts are rejected without changing them. For production, use
+`docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod run --rm --no-deps backoffice invite <email> --send`.
+Add future maintainers to `BACKOFFICE_MAINTAINERS` and `DIGEST_TO`, recreate backoffice/worker, then send their invites.
 The invite works once, only for that email, expires after 24 hours, and only its sha256 is stored
 (`backoffice."MaintainerInvites"`); minting a new one for the same email cancels the unused old one. A failed
 registration (e.g. a weak password) leaves the invite usable. External-login account creation is disabled. Passkeys need a secure

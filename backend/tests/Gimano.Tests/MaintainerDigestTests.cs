@@ -55,6 +55,25 @@ public class MaintainerDigestTests
     }
 
     [Fact]
+    public void Existing_work_is_not_reported_as_quiet()
+    {
+        var crashes = Counts() with { CrashGroupsOpen = 3 };
+        Assert.False(crashes.IsQuiet);
+        Assert.Contains("3 crash groups open", MaintainerDigest.Daily(crashes, At0810Myt, "u").Subject);
+        Assert.Contains("2 feedback awaiting triage", MaintainerDigest.Daily(Counts(untriaged: 2), At0810Myt, "u").Subject);
+    }
+
+    [Fact]
+    public void Category_breakdown_includes_zero_counts_and_does_not_double_count_regressions()
+    {
+        var message = MaintainerDigest.Daily(Counts(feedback: 4, regressed: 2), At0810Myt, "https://backoffice.manotu.app");
+        Assert.Contains("New bug feedback (24 h): 4", message.Text);
+        Assert.Contains("New idea feedback (24 h): 0", message.Text);
+        Assert.Contains("Open crash groups (includes regressions): 2", message.Text);
+        Assert.Contains("Regressed crash groups: 2", message.Text);
+    }
+
+    [Fact]
     public void Moderation_alert_states_the_wait()
     {
         var m = MaintainerDigest.ModerationAlert(Counts(moderation: 2, oldestModeration: TimeSpan.FromHours(20.6)), "u");

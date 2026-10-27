@@ -18,7 +18,7 @@ public sealed record DigestCounts(
     int CrashGroupsNew, int CrashGroupsRegressed, int CrashGroupsOpen,
     int ModerationWaiting, int PlacesHeld, TimeSpan? OldestModeration)
 {
-    public bool IsQuiet => FeedbackNew == 0 && FeedbackUntriaged == 0 && CrashGroupsNew == 0 && CrashGroupsRegressed == 0 && ModerationWaiting == 0;
+    public bool IsQuiet => FeedbackNew == 0 && FeedbackUntriaged == 0 && CrashGroupsNew == 0 && CrashGroupsRegressed == 0 && CrashGroupsOpen == 0 && ModerationWaiting == 0;
 }
 
 /// <summary>Daily counts-only email to maintainers, plus an alert when a moderation item nears the 24-hour promise (docs/back-office.md).</summary>
@@ -99,19 +99,24 @@ public static class MaintainerDigest
         if (c.CrashGroupsRegressed > 0) parts.Add($"{c.CrashGroupsRegressed} crash regressed");
         else if (c.CrashGroupsNew > 0) parts.Add($"{c.CrashGroupsNew} new crash");
         if (c.ModerationWaiting > 0) parts.Add($"{c.ModerationWaiting} to moderate");
+        if (parts.Count == 0 && c.FeedbackUntriaged > 0) parts.Add($"{c.FeedbackUntriaged} feedback awaiting triage");
+        if (parts.Count == 0 && c.CrashGroupsOpen > 0) parts.Add($"{c.CrashGroupsOpen} crash groups open");
         var subject = $"Manotu {day}: {(parts.Count == 0 ? "all quiet" : string.Join(" · ", parts))}";
 
         var categories = string.Join(", ", c.FeedbackNewByCategory.Where(kv => kv.Value > 0).OrderByDescending(kv => kv.Value)
-            .Select(kv => $"{kv.Value} {GimanoJson.ToWire(kv.Key)}"));
+            .Select(kv => $"{kv.Value} {GimanoJson.ToWire(kv.Key).Replace('_', ' ')}"));
         var rows = new List<(string Label, string Value)>
         {
             ("New feedback (24 h)", c.FeedbackNew == 0 ? "0" : $"{c.FeedbackNew} ({categories})"),
             ("Feedback not yet triaged", $"{c.FeedbackUntriaged}{Age(c.OldestUntriaged)}"),
             ("New crash groups (24 h)", $"{c.CrashGroupsNew}"),
-            ("Crash groups open / regressed", $"{c.CrashGroupsOpen} / {c.CrashGroupsRegressed}"),
+            ("Open crash groups (includes regressions)", $"{c.CrashGroupsOpen}"),
+            ("Regressed crash groups", $"{c.CrashGroupsRegressed}"),
             ("Moderation waiting", $"{c.ModerationWaiting}{Age(c.OldestModeration)}"),
-            ("…of which places held for review", $"{c.PlacesHeld}"),
+            ("Places held for review (included above)", $"{c.PlacesHeld}"),
         };
+        foreach (var category in Enum.GetValues<FeedbackCategory>())
+            rows.Add(($"New {GimanoJson.ToWire(category).Replace('_', ' ')} feedback (24 h)", c.FeedbackNewByCategory.GetValueOrDefault(category).ToString(CultureInfo.InvariantCulture)));
         return Render(subject, rows, backOfficeUrl,
             c.ModerationWaiting > 0 ? "We promise to act on reported content within 24 hours." : null);
     }
@@ -120,7 +125,7 @@ public static class MaintainerDigest
     {
         var hours = (int)Math.Floor(c.OldestModeration!.Value.TotalHours);
         var subject = $"Manotu: a moderation item has waited {hours} h ({c.ModerationWaiting} waiting)";
-        return Render(subject, [("Moderation waiting", $"{c.ModerationWaiting}{Age(c.OldestModeration)}"), ("…of which places held for review", $"{c.PlacesHeld}")],
+        return Render(subject, [("Moderation waiting", $"{c.ModerationWaiting}{Age(c.OldestModeration)}"), ("Places held for review (included above)", $"{c.PlacesHeld}")],
             backOfficeUrl, "Our Terms, Apple 1.2 and the Play UGC policy promise action within 24 hours.");
     }
 
@@ -137,13 +142,32 @@ public static class MaintainerDigest
         text.AppendLine().Append("Back office: ").AppendLine(url);
         text.AppendLine().AppendLine("Counts only. Message text, contacts and locations stay in the back office.");
 
-        var html = new StringBuilder("<div style=\"font-family:system-ui,sans-serif;color:#0B1B3A\"><table cellpadding=\"6\" style=\"border-collapse:collapse\">");
-        foreach (var (l, v) in rows)
-            html.Append("<tr><td style=\"color:#3A4A66\">").Append(WebUtility.HtmlEncode(l)).Append("</td><td><b>").Append(WebUtility.HtmlEncode(v)).Append("</b></td></tr>");
-        html.Append("</table>");
-        if (note is not null) html.Append("<p>").Append(WebUtility.HtmlEncode(note)).Append("</p>");
-        html.Append("<p><a href=\"").Append(WebUtility.HtmlEncode(url)).Append("\">Open the back office</a></p>")
-            .Append("<p style=\"color:#6B7A94;font-size:12px\">Counts only. Message text, contacts and locations stay in the back office.</p></div>");
+        var html = new StringBuilder("""
+            <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+            <body style="margin:0;padding:0;background:#F5F8FD;color:#0B1B3A;font-family:Arial,Helvetica,sans-serif">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F8FD"><tr><td align="center" style="padding:24px 12px">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#FFFFFF;border:1px solid #DCE5F2;border-radius:16px;overflow:hidden">
+            <tr><td style="padding:24px;background:#0047AB;color:#FFFFFF;font-size:28px;font-weight:bold">Manotu<span style="display:block;margin-top:8px;font-size:14px;font-weight:normal">Maintainer report</span></td></tr>
+            <tr><td style="padding:24px">
+            """);
+        html.Append("<h1 style=\"margin:0 0 12px;font-size:22px;line-height:1.35\">").Append(WebUtility.HtmlEncode(subject)).Append("</h1>")
+            .Append("<p style=\"margin:0 0 24px;color:#3A4A66;font-size:14px;line-height:1.6\">New activity covers the last 24 hours. Queue counts are current totals. Dates use Malaysia time (UTC+8).</p>")
+            .Append("<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;font-size:14px;line-height:1.5\"><caption style=\"text-align:left;font-size:18px;font-weight:bold;padding-bottom:12px\">Feedback, bugs &amp; moderation</caption>")
+            .Append("<thead><tr style=\"background:#EAF1FC\"><th scope=\"col\" align=\"left\" style=\"padding:12px;border-bottom:2px solid #0047AB\">Metric</th><th scope=\"col\" align=\"right\" style=\"padding:12px;border-bottom:2px solid #0047AB\">Count / age</th></tr></thead><tbody>");
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var (label, value) = rows[i];
+            html.Append("<tr style=\"background:").Append(i % 2 == 0 ? "#FFFFFF" : "#F5F8FD")
+                .Append("\"><th scope=\"row\" align=\"left\" style=\"padding:12px;border-bottom:1px solid #DCE5F2;font-weight:normal;color:#3A4A66\">")
+                .Append(WebUtility.HtmlEncode(label)).Append("</th><td align=\"right\" style=\"padding:12px;border-bottom:1px solid #DCE5F2;font-weight:bold\">")
+                .Append(WebUtility.HtmlEncode(value)).Append("</td></tr>");
+        }
+        html.Append("</tbody></table>");
+        if (note is not null) html.Append("<p style=\"padding:12px;background:#FFF4DF;color:#674400;font-size:14px;line-height:1.6\">").Append(WebUtility.HtmlEncode(note)).Append("</p>");
+        html.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin-top:24px\"><tr><td bgcolor=\"#0047AB\" style=\"border-radius:8px;padding:14px 20px\"><a style=\"color:#FFFFFF;font-size:16px;font-weight:bold;text-decoration:none;display:inline-block\" href=\"")
+            .Append(WebUtility.HtmlEncode(url)).Append("\">Open the back office</a></td></tr></table>")
+            .Append("<p style=\"font-size:12px;line-height:1.6;word-break:break-word\"><a style=\"color:#0047AB\" href=\"").Append(WebUtility.HtmlEncode(url)).Append("\">").Append(WebUtility.HtmlEncode(url)).Append("</a></p>")
+            .Append("</td></tr><tr><td style=\"padding:20px 24px;background:#EAF1FC;color:#3A4A66;font-size:12px;line-height:1.6\">Counts only. Message text, contacts and locations stay in the back office.</td></tr></table></td></tr></table></body></html>");
         return new Message(subject, text.ToString(), html.ToString());
     }
 }

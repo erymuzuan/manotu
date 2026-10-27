@@ -203,7 +203,7 @@ services:
       Digest__From: ${DIGEST_FROM:-DoNotReply@bukitbunga.com}
       Digest__To__0: ${DIGEST_TO:-}
       Digest__SendAtHour: ${DIGEST_SEND_AT_HOUR:-8}
-      Digest__BackOfficeUrl: ${BACKOFFICE_PUBLIC_URL:-http://127.0.0.1:5090}
+      Digest__BackOfficeUrl: ${BACKOFFICE_PUBLIC_URL:-https://backoffice.manotu.app}
       # The worker finishes AI checks that took longer than 4 s (same key and budget as the api).
       Screening__ApiKey: ${CLAUDE_API_KEY:-}
       Screening__WeeklyBudgetUsd: ${SCREENING_WEEKLY_BUDGET_USD:-20}
@@ -231,7 +231,7 @@ services:
       # Shown on "Agent access" as the API address agents use for /mcp (the api as reached over the tailnet).
       BackOffice__ApiBaseUrl: ${BACKOFFICE_API_BASE_URL:-http://172.30.30.150:5080}
       # Base of the one-time invite links printed by `run --rm backoffice invite <email>`.
-      BackOffice__PublicUrl: ${BACKOFFICE_PUBLIC_URL:-http://127.0.0.1:5090}
+      BackOffice__PublicUrl: ${BACKOFFICE_PUBLIC_URL:-https://backoffice.manotu.app}
       DataProtection__KeysPath: /data/keys
       # Every sign-in ends with a 6-digit code emailed through ACS (the digest's resource); no ACS = nobody can sign in.
       BackOffice__EmailCode__AcsConnectionString: ${DIGEST_ACS_CONNECTION_STRING:-}

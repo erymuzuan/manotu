@@ -10,7 +10,8 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-var builder = WebApplication.CreateBuilder(args);
+// Invite arguments belong to the maintenance command, not the configuration provider.
+var builder = WebApplication.CreateBuilder(args is ["invite", _, ..] ? [] : args);
 var config = builder.Configuration;
 
 builder.Services.AddRazorComponents()
@@ -137,15 +138,37 @@ if (args is ["invite", var inviteEmail, ..])
     await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.MigrateAsync();
     try
     {
+        var sendEmail = args.Contains("--send", StringComparer.Ordinal);
+        var baseUrl = (config["BackOffice:PublicUrl"] ?? "https://backoffice.manotu.app").TrimEnd('/');
+        var emailOptions = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<EmailCodeOptions>>().Value;
+        if (sendEmail && (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var publicUri) || publicUri.Scheme != "https" || publicUri.IsLoopback))
+            throw new InvalidOperationException("Set BackOffice:PublicUrl to the public HTTPS back office before sending invitations.");
+        if (sendEmail && !emailOptions.CanSend)
+            throw new InvalidOperationException("Configure BackOffice:EmailCode:AcsConnectionString before sending invitations.");
+        if (await scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>().FindByEmailAsync(inviteEmail.Trim()) is not null)
+            throw new InvalidOperationException("This maintainer already has an account. Sign in with the existing account; no new invitation was created.");
         var token = await scope.ServiceProvider.GetRequiredService<MaintainerInvites>().CreateAsync(inviteEmail);
-        var baseUrl = (config["BackOffice:PublicUrl"] ?? "http://100.101.150.9:5090").TrimEnd('/');
-        Console.WriteLine($"Invite for {inviteEmail.Trim()} (single use, expires in {MaintainerInvites.Lifetime.TotalHours:0} h):");
-        Console.WriteLine($"{baseUrl}/Account/Register?invite={Uri.EscapeDataString(token)}");
+        var link = $"{baseUrl}/Account/Register?invite={Uri.EscapeDataString(token)}";
+        if (sendEmail)
+        {
+            var content = MaintainerInvitationEmail.Create(link);
+            var client = new Azure.Communication.Email.EmailClient(emailOptions.AcsConnectionString);
+            var operation = await client.SendAsync(Azure.WaitUntil.Completed,
+                new Azure.Communication.Email.EmailMessage(emailOptions.From, inviteEmail.Trim(), content));
+            if (operation.Value.Status != Azure.Communication.Email.EmailSendStatus.Succeeded)
+                throw new InvalidOperationException("Invitation email was not accepted. Retry the invite command.");
+            Console.WriteLine("Invitation email accepted by the email service. The single-use link expires in 24 hours.");
+        }
+        else
+        {
+            Console.WriteLine($"Invite for {inviteEmail.Trim()} (single use, expires in {MaintainerInvites.Lifetime.TotalHours:0} h):");
+            Console.WriteLine(link);
+        }
         return 0;
     }
-    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Azure.RequestFailedException)
     {
-        Console.Error.WriteLine(ex.Message);
+        Console.Error.WriteLine(ex is Azure.RequestFailedException ? "Email service rejected the invitation. Check ACS configuration and retry." : ex.Message);
         return 1;
     }
 }

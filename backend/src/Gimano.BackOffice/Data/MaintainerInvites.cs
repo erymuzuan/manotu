@@ -6,8 +6,8 @@ namespace Gimano.BackOffice.Data;
 
 /// <summary>
 /// A one-time registration invite for one allowlisted email (docs/back-office.md "Maintainer sign-in"). There is no
-/// self-registration and no mail sender: an operator mints an invite on the host (<c>invite &lt;email&gt;</c>) and hands
-/// over the link. Only the sha256 of the token is stored; it expires after 24 hours and works once.
+/// self-registration: an operator mints an invite on the host (<c>invite &lt;email&gt;</c>) and hands
+/// over the link, or adds <c>--send</c> to email it through ACS. Only the sha256 of the token is stored; it expires after 24 hours and works once.
 /// </summary>
 public sealed class MaintainerInvite
 {
