@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<title>Facebook post [Name]</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&amp;display=swap">
+<style>body{margin:0;font-family:Nunito,system-ui,sans-serif}</style>
+</helmet>
+<div style="width: 680px; height: 1000px; background: #F0F2F5; font-family: Nunito, system-ui, sans-serif; color: #0B1B3A; display: flex; align-items: flex-start; justify-content: center; padding: 20px 0; box-sizing: border-box;">
+  <div style="width: 640px; background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.12); overflow: hidden; display: flex; flex-direction: column;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 14px 16px 8px;">
+      <svg width="44" height="44" viewBox="0 0 200 200" aria-hidden="true"><rect width="200" height="200" rx="44" fill="#0047AB"></rect><g transform="translate(0 11)"><path d="M100 26 L166 75 L136 75 L100 49 L64 75 L34 75 Z" fill="#FFFFFF"></path><path d="M100 70 L152 105 L125 105 L100 88 L75 105 L48 105 Z" fill="#FFFFFF" fill-opacity="0.85"></path><path d="M44 152 C68 122 132 122 156 152 C130 141 70 141 44 152 Z" fill="#FFFFFF"></path><circle cx="100" cy="124" r="11" fill="#FF6B4A"></circle></g></svg>
+      <span style="display: flex; flex-direction: column;"><span style="font-size: 16px; font-weight: 900;">Manotu</span><span style="font-size: 13px; font-weight: 700; color: #65676B;">Baru sahaja · Awam</span></span>
+    </div>
+    <!-- CAPTION: the exact text that will be posted; white-space: pre-line keeps its line breaks. -->
+    <div style="padding: 4px 16px 12px; font-size: 15px; font-weight: 600; line-height: 1.45; white-space: pre-line;">[Kapsyen dalam Bahasa Melayu, sapa pembaca sebagai "anda".]
+
+[Short English paragraph for feature announcements.]
+
+Muat turun / Download:
+▶️ Untuk Android (Google Play) [pautan Google Play]
+🍎 Untuk iPhone (beta) [pautan TestFlight]
+
+#Manotu</div>
+    <!-- IMAGES: 1–4 real app screenshots uploaded as canvas assets; use the /_blob/<id> URLs verbatim.
+         Change repeat(4, …) to the number of images. Keep real alt text. -->
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; background: #FFFFFF;">
+      <img src="/_blob/REPLACE_1" alt="[Skrin Manotu: …]" style="width: 100%; height: 340px; object-fit: cover; object-position: top; display: block;">
+      <img src="/_blob/REPLACE_2" alt="[Skrin Manotu: …]" style="width: 100%; height: 340px; object-fit: cover; object-position: top; display: block;">
+      <img src="/_blob/REPLACE_3" alt="[Skrin Manotu: …]" style="width: 100%; height: 340px; object-fit: cover; object-position: top; display: block;">
+      <img src="/_blob/REPLACE_4" alt="[Skrin Manotu: …]" style="width: 100%; height: 340px; object-fit: cover; object-position: top; display: block;">
+    </div>
+    <!-- Optional step labels under the images; delete if not needed. -->
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; padding: 6px 0 10px; font-size: 12px; font-weight: 900; color: #3A4A66; text-align: center;">
+      <span>1 · [langkah]</span><span>2 · [langkah]</span><span>3 · [langkah]</span><span>4 · [langkah]</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; padding: 10px 16px; font-size: 13px; font-weight: 700; color: #65676B; border-bottom: 1px solid #E4E6EB;"><span>👍❤️ [reaksi] · [komen] · [kongsi]</span><span>Contoh mockup</span></div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 6px 8px; font-size: 14px; font-weight: 800; color: #65676B; text-align: center;"><span style="padding: 8px;">Suka</span><span style="padding: 8px;">Komen</span><span style="padding: 8px;">Kongsi</span></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":680,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
