@@ -71,6 +71,8 @@ sealed interface Screen {
     data object Planned : Screen
     data object Favourites : Screen
     data object Inbox : Screen
+    /** Inbox › Not accepted: content the server refused, kept on this phone for 30 days (edit or appeal). */
+    data object NotAccepted : Screen
     data object Theme : Screen
     data object Account : Screen
     /** "Pilih pada peta" (canvas CariPeta): pin fixed at the centre, the map moves underneath. */
@@ -2082,6 +2084,7 @@ class MainViewModel(private val c: AppContainer) : ViewModel() {
                 Screen.Settings -> goHome()
                 Screen.Backup, Screen.MyFeedback, Screen.Account, Screen.About, Screen.Safety -> _ui.update { it.copy(screen = Screen.Settings) }
                 Screen.Licences -> _ui.update { it.copy(screen = Screen.About) }
+                Screen.NotAccepted -> _ui.update { it.copy(screen = Screen.Inbox) }
                 Screen.Contributions, Screen.AddPlace, Screen.Planned, Screen.Favourites, Screen.Inbox -> goHome()
                 Screen.Theme -> goHome()
                 Screen.Events -> goHome()

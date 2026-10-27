@@ -35,6 +35,7 @@ else
                     @if (f.Screen is { } scr) { <Pill Text="@($"screen: {Fmt.Wire(scr)}")" Kind="route" /> }
                     @if (f.Rating is { } rating) { <Pill Text="@($"rating {rating}/5")" Kind="neutral" /> }
                     @if (f.Severity is { } sev) { <Pill Text="@Fmt.Wire(sev)" /> }
+                    @if (f.SuspectedSpam) { <Pill Text="suspected spam" Kind="neutral" /> }
                 </div>
                 <blockquote style="margin: 0; font-size: 20px; font-weight: 800; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere;">“@f.Message”</blockquote>
 

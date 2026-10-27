@@ -661,8 +661,24 @@ class DemoRepository(
         return photoStore.values.flatten().firstOrNull { it.id == photoId }?.let(::settle) ?: throw demoProblem(404, ProblemDetails(title = "Not found", status = 404))
     }
 
-    override suspend fun appealReview(reviewId: String, note: String?) { latency(); if (!appealedContent.add(reviewId)) throw demoProblem(409, ProblemDetails(title = "Already appealed", status = 409)) }
-    override suspend fun appealPhoto(photoId: String, note: String?) { latency(); if (!photoAppealed.add(photoId)) throw demoProblem(409, ProblemDetails(title = "Already appealed", status = 409)) }
+    override suspend fun appealReview(reviewId: String, note: String?, photos: List<ByteArray>) {
+        latency(); requireDemoNote(note)
+        if (!appealedContent.add(reviewId)) throw demoProblem(409, ProblemDetails(title = "Already appealed", status = 409, code = "already_appealed"))
+    }
+    override suspend fun appealPhoto(photoId: String, note: String?, photos: List<ByteArray>) {
+        latency(); requireDemoNote(note)
+        if (!photoAppealed.add(photoId)) throw demoProblem(409, ProblemDetails(title = "Already appealed", status = 409, code = "already_appealed"))
+    }
+    private val refusalsAppealed = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    override suspend fun submitAppeal(refusalId: String, kind: String, placeId: String?, text: String, reasons: List<String>, note: String, photos: List<ByteArray>, rating: Int?): AppealAck {
+        latency(); requireDemoNote(note)
+        if (kind == "review" && rating !in 1..5) throw demoProblem(400, ProblemDetails(title = "Rating required", status = 400))
+        if (!refusalsAppealed.add(refusalId)) throw demoProblem(409, ProblemDetails(title = "Already appealed", status = 409, code = "already_appealed"))
+        return AppealAck(java.util.UUID.randomUUID().toString(), "pending")
+    }
+    private fun requireDemoNote(note: String?) {
+        if (note.isNullOrBlank() || note.trim().length > 200) throw demoProblem(400, ProblemDetails(title = "Note required", status = 400, code = "note_required"))
+    }
 
     // --- Share my drive (demo relay: keeps only the latest ciphertext, like the server) ---
     val demoShares = java.util.concurrent.ConcurrentHashMap<String, MutableList<my.gimano.app.data.share.SealedShare>>()

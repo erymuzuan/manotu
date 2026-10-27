@@ -429,6 +429,9 @@ struct InboxView: View {
             if let until = model.postingPausedUntil, PostingPause.isActive(until: until) {
                 PausedCard(until: until).listRowBackground(Color.clear).listRowInsets(EdgeInsets())
             }
+            if !model.refusedItems.isEmpty {
+                NotAcceptedInboxRow()
+            }
             if !model.inboxItems.isEmpty {
                 Text("News about your contributions: places, reviews, reports and feedback.")
                     .font(Tokens.Font.caption).foregroundStyle(Color.textMuted)
@@ -488,6 +491,7 @@ struct InboxView: View {
         }
         .refreshable { await model.refreshInbox() }
         .task {
+            model.reloadRefused()
             await model.refreshInbox()
             // Let the unread dots show briefly, then mark as read.
             try? await Task.sleep(for: .seconds(2))

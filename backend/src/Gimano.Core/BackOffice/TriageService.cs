@@ -88,10 +88,10 @@ public sealed class TriageService(GimanoDbContext db, TimeProvider clock, Contac
             .Select(f => new
             {
                 f.Id, f.Category, f.Message, f.Rating, f.Screen, f.Status, f.Severity, f.Device, HasScreenshot = f.Screenshot != null,
-                HasContact = db.ReportContacts.Any(c => c.SubjectType == ContactSubject.Feedback && c.SubjectId == f.Id), f.CreatedAt,
+                HasContact = db.ReportContacts.Any(c => c.SubjectType == ContactSubject.Feedback && c.SubjectId == f.Id), f.CreatedAt, f.SuspectedSpam,
             }).ToListAsync(ct);
         return rows.Select(f => new FeedbackListItem(f.Id, f.Category, f.Message, f.Rating, f.Screen, f.Status, f.Severity,
-            f.Device?.AppVersion, f.Device?.Platform, f.HasScreenshot, f.HasContact, f.CreatedAt)).ToList();
+            f.Device?.AppVersion, f.Device?.Platform, f.HasScreenshot, f.HasContact, f.CreatedAt, f.SuspectedSpam)).ToList();
     }
 
     public async Task<FeedbackView?> GetFeedbackAsync(Guid id, CancellationToken ct = default)
@@ -100,7 +100,7 @@ public sealed class TriageService(GimanoDbContext db, TimeProvider clock, Contac
         {
             x.Id, x.Category, x.Message, x.Rating, x.Screen, x.Status, x.Severity, x.Device, x.Lat, x.Lng, x.RouteId, x.PlaceId,
             HasScreenshot = x.Screenshot != null, x.ScreenshotSharedWithAgents, x.DuplicateOfId, x.CrashSignature, x.TriageNote,
-            x.ExternalUrl, x.CreatedAt, x.UpdatedAt, x.ClosedAt,
+            x.ExternalUrl, x.CreatedAt, x.UpdatedAt, x.ClosedAt, x.SuspectedSpam,
         }).FirstOrDefaultAsync(ct);
         if (f is null) return null;
         var contactCreated = await db.ReportContacts.AsNoTracking().Where(c => c.SubjectType == ContactSubject.Feedback && c.SubjectId == id)
@@ -108,7 +108,7 @@ public sealed class TriageService(GimanoDbContext db, TimeProvider clock, Contac
         var contact = contactCreated is { } created ? new ContactFlags(created, ReportRetention.ContactExpiresAt(created, f.ClosedAt)) : null;
         return new(f.Id, f.Category, f.Message, f.Rating, f.Screen, f.Status, f.Severity, f.Device, f.Lat, f.Lng, f.RouteId, f.PlaceId,
             f.HasScreenshot, f.ScreenshotSharedWithAgents, contact, f.DuplicateOfId, f.CrashSignature, f.TriageNote, f.ExternalUrl,
-            f.CreatedAt, f.UpdatedAt, f.ClosedAt);
+            f.CreatedAt, f.UpdatedAt, f.ClosedAt, f.SuspectedSpam);
     }
 
     /// <summary>Maintainers always; agents need the read scope and a maintainer must have shared that one screenshot.</summary>
@@ -236,10 +236,10 @@ public sealed class TriageService(GimanoDbContext db, TimeProvider clock, Contac
             .Select(f => new
             {
                 f.Id, f.Category, f.Message, f.Rating, f.Screen, f.Status, f.Severity, f.Device, HasScreenshot = f.Screenshot != null,
-                HasContact = db.ReportContacts.Any(c => c.SubjectType == ContactSubject.Feedback && c.SubjectId == f.Id), f.CreatedAt,
+                HasContact = db.ReportContacts.Any(c => c.SubjectType == ContactSubject.Feedback && c.SubjectId == f.Id), f.CreatedAt, f.SuspectedSpam,
             }).ToListAsync(ct);
         return rows.Select(f => new FeedbackListItem(f.Id, f.Category, f.Message, f.Rating, f.Screen, f.Status, f.Severity,
-            f.Device?.AppVersion, f.Device?.Platform, f.HasScreenshot, f.HasContact, f.CreatedAt)).ToList();
+            f.Device?.AppVersion, f.Device?.Platform, f.HasScreenshot, f.HasContact, f.CreatedAt, f.SuspectedSpam)).ToList();
     }
 
     public async Task<CrashGroupView> TriageCrashAsync(string signature, CrashTriage t, Actor actor, CancellationToken ct = default)

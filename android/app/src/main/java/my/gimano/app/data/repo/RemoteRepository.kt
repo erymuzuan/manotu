@@ -231,8 +231,14 @@ class RemoteRepository(
 
     override suspend fun photos(placeId: String) = authed { photos(placeId) }
     override suspend fun photo(photoId: String) = authed { photo(photoId) }
-    override suspend fun appealReview(reviewId: String, note: String?) { authed { appealReview(reviewId, AppealRequest(note?.trim()?.ifBlank { null })) }.orThrow() }
-    override suspend fun appealPhoto(photoId: String, note: String?) { authed { appealPhoto(photoId, AppealRequest(note?.trim()?.ifBlank { null })) }.orThrow() }
+    private fun textPart(s: String) = s.toRequestBody("text/plain; charset=utf-8".toMediaType())
+    private fun evidence(photos: List<ByteArray>) = photos.take(3).mapIndexed { i, b ->
+        MultipartBody.Part.createFormData("photos", "evidence-${i + 1}.jpg", b.toRequestBody("image/jpeg".toMediaType()))
+    }
+    override suspend fun appealReview(reviewId: String, note: String?, photos: List<ByteArray>) { authed { appealReview(reviewId, textPart(note.orEmpty().trim()), evidence(photos)) }.orThrow() }
+    override suspend fun appealPhoto(photoId: String, note: String?, photos: List<ByteArray>) { authed { appealPhoto(photoId, textPart(note.orEmpty().trim()), evidence(photos)) }.orThrow() }
+    override suspend fun submitAppeal(refusalId: String, kind: String, placeId: String?, text: String, reasons: List<String>, note: String, photos: List<ByteArray>, rating: Int?) =
+        authed { submitAppeal(textPart(refusalId), textPart(kind), placeId?.let { textPart(it) }, textPart(text), rating?.let { textPart(it.toString()) }, reasons.map { textPart(it) }, textPart(note.trim()), evidence(photos)) }
 
     override suspend fun createShare(expiresInMinutes: Int) = authed { createShare(my.gimano.app.data.share.CreateShareRequest(expiresInMinutes)) }
     override suspend fun updateShare(shareId: String, writeToken: String, sealed: my.gimano.app.data.share.SealedShare) { api.updateShare(shareId, "Share $writeToken", sealed).orThrow() }

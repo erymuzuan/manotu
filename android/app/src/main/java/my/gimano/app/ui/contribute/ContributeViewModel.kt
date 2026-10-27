@@ -21,6 +21,11 @@ import my.gimano.app.core.places.CreateFailure
 import my.gimano.app.core.places.OpeningHours
 import my.gimano.app.core.places.PlaceGate
 import my.gimano.app.core.places.RatingSummary
+import my.gimano.app.core.safety.AppealError
+import my.gimano.app.core.safety.AppealRules
+import my.gimano.app.core.safety.AppealState
+import my.gimano.app.core.safety.RefusedItem
+import my.gimano.app.core.safety.RefusedKind
 import my.gimano.app.core.safety.ContentFailure
 import my.gimano.app.core.safety.ContentGate
 import my.gimano.app.core.safety.ContentState
@@ -112,14 +117,46 @@ sealed interface AddOverlay {
 }
 
 /** One photo being attached: uploading → processing → published (or failed). */
-data class UploadItem(val key: String, val uri: Uri, val photo: Photo? = null, val failed: Boolean = false) {
+data class UploadItem(val key: String, val uri: Uri, val photo: Photo? = null, val failed: Boolean = false, val refusal: PhotoRefusal? = null) {
     val processing get() = photo?.status == "processing"
+    /** Still going up: no answer yet (a refusal or a failure is an answer). */
+    val uploading get() = photo == null && !failed && refusal == null
+}
+
+/** POST /photos answered 422 `content_rejected`: nothing was stored; the photo is kept on the phone as [refusedId] (Not accepted). */
+data class PhotoRefusal(val refusedId: String, val reasons: List<String>)
+
+/** What an appeal is about. */
+sealed interface AppealTarget {
+    /** Something the server refused (422): POST /appeals with the saved text. */
+    data class Refusal(val item: RefusedItem) : AppealTarget
+    /** Something the server stored and held or rejected (an own review, photo or place): POST /{kind}s/{id}/appeal. */
+    data class Existing(val kind: RefusedKind, val id: String, val placeName: String?, val text: String?, val reasons: List<String>) : AppealTarget
+}
+
+/** One evidence photo on the Appeal screen: a picker [uri] (copied when sent) or a [file] saved on the phone. */
+data class AppealPhoto(val key: String, val uri: Uri? = null, val file: File? = null)
+
+/** The Appeal screen. [done] shows the "pending" result; [error] an icon-led message; [pausedUntil] goes with PAUSED. */
+data class AppealUi(
+    val target: AppealTarget,
+    val note: String = "",
+    val photos: List<AppealPhoto> = emptyList(),
+    val sending: Boolean = false,
+    val error: AppealError? = null,
+    val pausedUntil: java.time.Instant? = null,
+    val done: Boolean = false,
+) {
+    val canSend: Boolean get() = AppealRules.canSend(note, sending, (target as? AppealTarget.Refusal)?.item?.appealState ?: AppealState.NONE) &&
+        ((target as? AppealTarget.Refusal)?.item?.appealable ?: true)
 }
 
 data class ReviewDraft(
     val rating: Int = 0, val text: String = "", val uploads: List<UploadItem> = emptyList(), val editingId: String? = null, val sending: Boolean = false,
     /** 422 `content_rejected`: the "Can't post this" sheet (nothing was stored). */
     val rejection: ContentFailure.Rejected? = null,
+    /** The saved copy of the last refusal of this draft (Not accepted list); removed once an edited version is posted. */
+    val refusedId: String? = null,
     /** 403 `posting_paused`: the "Paused" sheet. */
     val paused: java.time.Instant? = null,
 )
@@ -130,9 +167,12 @@ data class ReviewsState(
     val loading: Boolean = false,
     val summary: RatingSummary = RatingSummary.of(emptyList()),
     val draft: ReviewDraft? = null,
+    val placeName: String? = null,
     val placeUploads: List<UploadItem> = emptyList(),
     /** The rejected photo whose screen is open (its photo id). */
     val rejectedPhotoId: String? = null,
+    /** The photo the server refused at upload (kept on the phone): its refused id. */
+    val refusedPhotoId: String? = null,
 )
 
 sealed interface ContribEvent {
@@ -554,7 +594,7 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
 
     /** [keep]: the author's own review that the list may not carry yet (held or still being checked): shown with its status. */
     fun loadReviews(place: Place, keep: Review? = null) {
-        _reviews.value = ReviewsState(placeId = place.id, loading = true, summary = RatingSummary.of(emptyList(), place.rating, place.reviewCount))
+        _reviews.value = ReviewsState(placeId = place.id, placeName = place.name, loading = true, summary = RatingSummary.of(emptyList(), place.rating, place.reviewCount))
         viewModelScope.launch {
             val page = runCatching { c.repo.reviews(place.id, "recent") }.getOrNull()
             val list = page?.reviews.orEmpty().let { l -> if (keep != null && l.none { it.id == keep.id }) listOf(keep) + l else l }
@@ -575,6 +615,9 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
         _reviews.update { it.copy(draft = existing?.let { r -> ReviewDraft(r.rating, r.text.orEmpty(), editingId = r.id) } ?: ReviewDraft(rating = rating.coerceIn(0, 5))) }
     }
     fun closeReview() = _reviews.update { it.copy(draft = null) }
+
+    /** "Can't post this" · Appeal: the Appeal screen for the saved copy of the refused review. */
+    fun appealRejection() { _reviews.value.draft?.refusedId?.let(::openAppealFor) }
 
     /** "Can't post this" · Edit: back to the text, as it was. */
     fun dismissRejection() = updateDraft { it.copy(rejection = null) }
@@ -601,26 +644,140 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
             val item = UploadItem(UUID.randomUUID().toString(), u)
             updateDraft { it.copy(uploads = it.uploads + item) }
             viewModelScope.launch {
-                val ph = upload(placeId, u)
-                updateDraft { d -> d.copy(uploads = d.uploads.map { if (it.key == item.key) it.copy(photo = ph, failed = ph == null) else it }) }
+                val (ph, refusal) = upload(placeId, _reviews.value.placeName, u)
+                updateDraft { d -> d.copy(uploads = d.uploads.map { if (it.key == item.key) it.copy(photo = ph, failed = ph == null && refusal == null, refusal = refusal) else it }) }
             }
         }
     }
 
-    private suspend fun upload(placeId: String, u: Uri): Photo? {
-        val b = PhotoPrep.decode(c.app, u) ?: return null
-        return runCatching { c.repo.uploadPhoto(placeId, PhotoPrep.jpeg(b), null) }
+    private suspend fun upload(placeId: String, placeName: String?, u: Uri): Pair<Photo?, PhotoRefusal?> {
+        val b = PhotoPrep.decode(c.app, u) ?: return null to null
+        val jpeg = PhotoPrep.jpeg(b)
+        val photo = runCatching { c.repo.uploadPhoto(placeId, jpeg, null) }
             .onFailure { e ->
                 if (e is my.gimano.app.data.repo.RestrictedAreaException) _events.tryEmit(ContribEvent.Text(e.detail))
-                else if (e is HttpException) (ContentGate.failure(e.code(), runCatching { e.response()?.errorBody()?.string() }.getOrNull()) as? ContentFailure.Paused)
-                    ?.let { p -> PostingPause.set(p.until); _events.tryEmit(ContribEvent.Message(R.string.cs_paused_short)) }
+                else if (e is HttpException) when (val f = ContentGate.failure(e.code(), runCatching { e.response()?.errorBody()?.string() }.getOrNull())) {
+                    is ContentFailure.Paused -> { PostingPause.set(f.until ?: java.time.Instant.now().plusSeconds(24 * 3600)); _events.tryEmit(ContribEvent.Message(R.string.cs_paused_short)) }
+                    // POST /photos never answers 422 (docs/content-safety.md "Photos"): a refused photo is stored and turns
+                    // `rejected` later (GET /photos/{id}, polled by track()); its reason icons + Appeal come from that photo.
+                    else -> Unit
+                }
             }
             .getOrNull()?.also {
-            log.photo(it.id, it.url)
-            PhotoPrep.deleteIfCameraTemp(c.app, u)   // uploaded: the camera's temp file is no longer needed
-            track(it)
+                log.photo(it.id, it.url)
+                PhotoPrep.deleteIfCameraTemp(c.app, u)   // uploaded: the camera's temp file is no longer needed
+                track(it)
+            }
+        return photo to null
+    }
+
+    // ---------------------------------------------------------------- refused content (on the phone only) and appeals
+
+    /** Keeps what the server refused in the on-device DB (never sent anywhere unless the user appeals). */
+    private suspend fun keepRefused(kind: RefusedKind, placeId: String?, placeName: String?, text: String, reasons: List<String>, photo: ByteArray? = null, rating: Int? = null): PhotoRefusal? {
+        val id = UUID.randomUUID().toString()
+        val store = c.refused
+        val name = photo?.let { runCatching { store.savePhoto(id, 0, it) }.getOrNull() }
+        val saved = runCatching { store.save(RefusedItem(id, kind, placeId, placeName, text, reasons, listOfNotNull(name), java.time.Instant.now(), rating = rating)) }.getOrNull() ?: return null
+        return PhotoRefusal(saved.id, reasons)
+    }
+
+    private val _appeal = MutableStateFlow<AppealUi?>(null)
+    val appeal: StateFlow<AppealUi?> = _appeal.asStateFlow()
+    /** After an appeal of an own review, the place's reviews reload so the status line is current. */
+    private var appealReload: Place? = null
+
+    /** The Appeal screen for a saved refusal (from "Can't post this", the Not accepted list, or a refused photo). */
+    fun openAppealFor(refusedId: String) {
+        viewModelScope.launch {
+            val item = c.refused.get(refusedId) ?: return@launch
+            val files = item.photos.mapNotNull { n -> c.refused.photoFile(item.id, n)?.let { AppealPhoto("saved-$n", file = it) } }
+            appealReload = null
+            _appeal.value = AppealUi(AppealTarget.Refusal(item), photos = files.take(AppealRules.MAX_PHOTOS))
         }
     }
+
+    /** The Appeal screen for an item the server stored and held or rejected (own review, photo or place). */
+    fun openAppealExisting(kind: RefusedKind, id: String, placeName: String? = null, text: String? = null, reasons: List<String> = emptyList(), reload: Place? = null) {
+        if (!termsOk { openAppealExisting(kind, id, placeName, text, reasons, reload) }) return
+        appealReload = reload
+        _appeal.value = AppealUi(AppealTarget.Existing(kind, id, placeName, text, reasons))
+    }
+
+    fun appealEditNote(v: String) = _appeal.update { it?.copy(note = AppealRules.clipNote(v), error = if (it.error == AppealError.NOTE_REQUIRED) null else it.error) }
+
+    /** From the system photo picker (no permission prompt): up to 3 photos in all. */
+    fun appealPickPhotos(uris: List<Uri>) = _appeal.update { a ->
+        a ?: return@update null
+        val take = AppealRules.clipPhotos(a.photos.size, uris.size)
+        a.copy(photos = a.photos + uris.take(take).map { AppealPhoto(UUID.randomUUID().toString(), uri = it) }, error = null)
+    }
+
+    fun appealDropPhoto(key: String) = _appeal.update { it?.copy(photos = it.photos.filterNot { p -> p.key == key }) }
+
+    fun appealDismiss() {
+        _appeal.value = null
+        appealReload = null
+    }
+
+    /** Send -> POST /appeals (a refusal) or /reviews|/photos|/places/{id}/appeal. Disabled until the note is filled. */
+    fun appealSubmit() {
+        val a = _appeal.value ?: return
+        val note = AppealRules.validNote(a.note)
+        if (note == null || a.sending) { _appeal.update { it?.copy(error = AppealError.NOTE_REQUIRED) }; return }
+        _appeal.update { it?.copy(sending = true, error = null) }
+        viewModelScope.launch {
+            val evidence = a.photos.mapNotNull { evidenceBytes(it) }
+            if (evidence.size < a.photos.size || evidence.any { !AppealRules.photoFits(it.size) }) {
+                _appeal.update { it?.copy(sending = false, error = AppealError.TOO_LARGE) }
+                return@launch
+            }
+            try {
+                when (val t = a.target) {
+                    is AppealTarget.Refusal -> {
+                        val i = t.item
+                        // kind=photo: refusalId is the photo's own id and placeId is not sent; kind=place: placeId plus any UUID.
+                        c.repo.submitAppeal(i.id, i.kind.wire, i.placeId.takeIf { i.kind != RefusedKind.PHOTO }, i.text, i.reasons, note, evidence, i.rating.takeIf { i.kind == RefusedKind.REVIEW })
+                        c.refused.setState(i.id, AppealState.SENT)
+                    }
+                    is AppealTarget.Existing -> when (t.kind) {
+                        RefusedKind.REVIEW -> c.repo.appealReview(t.id, note, evidence)
+                        RefusedKind.PHOTO -> c.repo.appealPhoto(t.id, note, evidence)
+                        RefusedKind.PLACE -> { c.repo.appealPlace(t.id, note); Unit }
+                    }
+                }
+                _appeal.update { it?.copy(sending = false, done = true, error = null) }
+                appealReload?.let { loadReviews(it) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val http = e as? HttpException
+                val body = http?.let { runCatching { it.response()?.errorBody()?.string() }.getOrNull() }
+                val err = AppealRules.errorOf(http?.code(), body, noConnection = e is java.io.IOException)
+                when (err) {
+                    AppealError.ALREADY_APPEALED -> (a.target as? AppealTarget.Refusal)?.let { runCatching { c.refused.setState(it.item.id, AppealState.SENT) } }
+                    AppealError.PAUSED -> PostingPause.set(AppealRules.pausedUntil(body) ?: java.time.Instant.now().plusSeconds(24 * 3600))
+                    else -> Unit
+                }
+                _appeal.update { it?.copy(sending = false, error = err, pausedUntil = if (err == AppealError.PAUSED) PostingPause.active() else it.pausedUntil) }
+            }
+        }
+    }
+
+    /** JPEG bytes of one evidence photo: a saved file as is, a picked photo decoded, EXIF/GPS stripped, re-encoded smaller until it fits 5 MB. */
+    private suspend fun evidenceBytes(p: AppealPhoto): ByteArray? {
+        p.file?.let { f -> return runCatching { f.readBytes() }.getOrNull() }
+        val uri = p.uri ?: return null
+        val bmp = PhotoPrep.decode(c.app, uri) ?: return null
+        for (q in intArrayOf(85, 70, 55)) {
+            val b = PhotoPrep.jpeg(bmp, q)
+            if (AppealRules.photoFits(b.size)) return b
+        }
+        return PhotoPrep.jpeg(bmp, 40)
+    }
+
+    /** Not accepted list: remove one (and its photo files). */
+    fun deleteRefused(id: String) { viewModelScope.launch { runCatching { c.refused.delete(id) } } }
 
     // ---- photo status: tick (published) / clock (processing, checking) / cross (rejected); polls GET /photos/{id}
 
@@ -647,8 +804,26 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
         _reviews.update { s -> s.copy(placeUploads = s.placeUploads.swap(), draft = s.draft?.let { d -> d.copy(uploads = d.uploads.swap()) }) }
     }
 
-    fun showRejectedPhoto(id: String) = _reviews.update { it.copy(rejectedPhotoId = id) }
-    fun closeRejectedPhoto() = _reviews.update { it.copy(rejectedPhotoId = null) }
+    /** [id] = a server photo id, or the refused id of a photo the server refused at upload. */
+    fun showRejectedPhoto(id: String) = _reviews.update { s ->
+        val refused = (s.placeUploads + s.draft?.uploads.orEmpty()).any { it.refusal?.refusedId == id }
+        if (refused) s.copy(refusedPhotoId = id) else s.copy(rejectedPhotoId = id)
+    }
+    fun closeRejectedPhoto() = _reviews.update { it.copy(rejectedPhotoId = null, refusedPhotoId = null) }
+
+    /** Refused photo · "Another photo": it leaves the draft / strip (the saved copy stays in Not accepted until it expires). */
+    fun dropRefusedPhoto(refusedId: String) {
+        _reviews.update { s ->
+            s.copy(refusedPhotoId = null, placeUploads = s.placeUploads.filterNot { it.refusal?.refusedId == refusedId },
+                draft = s.draft?.let { d -> d.copy(uploads = d.uploads.filterNot { it.refusal?.refusedId == refusedId }) })
+        }
+    }
+
+    /** Refused photo · "Ask a person": the Appeal screen for the saved photo. */
+    fun appealRefusedPhoto(refusedId: String) {
+        _reviews.update { it.copy(refusedPhotoId = null) }
+        openAppealFor(refusedId)
+    }
 
     /** Rejected photo · "Another photo": the rejected one leaves the draft / strip; the picker opens in the screen. */
     fun dropPhoto(id: String) {
@@ -658,44 +833,21 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 
-    /** Rejected photo · "Ask a person": POST /photos/{id}/appeal. */
+    /** Rejected photo · "Ask a person": the Appeal screen (a note is required) for POST /photos/{id}/appeal. */
     fun appealPhoto(id: String) {
-        if (!termsOk { appealPhoto(id) }) return
-        viewModelScope.launch {
-            runCatching { c.repo.appealPhoto(id, null) }
-                .onSuccess {
-                    _reviews.update { it.copy(rejectedPhotoId = null) }
-                    _events.tryEmit(ContribEvent.Message(R.string.cs_appeal_sent))
-                }
-                .onFailure { e -> _events.tryEmit(failure(e, if ((e as? HttpException)?.code() == 409) R.string.appeal_already else R.string.action_failed)) }
-        }
+        _reviews.update { it.copy(rejectedPhotoId = null) }
+        val name = _reviews.value.placeName
+        openAppealExisting(RefusedKind.PHOTO, id, placeName = name, reasons = (_reviews.value.placeUploads + _reviews.value.draft?.uploads.orEmpty()).firstOrNull { it.photo?.id == id }?.photo?.moderation?.reasons.orEmpty())
     }
 
-    /** A stored review the check didn't accept (or held): "Ask a person" → POST /reviews/{id}/appeal. */
-    fun appealReview(r: Review, place: Place) {
-        if (!termsOk { appealReview(r, place) }) return
-        viewModelScope.launch {
-            runCatching { c.repo.appealReview(r.id, null) }
-                .onSuccess { _events.tryEmit(ContribEvent.Message(R.string.cs_appeal_sent)); loadReviews(place) }
-                .onFailure { e -> _events.tryEmit(failure(e, if ((e as? HttpException)?.code() == 409) R.string.appeal_already else R.string.action_failed)) }
-        }
-    }
+    /** A stored review the check didn't accept (or held): "Ask a person" opens the Appeal screen (POST /reviews/{id}/appeal). */
+    fun appealReview(r: Review, place: Place) =
+        openAppealExisting(RefusedKind.REVIEW, r.id, place.name, r.text, r.moderation?.reasons.orEmpty(), reload = place)
 
-    /** Inbox · Appeal on a rejected review or photo (the place is not needed: the list reloads when its card opens). */
-    fun appealContent(kind: String?, id: String) {
-        if (!termsOk { appealContent(kind, id) }) return
-        viewModelScope.launch {
-            runCatching {
-                when (kind) {
-                    "review" -> c.repo.appealReview(id, null)
-                    "photo" -> c.repo.appealPhoto(id, null)
-                    "place" -> { c.repo.appealPlace(id, null); Unit }
-                    else -> Unit
-                }
-            }
-                .onSuccess { _events.tryEmit(ContribEvent.Message(R.string.cs_appeal_sent)) }
-                .onFailure { e -> _events.tryEmit(failure(e, if ((e as? HttpException)?.code() == 409) R.string.appeal_already else R.string.action_failed)) }
-        }
+    /** Inbox · Appeal on a rejected review, photo or place: the same screen. */
+    fun appealContent(kind: String?, id: String, placeName: String? = null, reasons: List<String> = emptyList()) {
+        val k = RefusedKind.of(kind) ?: return
+        openAppealExisting(k, id, placeName, null, reasons)
     }
 
     fun submitReview(place: Place) {
@@ -707,6 +859,7 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
             val body = ReviewRequest(d.rating, d.text.trim().ifBlank { null }, d.uploads.filter { it.photo != null && ContentGate.photoState(it.photo) != ContentState.REJECTED }.mapNotNull { it.photo?.id }.ifEmpty { null })
             runCatching { if (d.editingId != null) c.repo.updateReview(d.editingId, body) else c.repo.createReview(place.id, body) }
                 .onSuccess { r ->
+                    d.refusedId?.let { id -> runCatching { c.refused.deleteIfUnappealed(id) } }   // fixed and posted: no longer "not accepted"
                     myReviewIds += r.id
                     val state = ContentGate.reviewState(r)
                     log.review(r.id, place.name, held = state != ReviewState.PASSED)
@@ -725,9 +878,16 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
                     val f = http?.let { ContentGate.failure(it.code(), runCatching { it.response()?.errorBody()?.string() }.getOrNull()) }
                     when (f) {
                         // 422 content_rejected: nothing was stored. The "Can't post this" sheet explains it (never the model's words).
-                        is ContentFailure.Rejected -> updateDraft { it.copy(rejection = f) }
+                        is ContentFailure.Rejected -> {
+                            // Kept on the phone only (Not accepted, 30 days) so it can be edited or appealed; the server stored nothing.
+                            val saved = keepRefused(RefusedKind.REVIEW, place.id, place.name, d.text, f.reasons, rating = d.rating)
+                            updateDraft { it.copy(rejection = f, refusedId = saved?.refusedId ?: it.refusedId) }
+                        }
                         // 403 posting_paused: 3 rejections in 24 h.
-                        is ContentFailure.Paused -> { PostingPause.set(f.until); updateDraft { it.copy(paused = f.until ?: java.time.Instant.now().plusSeconds(24 * 3600)) } }
+                        is ContentFailure.Paused -> {
+                            val until = f.until ?: java.time.Instant.now().plusSeconds(24 * 3600)
+                            PostingPause.set(until); updateDraft { it.copy(paused = until) }
+                        }
                         else -> _events.tryEmit(failure(e, if (http?.code() == 409) R.string.review_one_per_place else R.string.action_failed))
                     }
                 }
@@ -759,9 +919,9 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
         runCatching { c.repo.flagPlace(p.id, reason) }.onSuccess { _events.tryEmit(ContribEvent.Message(R.string.thanks_flag)) }
     }
 
-    /** Warning banner · "Not right? Tell us": POST /places/{id}/flag {reason: "other"}. */
-    fun flagWarning(p: Place) = viewModelScope.launch {
-        runCatching { c.repo.flagPlace(p.id, "other") }
+    /** Warning banner · "Not right? Tell us": POST /places/{id}/flag {reason: "other"}; the server takes OSM places too. */
+    fun flagWarning(placeId: String) = viewModelScope.launch {
+        runCatching { c.repo.flagPlace(placeId, "other") }
             .onSuccess { _events.tryEmit(ContribEvent.Message(R.string.thanks_flag)) }
             .onFailure { _events.tryEmit(ContribEvent.Message(R.string.action_failed)) }
     }
@@ -779,8 +939,8 @@ class ContributeViewModel(private val c: AppContainer) : ViewModel() {
             val item = UploadItem(UUID.randomUUID().toString(), u)
             _reviews.update { it.copy(placeUploads = it.placeUploads + item) }
             viewModelScope.launch {
-                val ph = upload(place.id, u)
-                _reviews.update { s -> s.copy(placeUploads = s.placeUploads.map { if (it.key == item.key) it.copy(photo = ph, failed = ph == null) else it }) }
+                val (ph, refusal) = upload(place.id, place.name, u)
+                _reviews.update { s -> s.copy(placeUploads = s.placeUploads.map { if (it.key == item.key) it.copy(photo = ph, failed = ph == null && refusal == null, refusal = refusal) else it }) }
                 if (ph != null) onDone()
             }
         }

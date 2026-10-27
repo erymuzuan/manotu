@@ -88,7 +88,7 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
 
     private ContentGate Gate(GimanoDbContext db, IContentScreener? screener) => TestGates.Content(db, _clock, screener, _bus);
 
-    private ReviewService Reviews(GimanoDbContext db, IContentScreener? screener) => new(db, _bus, _clock, _handles, new RestrictedAreaService(db, new()), Gate(db, screener));
+    private ReviewService Reviews(GimanoDbContext db, IContentScreener? screener) => new(db, _bus, _clock, _handles, new RestrictedAreaService(db, new()), Gate(db, screener), new LocalMediaStore(_mediaDir!));
 
     private PhotoService Photos(GimanoDbContext db, IContentScreener? screener) =>
         new(db, new LocalMediaStore(_mediaDir!), _bus, _clock, _handles, new RestrictedAreaService(db, new()), Gate(db, screener));
@@ -276,7 +276,8 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
         Assert.Empty(await Moderators(db).QueueAsync(ModerationKind.Review, hidden: true, ct));
 
         await Assert.ThrowsAsync<ForbiddenException>(() => Reviews(db, null).AppealAsync(_bob, r.Id, null, ct));
-        await Assert.ThrowsAsync<ValidationException>(() => Reviews(db, null).AppealAsync(_alice, r.Id, new string('x', 201), ct));
+        Assert.Equal("note_required", (await Assert.ThrowsAsync<ApiCodeException>(() => Reviews(db, null).AppealAsync(_alice, r.Id, new string('x', 201), ct))).Code);
+        Assert.Equal("note_required", (await Assert.ThrowsAsync<ApiCodeException>(() => Reviews(db, null).AppealAsync(_alice, r.Id, "   ", ct))).Code);
         await Reviews(db, null).AppealAsync(_alice, r.Id, "Itu bukan hinaan, itu pendapat", ct);
         await Assert.ThrowsAsync<ConflictException>(() => Reviews(db, null).AppealAsync(_alice, r.Id, null, ct));
         var item = Assert.Single(await Moderators(db).QueueAsync(ModerationKind.Review, hidden: true, ct));
@@ -481,5 +482,167 @@ public sealed class PostgresIntegrationContentSafetyTests : IAsyncLifetime
         await db.SaveChangesAsync(ct);
         await Worker.Vetting.ContentScreeningRetry.PurgeRejectedAsync(db, new LocalMediaStore(_mediaDir!), T0, ct);
         Assert.Equal("y", Assert.Single(await db.Reviews.AsNoTracking().ToListAsync(ct)).Text);
+    }
+
+    // ---- appeals (POST /appeals) ----------------------------------------------------------------------
+
+    private AppealService Appeals(GimanoDbContext db) => new(db, new LocalMediaStore(_mediaDir!), _clock);
+
+    private static Gimano.Api.Endpoints.AppealInput Appeal(string kind, string refusal, string place, string? note = "Ini ulasan jujur", string? text = "Kedai ini bersih", int photos = 0,
+        string? rating = "4", params string[] reasons) =>
+        new(refusal, kind, place, text, reasons, note, rating, Enumerable.Range(0, photos).Select(_ => ImageProcessorTests.Jpeg()).ToList());
+
+    [Fact]
+    public async Task A_refused_review_appeal_needs_a_note_is_one_per_refusal_and_lands_in_the_queue_with_private_evidence()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewDb();
+        var refusal = Guid.NewGuid().ToString();
+        Assert.Equal("note_required", (await Assert.ThrowsAsync<ApiCodeException>(() => Appeals(db).CreateAsync(_alice, Appeal("review", refusal, "n77", note: " "), ct))).Code);
+        Assert.Equal("note_required", (await Assert.ThrowsAsync<ApiCodeException>(() => Appeals(db).CreateAsync(_alice, Appeal("review", refusal, "n77", note: new string('x', 201)), ct))).Code);
+        await Assert.ThrowsAsync<ValidationException>(() => Appeals(db).CreateAsync(_alice, Appeal("review", refusal, "n77", photos: 4), ct));
+
+        var accepted = await Appeals(db).CreateAsync(_alice, Appeal("review", refusal, "n77", photos: 2, reasons: ["alcohol_promo", "made_up"]), ct);
+        Assert.Equal("pending", accepted.Status);
+        Assert.Equal("already_appealed", (await Assert.ThrowsAsync<ApiCodeException>(() => Appeals(db).CreateAsync(_alice, Appeal("review", refusal, "n77"), ct))).Code);
+        // Another user may use the same client id.
+        await Appeals(db).CreateAsync(_bob, Appeal("review", refusal, "n77"), ct);
+
+        var row = await db.ContentAppeals.AsNoTracking().SingleAsync(a => a.Id == accepted.Id, ct);
+        Assert.Equal("alcohol_promo", row.Reasons);
+        Assert.Equal(2, AppealEvidence.Split(row.EvidenceKeys).Count);
+        Assert.False(await db.Reviews.AnyAsync(ct));     // nothing is published, nothing stored as a review yet
+
+        var item = Assert.Single(await Moderators(db).QueueAsync(ModerationKind.Appeal, hidden: true, ct), i => i.Id == accepted.Id.ToString());
+        Assert.Equal(("review", "Alice", "Ini ulasan jujur", "Kedai ini bersih"), (item.AppealKind, item.AuthorName, item.AppealNote, item.Text));
+        Assert.Equal(["alcohol_promo"], item.Reasons);
+        Assert.Equal(2, item.EvidenceUrls!.Count);
+        var bytes = await Moderators(db).EvidenceAsync(ModerationKind.Appeal, item.Id, 0, new LocalMediaStore(_mediaDir!), ct);
+        Assert.NotNull(bytes);
+        Assert.DoesNotContain("GimanoTestGPS", System.Text.Encoding.Latin1.GetString(bytes!));
+    }
+
+    [Fact]
+    public async Task Approving_a_review_appeal_publishes_the_review_for_the_author_and_denying_tells_them_no_second_appeal()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewDb();
+        var yes = await Appeals(db).CreateAsync(_alice, Appeal("review", Guid.NewGuid().ToString(), "n77", rating: "5"), ct);
+        var pointsBefore = (await db.Users.AsNoTracking().SingleAsync(u => u.Id == _alice, ct)).Points;
+        await Moderators(db).RestoreAsync(ModerationKind.Appeal, yes.Id.ToString(), ct);
+        var review = await db.Reviews.AsNoTracking().SingleAsync(r => r.UserId == _alice, ct);
+        Assert.Equal((ReviewStatus.Published, 5, "Kedai ini bersih", ContentState.Passed), (review.Status, review.Rating, review.Text, review.ModerationState));
+        Assert.Equal(pointsBefore + CommunityRules.Points.Review, (await db.Users.AsNoTracking().SingleAsync(u => u.Id == _alice, ct)).Points);
+        Assert.Contains(Screened, e => e.SubjectKind == "review" && e.SubjectId == review.Id.ToString() && e.State == ContentState.Passed && e.Late && e.AppealId is null);
+        await Assert.ThrowsAsync<ConflictException>(() => Moderators(db).RestoreAsync(ModerationKind.Appeal, yes.Id.ToString(), ct));
+
+        var no = await Appeals(db).CreateAsync(_bob, Appeal("review", Guid.NewGuid().ToString(), "n77"), ct);
+        await Moderators(db).HideAsync(ModerationKind.Appeal, no.Id.ToString(), ct);
+        Assert.False(await db.Reviews.AnyAsync(r => r.UserId == _bob, ct));
+        Assert.Contains(Screened, e => e.SubjectKind == "review" && e.State == ContentState.Rejected && e.AppealId == no.Id);
+        Assert.Empty((await Moderators(db).QueueAsync(ModerationKind.Appeal, hidden: true, ct)));
+    }
+
+    [Fact]
+    public async Task A_photo_appeal_must_point_at_the_users_own_rejected_photo_and_approval_awards_the_two_points()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewDb();
+        var photos = Photos(db, Answer("publish"));
+        var dto = await photos.UploadAsync(_alice, "n77", Jpeg(), "Depan kedai", ct);
+        var p = await db.Photos.Include(x => x.User).SingleAsync(x => x.Id == dto.Id, ct);
+        p.Key = "k" + dto.Id.ToString("N")[..30]; p.ThumbKey = "t" + dto.Id.ToString("N")[..30];
+        await Gate(db, null).ApplyPhotoAsync(p, new ContentOutcome(ContentOutcomeKind.Rejected, ["adult"]), late: true, ct);
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => Appeals(db).CreateAsync(_bob, Appeal("photo", dto.Id.ToString(), "n77"), ct));
+        var a = await Appeals(db).CreateAsync(_alice, Appeal("photo", dto.Id.ToString(), "n77", photos: 1), ct);
+        // The older per-photo appeal is closed by it.
+        await Assert.ThrowsAsync<ConflictException>(() => photos.AppealAsync(_alice, dto.Id, "satu lagi", ct));
+        Assert.Equal("already_appealed", (await Assert.ThrowsAsync<ApiCodeException>(() => Appeals(db).CreateAsync(_alice, Appeal("photo", dto.Id.ToString(), "n77"), ct))).Code);
+
+        var before = (await db.Users.AsNoTracking().SingleAsync(u => u.Id == _alice, ct)).Points;
+        await Moderators(db).RestoreAsync(ModerationKind.Appeal, a.Id.ToString(), ct);
+        Assert.Equal(PhotoStatus.Published, (await photos.GetAsync(dto.Id, ct)).Status);
+        Assert.Equal(before + CommunityRules.Points.Photo, (await db.Users.AsNoTracking().SingleAsync(u => u.Id == _alice, ct)).Points);
+        Assert.Contains(Screened, e => e.SubjectKind == "photo" && e.SubjectId == dto.Id.ToString() && e.State == ContentState.Passed && e.Late);
+    }
+
+    [Fact]
+    public async Task A_photo_a_maintainer_approves_from_the_queue_earns_two_points_once()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewDb();
+        var photos = Photos(db, Answer("publish"));
+        var dto = await photos.UploadAsync(_alice, "n77", Jpeg(), null, ct);
+        var p = await db.Photos.Include(x => x.User).SingleAsync(x => x.Id == dto.Id, ct);
+        p.Key = "k" + dto.Id.ToString("N")[..30]; p.ThumbKey = "t" + dto.Id.ToString("N")[..30];
+        await Gate(db, null).ApplyPhotoAsync(p, new ContentOutcome(ContentOutcomeKind.Held, ["unclear"]), late: false, ct);
+        var before = (await db.Users.AsNoTracking().SingleAsync(u => u.Id == _alice, ct)).Points;
+
+        await Moderators(db).RestoreAsync(ModerationKind.Photo, dto.Id.ToString(), ct);
+        Assert.Equal(before + CommunityRules.Points.Photo, (await db.Users.AsNoTracking().SingleAsync(u => u.Id == _alice, ct)).Points);
+        // Hidden by reports later and restored again: already earned, not again.
+        await Moderators(db).HideAsync(ModerationKind.Photo, dto.Id.ToString(), ct);
+        await Moderators(db).RestoreAsync(ModerationKind.Photo, dto.Id.ToString(), ct);
+        Assert.Equal(before + CommunityRules.Points.Photo, (await db.Users.AsNoTracking().SingleAsync(u => u.Id == _alice, ct)).Points);
+    }
+
+    [Fact]
+    public async Task Appeal_text_note_and_evidence_are_deleted_30_days_after_the_decision_and_with_the_account()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewDb();
+        var media = new LocalMediaStore(_mediaDir!);
+        var a = await Appeals(db).CreateAsync(_alice, Appeal("review", Guid.NewGuid().ToString(), "n77", photos: 1), ct);
+        var keys = (await db.ContentAppeals.AsNoTracking().SingleAsync(x => x.Id == a.Id, ct)).EvidenceKeys;
+        Assert.Equal(0, await AppealRetention.RunAsync(db, media, T0.AddDays(90), ct));          // pending appeals are kept
+        await Moderators(db).HideAsync(ModerationKind.Appeal, a.Id.ToString(), ct);
+        Assert.Equal(0, await AppealRetention.RunAsync(db, media, T0.AddDays(29), ct));
+        Assert.NotNull(await media.GetAsync(keys!, ct));
+
+        Assert.Equal(1, await AppealRetention.RunAsync(db, media, T0.AddDays(31), ct));
+        var row = await db.ContentAppeals.AsNoTracking().SingleAsync(x => x.Id == a.Id, ct);
+        Assert.Equal((null, "", null), (row.Text, row.Note, row.EvidenceKeys));
+        Assert.Null(await media.GetAsync(keys!, ct));
+        // The row stays, so the same refusal can't be appealed twice.
+        await Assert.ThrowsAsync<ApiCodeException>(() => Appeals(db).CreateAsync(_alice, Appeal("review", row.RefusalId.ToString(), "n77"), ct));
+
+        // Older-style appeals keep their note on the review: same 30 days.
+        var r = await Reviews(db, new TestGates.ContentScreener(_ => ContentResult.Failed)).CreateAsync(_bob, "n77", Review("Hmm"), ct);
+        var rr = await db.Reviews.SingleAsync(x => x.Id == r.Id, ct);
+        await Gate(db, null).ApplyReviewAsync(rr, new ContentOutcome(ContentOutcomeKind.Rejected, ["unclear"]), late: true, ct);
+        await Reviews(db, null).AppealAsync(_bob, r.Id, "Tolong semak", ct, [ImageProcessorTests.Jpeg()]);
+        Assert.NotNull((await db.Reviews.AsNoTracking().SingleAsync(x => x.Id == r.Id, ct)).AppealEvidence);
+        await Moderators(db).HideAsync(ModerationKind.Review, r.Id.ToString(), ct);
+        await AppealRetention.RunAsync(db, media, T0.AddDays(31), ct);
+        var cleared = await db.Reviews.AsNoTracking().SingleAsync(x => x.Id == r.Id, ct);
+        Assert.Equal((null, null), (cleared.AppealNote, cleared.AppealEvidence));
+    }
+
+    [Fact]
+    public async Task A_map_place_can_be_flagged_with_suggested_warnings_and_the_report_waits_in_the_queue()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewDb();
+        await Places(db, null!).FlagAsync(_alice, "n77", FlagReason.Other, ct, ["gambling", "Alcohol", "nonsense"]);
+        await Places(db, null!).FlagAsync(_alice, "n77", FlagReason.Spam, ct);          // the same user twice: ignored
+        await Places(db, null!).FlagAsync(_bob, "n77", FlagReason.Other, ct, ["alcohol"]);
+        await Assert.ThrowsAsync<NotFoundException>(() => Places(db, null!).FlagAsync(_alice, "n999", FlagReason.Other, ct));
+        Assert.Equal(2, await db.OsmPlaceFlags.CountAsync(ct));
+
+        var item = Assert.Single(await Moderators(db).QueueAsync(ModerationKind.Place, hidden: false, ct));
+        Assert.Equal(("n77", "osm", 2, "99 Speedmart Bangi"), (item.Id, item.Status, item.FlagCount, item.Text));
+        Assert.Equal(["alcohol", "gambling"], item.SuggestedWarnings);
+        Assert.Null(item.AuthorRef);
+
+        await Assert.ThrowsAsync<ConflictException>(() => Moderators(db).HideAsync(ModerationKind.Place, "n77", ct));
+        await Moderators(db).RestoreAsync(ModerationKind.Place, "n77", ct);              // dismiss
+        Assert.Empty(await Moderators(db).QueueAsync(ModerationKind.Place, hidden: false, ct));
     }
 }

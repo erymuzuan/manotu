@@ -16473,6 +16473,206 @@
           }
         }
       }
+    },
+    "Your review" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ulasan anda"
+          }
+        }
+      }
+    },
+    "Your photo" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto anda"
+          }
+        }
+      }
+    },
+    "Your place note" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nota tempat anda"
+          }
+        }
+      }
+    },
+    "Appeal" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rayuan"
+          }
+        }
+      }
+    },
+    "Pending" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menunggu"
+          }
+        }
+      }
+    },
+    "Answered" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dijawab"
+          }
+        }
+      }
+    },
+    "Nothing here" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiada apa-apa di sini"
+          }
+        }
+      }
+    },
+    "Kept only on this phone for %lld days. Sent only if you appeal." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disimpan hanya pada telefon ini selama %lld hari. Dihantar hanya jika anda merayu."
+          }
+        }
+      }
+    },
+    "%lld d" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld h"
+          }
+        }
+      }
+    },
+    "%lld days left" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld hari lagi"
+          }
+        }
+      }
+    },
+    "Why should it be accepted?" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kenapa ia patut diterima?"
+          }
+        }
+      }
+    },
+    "Tell us (required)" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beritahu kami (wajib)"
+          }
+        }
+      }
+    },
+    "Paused. Back in %lld h" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dijeda. Pulih dalam %lld j"
+          }
+        }
+      }
+    },
+    "Your account can't post right now." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Akaun anda tidak boleh menyiarkan sekarang."
+          }
+        }
+      }
+    },
+    "No connection. Your note is kept, try again." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiada sambungan. Nota anda disimpan, cuba lagi."
+          }
+        }
+      }
+    },
+    "A photo is too big (5 MB at most)." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto terlalu besar (paling banyak 5 MB)."
+          }
+        }
+      }
+    },
+    "%lld photo not accepted" : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld foto tidak diterima"
+          }
+        }
+      }
+    },
+    "A photo wasn't accepted. See Inbox, Not accepted." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satu foto tidak diterima. Lihat Peti masuk, Tidak diterima."
+          }
+        }
+      }
+    },
+    "Write a short reason, without links." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tulis sebab ringkas, tanpa pautan."
+          }
+        }
+      }
+    },
+    "Too many appeals today. Try again tomorrow." : {
+      "localizations" : {
+        "ms" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terlalu banyak rayuan hari ini. Cuba lagi esok."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

@@ -65,6 +65,8 @@ fun InboxScreen(
     onEditContent: (InboxItem) -> Unit = {}, onAppealContent: (InboxItem) -> Unit = {},
     /** 403 `posting_paused` is running until this time: the "Paused" card on top. */
     pausedUntil: Instant? = null, use24h: Boolean = false,
+    /** Content the server refused, kept on this phone: [notAcceptedWaiting] not yet appealed (the badge), [notAcceptedTotal] kept. */
+    notAcceptedWaiting: Int = 0, notAcceptedTotal: Int = 0, onNotAccepted: () -> Unit = {},
 ) {
     val c = Gimano.colors
     val lang = currentLang()
@@ -84,6 +86,7 @@ fun InboxScreen(
         }
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (pausedUntil != null) item(key = "paused") { PausedCard(pausedUntil, use24h) }
+            if (notAcceptedTotal > 0) item(key = "not_accepted") { my.gimano.app.ui.safety.NotAcceptedRow(notAcceptedWaiting, notAcceptedTotal, onNotAccepted) }
             items(items, key = { it.id }) { m ->
                 val unread = m.id !in read
                 val content = ContentGate.inboxContent(m.kind)

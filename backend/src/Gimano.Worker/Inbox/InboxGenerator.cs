@@ -70,7 +70,13 @@ public sealed class InboxGenerator(RabbitMqConnection connection, IServiceScopeF
                 // A review or photo the content check held or rejected, or approved late / by a maintainer (docs/content-safety.md "Inbox").
                 var e = message.Deserialize<ContentScreenedEvent>(o)!;
                 Guid? uid; string? reasons; bool canAppeal;
-                if (e.SubjectKind == "review" && Guid.TryParse(e.SubjectId, out var rid))
+                if (e.AppealId is { } appealId)
+                {
+                    // A maintainer decided an appeal from POST /appeals: the reasons are the ones the app sent, and there is no second appeal.
+                    var a = await db.ContentAppeals.AsNoTracking().Where(x => x.Id == appealId).Select(x => new { x.UserId, x.Reasons }).FirstOrDefaultAsync(ct);
+                    (uid, reasons, canAppeal) = (a?.UserId, a?.Reasons, false);
+                }
+                else if (e.SubjectKind == "review" && Guid.TryParse(e.SubjectId, out var rid))
                 {
                     var r = await db.Reviews.AsNoTracking().Where(x => x.Id == rid).Select(x => new { x.UserId, x.ModerationReasons, x.AppealedAt, x.ModerationState }).FirstOrDefaultAsync(ct);
                     (uid, reasons, canAppeal) = (r?.UserId, r?.ModerationReasons, r is { ModerationState: Core.Community.ContentState.Rejected, AppealedAt: null });

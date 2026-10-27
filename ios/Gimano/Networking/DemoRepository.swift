@@ -22,6 +22,7 @@ actor DemoRepository: GimanoRepository {
     private var contentInbox: [InboxItem] = []
     private var notedPhotos: Set<String> = []
     private var appealedPhotos: Set<String> = []
+    private var appealedRefusals: Set<String> = []
     /// Demo user's display name for authored content.
     private var me: PersonRef { PersonRef(displayName: user.displayName, level: user.level, reviewCount: reviewsByPlace.values.flatMap { $0 }.filter { $0.author.displayName == user.displayName }.count) }
     private var routeCounter = 0
@@ -565,8 +566,21 @@ actor DemoRepository: GimanoRepository {
 
     func flagReview(id: String, reason: FlagReason) async throws {}
 
-    func appealReview(id: String, note: String?) async throws {
+    /// Demo `POST /appeals`: one per refusalId (409), a blank note is 400 `note_required`.
+    func appeal(_ request: AppealRequest) async throws -> AppealCreated {
         await pause()
+        guard AppealRules.isValidNote(request.note) else {
+            throw APIError.http(status: 400, problem: ProblemDetails(title: "Note required", status: 400, code: "note_required"))
+        }
+        guard appealedRefusals.insert(request.refusalId).inserted else {
+            throw APIError.conflict(Data(#"{"status":409,"code":"already_appealed"}"#.utf8))
+        }
+        return AppealCreated(id: UUID().uuidString.lowercased(), status: "pending")
+    }
+
+    func appealReview(id: String, note: String, photos: [Data]) async throws {
+        await pause()
+        guard AppealRules.isValidNote(note) else { throw APIError.http(status: 400, problem: ProblemDetails(title: "Note required", status: 400, code: "note_required")) }
         for pid in reviewsByPlace.keys {
             guard let i = reviewsByPlace[pid]!.firstIndex(where: { $0.id == id }) else { continue }
             guard reviewsByPlace[pid]![i].moderation?.canAppeal != false else { throw APIError.conflict(Data(#"{"status":409,"title":"Conflict"}"#.utf8)) }
@@ -577,8 +591,9 @@ actor DemoRepository: GimanoRepository {
         throw APIError.http(status: 404, problem: nil)
     }
 
-    func appealPhoto(id: String, note: String?) async throws {
+    func appealPhoto(id: String, note: String, photos: [Data]) async throws {
         await pause()
+        guard AppealRules.isValidNote(note) else { throw APIError.http(status: 400, problem: ProblemDetails(title: "Note required", status: 400, code: "note_required")) }
         guard photoVerdicts[id] != nil else { throw APIError.http(status: 404, problem: nil) }
         photoVerdicts[id] = DemoContentCheck.Verdict(state: .held, reasons: photoVerdicts[id]?.reasons ?? [])
         appealedPhotos.insert(id)

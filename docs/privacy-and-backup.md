@@ -68,7 +68,32 @@ CREATE TABLE identity (                -- the contributor pseudonym's signing ke
 -- Not backed up (device-local queues):
 CREATE TABLE outbox (id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload_json TEXT NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL);   -- feedback, reports, uploads
+
+-- Not backed up, never synced: content the server refused (422 content_rejected), kept so the user can edit it or
+-- appeal. Leaves the phone only inside an appeal the user sends (POST /appeals). Rows older than 30 days are deleted.
+CREATE TABLE refused_content (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('review','photo','place')),
+  place_id TEXT, place_name TEXT,
+  text TEXT NOT NULL DEFAULT '',
+  reasons_json TEXT NOT NULL DEFAULT '[]',   -- fixed reason codes, JSON array of strings
+  photos_json TEXT NOT NULL DEFAULT '[]',    -- file names in the app's private storage (refused/<id>/), JSON array
+  created_at TEXT NOT NULL,
+  appeal_state TEXT NOT NULL DEFAULT 'none' CHECK (appeal_state IN ('none','sent','answered')),
+  rating INTEGER CHECK (rating BETWEEN 1 AND 5));   -- the refused review's stars: POST /appeals needs `rating` for kind=review
+
+-- Not backed up: small device-only flags (iOS: postingPausedUntil, an ISO-8601 time, so the 24 h posting pause survives a restart).
+CREATE TABLE device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ```
+
+**`refused_content`** ("Not accepted" list in the Inbox, docs/content-safety.md "Appeals"): when a review, place note or photo
+is refused (422 `content_rejected`) the app keeps the refused text, its reason codes and, for a photo, the JPEG
+(`refused/<id>/<n>.jpg` in the app's private files) **on this phone only**, so the user can appeal it. `id` is the client UUID
+sent as `refusalId`. Rows and files are deleted after **30 days** (checked at launch and when the list opens), when the user
+deletes the item, and on "delete all my data". Never backed up and never sent anywhere except in the one `POST /appeals` the
+user starts by tapping Send. `appeal_state`: `none`, `sent` (appeal accepted, pending), `answered` (the Inbox brought the
+result). Both tables are created without a schema bump (`user_version` stays 3), so a backup from or to the other platform
+still restores; both are dropped from the snapshot like `outbox`.
 
 **`personal_routes.route_json`** (identical on both platforms, so routes restore across them):
 
@@ -120,7 +145,7 @@ A ZIP container:
 manifest.json   {format:1, schemaVersion, appVersion, platform, createdAt,
                  counts:{saved_places, recents, private_places, photos, planned_drives, personal_routes},
                  encryption: "none" | "passphrase-argon2id-xchacha20poly1305", kdf:{opslimit, memlimit, salt}}
-data.sqlite     snapshot via `VACUUM INTO` (consistent, compact; outbox table dropped)
+data.sqlite     snapshot via `VACUUM INTO` (consistent, compact; outbox, refused_content and device_state tables dropped)
 photos/*.webp   private-place photos
 ```
 

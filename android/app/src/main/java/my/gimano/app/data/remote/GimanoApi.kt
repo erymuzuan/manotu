@@ -219,13 +219,27 @@ interface GimanoApi {
     @GET("photos/{id}")
     suspend fun photo(@Path("id") id: String): Photo
 
-    /** docs/content-safety.md: once per review, held for a maintainer → 202. */
+    /** docs/content-safety.md "Appeals": once per review → 202. `note` is required (1..200), up to 3 evidence photos. */
+    @Multipart
     @POST("reviews/{id}/appeal")
-    suspend fun appealReview(@Path("id") id: String, @Body body: AppealRequest): Response<ResponseBody>
+    suspend fun appealReview(@Path("id") id: String, @Part("note") note: RequestBody, @Part photos: List<MultipartBody.Part>): Response<ResponseBody>
 
-    /** docs/content-safety.md: once per photo → 202. */
+    /** docs/content-safety.md "Appeals": once per photo → 202. `note` is required (1..200), up to 3 evidence photos. */
+    @Multipart
     @POST("photos/{id}/appeal")
-    suspend fun appealPhoto(@Path("id") id: String, @Body body: AppealRequest): Response<ResponseBody>
+    suspend fun appealPhoto(@Path("id") id: String, @Part("note") note: RequestBody, @Part photos: List<MultipartBody.Part>): Response<ResponseBody>
+
+    /**
+     * Appeal a refusal (422 content_rejected stored nothing, so there is no id to appeal): the refused [text] travels
+     * here, once, because the user chose to. `refusalId` is a client UUID (409 `already_appealed` on a second try).
+     */
+    @Multipart
+    @POST("appeals")
+    suspend fun submitAppeal(
+        @Part("refusalId") refusalId: RequestBody, @Part("kind") kind: RequestBody, @Part("placeId") placeId: RequestBody?,
+        @Part("text") text: RequestBody, @Part("rating") rating: RequestBody?, @Part("reasons") reasons: List<RequestBody>, @Part("note") note: RequestBody,
+        @Part photos: List<MultipartBody.Part>,
+    ): AppealAck
 
     @GET("places/{id}/photos")
     suspend fun photos(@Path("id") id: String, @Query("cursor") cursor: String? = null): PhotosPage

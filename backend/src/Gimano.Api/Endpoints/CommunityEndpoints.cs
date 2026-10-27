@@ -27,15 +27,19 @@ public static class CommunityEndpoints
         places.MapGet("/{id}/reviews", ListReviews).AllowAnonymous();
         places.MapPost("/{id}/reviews", CreateReview).RequireSignature();
         places.MapGet("/{id}/photos", ListPhotos).AllowAnonymous();
-        places.MapPost("/{id}/flag", FlagPlace).WithSummary("Report a community place (spam, offensive, …). 3 reports hide it pending moderation.");
+        places.MapPost("/{id}/flag", FlagPlace).WithSummary("Report a place (spam, offensive, …; optional suggested warnings alcohol|gambling|tobacco). Community place: 3 reports hide it pending moderation. Map (OSM) place: the report waits for a maintainer.");
 
         api.MapGet("/me/places/contributed", Contributed).WithTags("Community places").RequireAuthorization();
+
+        api.MapPost("/appeals", CreateAppeal).WithTags("Appeals").RequireAuthorization().RequireSignature().DisableAntiforgery()
+            .WithMetadata(new RequestSizeLimitAttribute(AppealForm.MaxRequestBytes))
+            .WithSummary("multipart/form-data: refusalId, kind (review|photo|place), placeId, text?, reasons* , note (required, 1-200), rating (review), photos* (0-3 evidence images). 202 {id, status:\"pending\"}; 409 already_appealed; 400 note_required.");
 
         var reviews = api.MapGroup("/reviews").WithTags("Reviews").RequireAuthorization();
         reviews.MapPatch("/{id:guid}", PatchReview).RequireSignature();
         reviews.MapDelete("/{id:guid}", DeleteReview).RequireSignature();
-        reviews.MapPost("/{id:guid}/appeal", AppealReview).RequireSignature()
-            .WithSummary("Author only: ask a maintainer to review a review the content check didn't accept (once per review; note ≤ 200 chars).");
+        reviews.MapPost("/{id:guid}/appeal", AppealReview).RequireSignature().DisableAntiforgery().WithMetadata(new RequestSizeLimitAttribute(AppealForm.MaxRequestBytes))
+            .WithSummary("Author only: ask a maintainer to review a review the content check didn't accept (once per review). JSON {note} or multipart (note + up to 3 photos); note is required (1-200 chars, else 400 note_required).");
         reviews.MapPost("/{id:guid}/helpful", Helpful);
         reviews.MapPost("/{id:guid}/flag", FlagReview);
 
@@ -43,8 +47,8 @@ public static class CommunityEndpoints
         photos.MapPost("", Upload).RequireSignature().DisableAntiforgery().WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes))
             .WithSummary("multipart/form-data: file (JPEG/PNG/WebP, ≤ 15 MB), placeId, caption?. 415 for HEIC/undecodable.");
         photos.MapGet("/{id:guid}", GetPhoto).AllowAnonymous();
-        photos.MapPost("/{id:guid}/appeal", AppealPhoto).RequireSignature()
-            .WithSummary("Uploader only: ask a maintainer to review a photo the content check didn't accept (once per photo; note ≤ 200 chars).");
+        photos.MapPost("/{id:guid}/appeal", AppealPhoto).RequireSignature().DisableAntiforgery().WithMetadata(new RequestSizeLimitAttribute(AppealForm.MaxRequestBytes))
+            .WithSummary("Uploader only: ask a maintainer to review a photo the content check didn't accept (once per photo). JSON {note} or multipart (note + up to 3 photos); note is required (1-200 chars, else 400 note_required).");
         photos.MapDelete("/{id:guid}", DeletePhoto);
         photos.MapPost("/{id:guid}/flag", FlagPhoto);
         return api;
@@ -114,16 +118,24 @@ public static class CommunityEndpoints
     private static async Task<Ok<ReviewDto>> PatchReview(Guid id, PatchReviewRequest req, HttpContext http, ReviewService svc, CancellationToken ct) =>
         TypedResults.Ok(await svc.PatchAsync(http.User.RequiredUserId(), id, req, ct));
 
-    private static async Task<Accepted> AppealReview(Guid id, AppealContentRequest req, HttpContext http, ReviewService svc, CancellationToken ct)
+    private static async Task<Accepted> AppealReview(Guid id, HttpContext http, ReviewService svc, CancellationToken ct)
     {
-        await svc.AppealAsync(http.User.RequiredUserId(), id, req.Note, ct);
+        var input = await AppealForm.ReadLegacyAsync(http, ct);
+        await svc.AppealAsync(http.User.RequiredUserId(), id, input.Note, ct, input.Photos);
         return TypedResults.Accepted((string?)null);
     }
 
-    private static async Task<Accepted> AppealPhoto(Guid id, AppealContentRequest req, HttpContext http, PhotoService svc, CancellationToken ct)
+    private static async Task<Accepted> AppealPhoto(Guid id, HttpContext http, PhotoService svc, CancellationToken ct)
     {
-        await svc.AppealAsync(http.User.RequiredUserId(), id, req.Note, ct);
+        var input = await AppealForm.ReadLegacyAsync(http, ct);
+        await svc.AppealAsync(http.User.RequiredUserId(), id, input.Note, ct, input.Photos);
         return TypedResults.Accepted((string?)null);
+    }
+
+    private static async Task<Accepted<AppealAccepted>> CreateAppeal(HttpContext http, AppealService svc, CancellationToken ct)
+    {
+        var input = await AppealForm.ReadAsync(http, ct);
+        return TypedResults.Accepted((string?)null, await svc.CreateAsync(http.User.RequiredUserId(), input, ct));
     }
 
     private static async Task<NoContent> DeleteReview(Guid id, HttpContext http, ReviewService svc, CancellationToken ct)
@@ -140,7 +152,7 @@ public static class CommunityEndpoints
 
     private static async Task<Accepted> FlagPlace(string id, FlagRequest req, HttpContext http, CommunityService svc, CancellationToken ct)
     {
-        await svc.FlagAsync(http.User.RequiredUserId(), id, req.Reason, ct);
+        await svc.FlagAsync(http.User.RequiredUserId(), id, req.Reason, ct, req.Warnings);
         return TypedResults.Accepted((string?)null);
     }
 

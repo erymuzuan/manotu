@@ -307,7 +307,7 @@ struct ContentSafetyTests {
         #expect(inbox.contains { $0.kind == .contentPublished && $0.subjectId == slow.id })
 
         // Appeal a held review once.
-        try await repo.appealReview(id: held.id, note: nil)
+        try await repo.appealReview(id: held.id, note: "It is my own review", photos: [])
         let appealed = try await repo.reviews(placeId: "demo-c", sort: .recent, cursor: nil).reviews.first { $0.id == held.id }
         #expect(appealed?.moderation?.canAppeal == false)
     }
@@ -341,7 +341,7 @@ struct ContentSafetyTests {
         #expect(try await repo.photos(placeId: "demo-p", cursor: nil).photos.map(\.id) == [good.id])
         #expect(try await repo.inbox(cursor: nil).items.contains { $0.kind == .contentRejected && $0.subjectId == bad.id && $0.canAppeal == true })
 
-        try await repo.appealPhoto(id: bad.id, note: "not adult")
+        try await repo.appealPhoto(id: bad.id, note: "not adult", photos: [])
         let after = try await repo.photo(id: bad.id)
         #expect(PhotoBadge.of(after) == .checking && after.moderation?.canAppeal != true)
         do { _ = try await repo.photo(id: "nope"); Issue.record("expected 404") } catch {}

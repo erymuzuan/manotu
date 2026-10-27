@@ -52,6 +52,15 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     val settings by vm.settingsState.collectAsStateWithLifecycle()
     val postingPauseRaw by my.gimano.app.core.safety.PostingPause.until.collectAsStateWithLifecycle()
     val postingPause = postingPauseRaw?.takeIf { it.isAfter(java.time.Instant.now()) }
+    val refusedItems by container.refused.items().collectAsStateWithLifecycle(emptyList())
+    val appealUi by cvm.appeal.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { runCatching { container.refused.purgeExpired() } }   // 30-day limit, also for their photo files
+    // The maintainers' answer arrives as a content_rejected item whose subjectId is the refusalId: mark the saved copy answered.
+    LaunchedEffect(ui.inbox, refusedItems) {
+        val sent = refusedItems.filter { it.appealState == my.gimano.app.core.safety.AppealState.SENT }.map { it.id }.toSet()
+        ui.inbox.filter { it.kind == "content_rejected" && it.subjectId in sent }.forEach { runCatching { container.refused.setState(it.subjectId!!, my.gimano.app.core.safety.AppealState.ANSWERED) } }
+    }
+    val refusedWaiting = my.gimano.app.core.safety.RefusedRules.badge(refusedItems, java.time.Instant.now())
     val upd by container.updater.ui.collectAsStateWithLifecycle()
     val homeSheetDp by vm.homeSheetDp.collectAsStateWithLifecycle()
     val placeSheetDp by vm.placeSheetDp.collectAsStateWithLifecycle()
@@ -253,7 +262,7 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
         gesturesEnabled = drawer.isOpen,
         drawerContent = {
             SideMenu(
-                ui.user, inboxUnread = ui.inbox.count { it.id !in settings.inboxRead },
+                ui.user, inboxUnread = ui.inbox.count { it.id !in settings.inboxRead } + refusedWaiting,
                 updateVersion = (upd.decision as? my.gimano.app.core.update.UpdateDecision.Available)?.manifest?.versionName,
                 onUpdate = { scope.launch { drawer.close() }; updateSheetOpen = true; forceUpdateSheet = true; vm.goHome() },
                 onProfile = { scope.launch { drawer.close() }; vm.open(Screen.Contributions) },
@@ -345,8 +354,10 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
                     onOpenPlace = { item -> item.placeRef?.let { id -> cvm.openResult(id) } },
                     // Content safety: Edit opens the place (a review or photo is fixed from its place) or the place's own result screen; Appeal asks a person.
                     onEditContent = { item -> if (item.subjectKind == "place") item.subjectId?.let { id -> cvm.openResult(id) } else item.placeId?.let { id -> vm.openPlaceLink(id) } },
-                    onAppealContent = { item -> item.subjectId?.let { id -> cvm.appealContent(item.subjectKind, id) } },
-                    pausedUntil = postingPause, use24h = settings.use24h)
+                    onAppealContent = { item -> item.subjectId?.let { id -> cvm.appealContent(item.subjectKind, id, reasons = item.reasons) } },
+                    pausedUntil = postingPause, use24h = settings.use24h,
+                    notAcceptedWaiting = refusedWaiting, notAcceptedTotal = refusedItems.size, onNotAccepted = { vm.open(Screen.NotAccepted) })
+                Screen.NotAccepted -> my.gimano.app.ui.safety.NotAcceptedScreen(refusedItems, onBack = vm::back, onAppeal = cvm::openAppealFor, onDelete = cvm::deleteRefused)
                 Screen.Theme -> my.gimano.app.ui.more.ThemeScreen(settings.theme, onPick = { vm.setTheme(it) }, onBack = vm::back)
                 Screen.Events -> my.gimano.app.ui.events.EventsListScreen(container.eventStore, container.hostStore, settings.use24h, onBack = vm::back,
                     onOpen = { id -> vm.open(Screen.EventDetail(id)) }, onOpenHosted = { id -> vm.openHostEvent(id) }, onNew = vm::newHostEvent)
@@ -400,6 +411,11 @@ fun GimanoRoot(vm: MainViewModel, onMic: () -> Unit, onExit: () -> Unit, onReque
     }
 
     ui.favoriteSheet?.let { my.gimano.app.ui.sheets.FavoriteSheet(it, vm) }
+    // "Ask a person": one screen for every appeal (refused text, held or rejected review / photo). The reason is required.
+    appealUi?.let { a ->
+        my.gimano.app.ui.safety.AppealScreen(a, settings.use24h, onNote = cvm::appealEditNote, onPhotos = cvm::appealPickPhotos,
+            onDropPhoto = cvm::appealDropPhoto, onSend = cvm::appealSubmit, onClose = cvm::appealDismiss)
+    }
     my.gimano.app.ui.events.EventImportDialogs(container.eventImporter, settings.use24h,
         navigatingTo = nav.destination?.takeIf { nav.active && it.eventStop },
         onRetarget = { eventId, st -> vm.retargetEventStop(eventId, st.id, st.label, st.navigationTarget) })

@@ -47,9 +47,15 @@ public static class PrivacyEndpoints
     /// feedback screenshots, event short links; reports and feedback text are detached (anonymised). Device tokens are stateless JWTs:
     /// once the user row is gone they no longer resolve to an account. Driver dots were never stored.
     /// </summary>
-    private static async Task<NoContent> DeleteAccount(HttpContext http, GimanoDbContext db, Gimano.Core.Events.DropService drops, CancellationToken ct)
+    private static async Task<NoContent> DeleteAccount(HttpContext http, GimanoDbContext db, Gimano.Core.Events.DropService drops,
+        Gimano.Core.Community.IMediaStore media, CancellationToken ct)
     {
         var uid = http.User.RequiredUserId();
+        // Appeal text, notes and private evidence photos go with the account (the rows cascade; the files are ours to delete).
+        var evidence = await db.ContentAppeals.Where(a => a.UserId == uid && a.EvidenceKeys != null).Select(a => a.EvidenceKeys).ToListAsync(ct);
+        evidence.AddRange(await db.Reviews.Where(r => r.UserId == uid && r.AppealEvidence != null).Select(r => r.AppealEvidence).ToListAsync(ct));
+        evidence.AddRange(await db.Photos.Where(p => p.UserId == uid && p.AppealEvidence != null).Select(p => p.AppealEvidence).ToListAsync(ct));
+        foreach (var keys in evidence) await Gimano.Core.Community.AppealEvidence.DeleteAsync(media, keys, ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         // Event short links (encrypted packs) the user uploaded, live or ended: found by the keyed owner hash.
         await drops.DeleteAllForUserAsync(uid, ct);
@@ -69,6 +75,14 @@ public static class PrivacyEndpoints
             .SetProperty(f => f.ScreenshotContentType, (string?)null), ct);
         await db.SavedPlaces.Where(p => p.UserId == uid).ExecuteDeleteAsync(ct);
         await db.Recents.Where(r => r.UserId == uid).ExecuteDeleteAsync(ct);
+        // Notes and evidence of older-style appeals live on the (anonymised, kept) review/photo/place rows: cleared. content_appeals and
+        // osm_place_flags rows cascade with the user.
+        await db.Reviews.Where(r => r.UserId == uid && (r.AppealNote != null || r.AppealEvidence != null))
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.AppealNote, (string?)null).SetProperty(r => r.AppealEvidence, (string?)null), ct);
+        await db.Photos.Where(p => p.UserId == uid && (p.AppealNote != null || p.AppealEvidence != null))
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.AppealNote, (string?)null).SetProperty(p => p.AppealEvidence, (string?)null), ct);
+        await db.CommunityPlaces.Where(p => p.OwnerId == uid && p.AppealNote != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.AppealNote, (string?)null), ct);
         await db.Users.Where(u => u.Id == uid).ExecuteDeleteAsync(ct);
         await tx.CommitAsync(ct);
         return TypedResults.NoContent();

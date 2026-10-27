@@ -185,7 +185,28 @@ POST /api/v1/admin/moderation/{kind}/{id}/unban-author  lift the ban (hidden con
 authorRef?, authorBanned, createdAt, held, reasons?, appealNote?}`. Reviews and photos that the AI content check **held**
 (docs/content-safety.md), or whose author appealed a rejection, wait in the `hidden` queue with `held: true`, the fixed
 `reasons` codes and the author's `appealNote`; `restore` publishes them (the author gets Inbox `content_published`), `hide`
-rejects them (`content_rejected`). Items still "checking" and rejections nobody appealed are not in the queue. Authors appear only by display name and the opaque `authorRef` handle, never by
+rejects them (`content_rejected`). Items still "checking" and rejections nobody appealed are not in the queue.
+
+**Appeals (new).** `kind=appeal` items are appeals from `POST /api/v1/appeals` (docs/content-safety.md "Appeals"). They wait in
+`state=hidden`, like held items, with `id` = the appeal id, `appealKind` (`review|photo|place`), `placeId`, `text` (the refused text the
+user chose to resubmit), `reasons` (the refusal's codes), `appealNote` (the user's compulsory note), `rating` (reviews),
+`evidenceUrls` (private evidence photos: `GET /api/v1/admin/moderation/{kind}/{id}/evidence/{n}` with the maintainer key, `no-store`,
+`image/webp`; older review/photo appeals also expose theirs on the review/photo item), `mediaUrl` (the refused photo, photo appeals), and
+the author as display name + `authorRef` only. `restore` **approves**: a review appeal creates the review published for the author (+3
+points, Inbox `content_published`); photo and place appeals follow the existing approve paths (a photo earns its +2, a place goes
+live). `hide` **denies** (Inbox `content_rejected`, `canAppeal:false`). Deciding twice is `409`. `ban-author` works on appeals too.
+Appeal text, note and evidence photos are deleted 30 days after the decision.
+
+**Reports on map places.** `POST /places/{id}/flag` for an OSM place lands as a `kind=place` item with `status:"osm"` in the default
+(`flagged`) view: the place's public name, `flagCount`, the reasons and `suggestedWarnings` (alcohol, gambling, tobacco). There is no
+author. `restore` dismisses the reports; `hide` is `409` (map data is fixed upstream). The queue is on the admin API; the Blazor
+back office has no moderation page yet, so appeals and map-place reports are worked from this API (and counted in the daily digest).
+
+**Photo points.** Approving a held, rejected or appealed photo (`restore`) awards the uploader the +2 points an auto-published photo
+earns, once.
+
+**Suspected spam feedback.** Feedback whose message the AI screen flagged as spam or abuse shows a "suspected spam" pill in the
+Feedback list and detail pages (and `suspectedSpam` in `GET /api/v1/admin/feedback`). It is never hidden or deleted automatically. Authors appear only by display name and the opaque `authorRef` handle, never by
 user id: act on an author through one of their items. Display names are filtered on set (word list, no links). Users can
 also hide a contributor on their own device by `authorRef`, without telling the server.
 
@@ -207,7 +228,7 @@ and emails the maintainers (`Digest:To`) through Azure Communication Services:
 
 - **Daily digest**, once between 08:00 and 09:00 Malaysia time (`Digest:SendAtHour`), skipped on quiet days: new
   feedback in 24 h by category, feedback not yet triaged and its oldest age, new / open / regressed crash groups,
-  moderation items waiting (same predicates as the moderation queue) and how many are places held for review.
+  moderation items waiting (same predicates as the moderation queue, now including pending appeals and map-place reports) and how many are places held for review.
 - **Moderation alert** when the oldest waiting item reaches 20 h, at most every 12 h, so the 24-hour promise holds.
 
 It carries **counts and ages only**: no message text, contacts, display names, ids or coordinates, so nothing private
@@ -224,5 +245,6 @@ a worker restarted inside the send hour may send that day's digest twice, and on
 | Contact details | 30 days after the report closes, 90 days max; the report is stored without the user id |
 | Crash reports | 90 days (group counts stay) |
 | Inbox items | 90 days |
+| Appeal text, note and evidence photos | 30 days after the decision (and with `DELETE /me`); the appeal row stays until the account is deleted |
 | Agent tokens | deleted 30 days after expiry or revocation |
 | Audit log | 1 year |

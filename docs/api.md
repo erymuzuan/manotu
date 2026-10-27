@@ -354,7 +354,8 @@ GET    /places/{id}/reviews?sort=recent|helpful&cursor=   → {reviews: Review[]
 POST   /places/{id}/reviews           {rating: 1–5, text?: ≤ 2000, photoIds?: string[]} → 201 Review (screened, see below)
                                       → 422 {code:"content_rejected", reasons, safeText?}   → 403 {code:"posting_paused", pausedUntil}
 PATCH  /reviews/{id}  /  DELETE /reviews/{id}      (author only; one review per user per place; an edited text is screened the same way)
-POST   /reviews/{id}/appeal           {note?: ≤ 200} → 202   (author only, once, only after a late rejection; held for a maintainer)
+POST   /reviews/{id}/appeal           {note: 1–200} or multipart note + photos≤3 → 202   (author only, once, only after a late rejection; held for a maintainer;
+                                      400 {code:"note_required"} without a note; see docs/content-safety.md "Appeals")
 POST   /reviews/{id}/helpful          → 204   (toggle)
 POST   /reviews/{id}/flag             {reason: spam|offensive|off_topic|conflict_of_interest|sensitive_location|other} → 202
 
@@ -363,8 +364,11 @@ POST   /photos   multipart/form-data: file (JPEG/PNG/HEIC/WebP, ≤ 15 MB), plac
 GET    /places/{id}/photos?cursor=    → {photos: Photo[], next?}
 DELETE /photos/{id}                   (uploader only)
 POST   /photos/{id}/flag              {reason}
-POST   /photos/{id}/appeal            {note?: ≤ 200} → 202   (uploader only, once, only after a rejection; held for a maintainer)
-POST   /places/{id}/flag              {reason} → 202   (community places only; 3 reports from different users hide it)
+POST   /photos/{id}/appeal            {note: 1–200} or multipart note + photos≤3 → 202   (uploader only, once, only after a rejection; held for a maintainer)
+POST   /appeals  (signed)             multipart: refusalId, kind review|photo|place, placeId, text?, rating (review), reasons*, note (1–200, required), photos*≤3
+                                      → 202 {id, status:"pending"}   400 {code:"note_required"}   409 {code:"already_appealed"}   (docs/content-safety.md "Appeals")
+POST   /places/{id}/flag              {reason, warnings?: alcohol|gambling|tobacco[]} → 202   (community place: 3 reports from different users hide it;
+                                      map/OSM place: the report, with the suggested warnings, waits for a maintainer and changes nothing)
 GET    /media/{key}.webp              (public, immutable, Cache-Control: max-age=31536000)
 GET    /photos/{id}                   → Photo   (poll after upload: status processing → published | rejected)
 ```
@@ -393,14 +397,17 @@ A rating-only `PATCH` is not screened. The author also gets their own hidden rev
 page, when the request is signed in) with its `moderation`. A review rejected only after the app stopped waiting stays hidden with
 `moderation: {state:"rejected", reasons, canAppeal:true}` until appealed; unappealed rejected reviews and photo files are deleted
 after 7 days. An appeal (`POST …/appeal`, `202`) turns the item into `held` (`canAppeal:false`); `409` when not rejected or already
-appealed; `400` for a note over 200 characters or with links. A maintainer's approval publishes it (Inbox `content_published`), a
+appealed; `400 {code:"note_required"}` for a missing note (the note is now compulsory), one over 200 characters or with links; up to 3 private
+evidence photos (JPEG/PNG/WebP, ≤ 5 MB each) may come with it (multipart). `POST /appeals` does the same for a review that was refused
+(and therefore not stored), a photo or a place. A maintainer's approval publishes it (Inbox `content_published`), a
 refusal rejects it (`content_rejected`, `canAppeal:false` once appealed).
 
 **Photos.** `POST /photos` still answers `201 Photo` with `status: "processing"`; the uploader's `Photo` carries
 `moderation.state: "checking"` while the worker processes and checks it (poll `GET /photos/{id}`). Outcomes: `published`
 (`passed`), `rejected` (`rejected`, `canAppeal: true`), or still `processing` while held (`held`) or `checking`. Other viewers see
 only published photos (`GET /photos/{id}` of someone else's unpublished photo is `404`). A rejected photo never blocks the review
-or place it belongs to.
+or place it belongs to. Photos are checked only by the worker, so `POST /photos` has no synchronous `422 content_rejected`: use
+`GET /photos/{id}` and the Inbox. A maintainer's approval earns the uploader the same +2 points as an auto-published photo.
 
 **Pause.** Three AI rejections in 24 hours (reviews, review edits, photos, report notes and rejected places together) pause
 posting for 24 hours: `403 {code: "posting_paused", pausedUntil}` on `POST/PATCH /reviews` and `POST /photos`
@@ -856,6 +863,10 @@ The create response returns `contactToken` once; the app keeps it with its local
 `X-Contact-Token` to withdraw the contact. Rate limits still apply (counted in memory only). Feedback is deleted
 after **24 months**.
 
+Feedback is never blocked by the content check: the message text alone (no contact, device info or user) is screened for spam/abuse
+with Claude Haiku 5.5 when the check is on, and a hit only marks it `suspectedSpam` for the maintainers (back office, admin list). The
+response is the same either way.
+
 `status ∈ received, triaged, planned, done, wont_fix`. Feedback is stored in Postgres (screenshot as bytea,
 max 1.5 MB) and `feedback.created` is published on RabbitMQ. The optional GitHub-issue sink **never** includes
 contact details, device model or location.
@@ -922,7 +933,8 @@ place_held, place_not_accepted, place_live, content_published, content_held, con
 
 - `content_published` / `content_held` / `content_rejected` (docs/content-safety.md): the content check or a maintainer decided on
   the user's review or photo (held and rejected are also sent when the app already showed the result; published only when it
-  came late or from a maintainer). Besides the usual fields they carry `subjectKind: "review"|"photo"`, `subjectId`, `placeId`,
+  came late or from a maintainer; also `content_rejected` with `canAppeal:false` when a maintainer denies an appeal from `POST /appeals`,
+  where `subjectKind` may be `place` too). Besides the usual fields they carry `subjectKind: "review"|"photo"`, `subjectId`, `placeId`,
   `reasons: string[]` (fixed codes) and `canAppeal: bool` (rejected and not yet appealed), and `refType`/`refId` = the same
   subject. The title names the place. Places keep `place_held` / `place_not_accepted` / `place_live` (no `subjectKind: "place"`).
 

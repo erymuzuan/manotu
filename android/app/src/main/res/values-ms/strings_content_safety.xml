@@ -91,4 +91,43 @@
     <string name="cs_inbox_held">Seseorang sedang menyemak</string>
     <string name="cs_inbox_rejected">Tidak diterima</string>
     <string name="cs_inbox_edit_cd">Sunting</string>
+
+    <!-- Tidak diterima (kandungan yang ditolak, disimpan pada telefon ini) dan rayuan -->
+    <string name="na_title">Tidak diterima</string>
+    <string name="na_intro">Disimpan pada telefon ini sahaja selama 30 hari. Tiada apa-apa disiarkan.</string>
+    <string name="na_empty">Tiada apa-apa di sini</string>
+    <string name="na_row">Tidak diterima</string>
+    <string name="na_row_cd">Tidak diterima, %1$d menunggu</string>
+    <string name="na_delete">Padam</string>
+    <string name="na_delete_cd">Padam salinan ini daripada telefon</string>
+    <string name="na_days_left">%1$d hari lagi</string>
+    <string name="na_sent">Dihantar kepada seseorang</string>
+    <string name="na_answered">Sudah dijawab, lihat Peti masuk</string>
+    <string name="na_kind_review">Ulasan</string>
+    <string name="na_kind_photo">Gambar</string>
+    <string name="na_kind_place">Tempat</string>
+    <string name="ap_title">Minta seseorang semak</string>
+    <string name="ap_your_text">Apa yang anda tulis</string>
+    <string name="ap_photo_kept">Gambar anda</string>
+    <string name="ap_why_label">Kenapa ini sesuai?</string>
+    <string name="ap_why_hint">Satu baris pendek untuk orang yang membacanya</string>
+    <string name="ap_why_required">Wajib</string>
+    <string name="ap_count">%1$d / %2$d</string>
+    <string name="ap_add_photos">Tambah gambar (pilihan)</string>
+    <string name="ap_photos_cd">Tambah gambar bukti, sehingga 3</string>
+    <string name="ap_remove_photo_cd">Buang gambar</string>
+    <string name="ap_send">Hantar</string>
+    <string name="ap_sending_cd">Menghantar</string>
+    <string name="ap_privacy">Teks ini dan nota anda sampai kepada seseorang hanya kerana anda tekan Hantar.</string>
+    <string name="ap_pending_title">Dihantar</string>
+    <string name="ap_pending_body">Seseorang akan melihatnya. Jawapan masuk ke Peti masuk anda.</string>
+    <string name="ap_err_already">Sudah dihantar untuk yang ini</string>
+    <string name="ap_err_note">Tulis sebabnya dahulu</string>
+    <string name="ap_err_paused">Dijeda sehingga %1$s</string>
+    <string name="ap_err_paused_later">Dijeda seketika</string>
+    <string name="ap_err_banned">Akaun ini tidak boleh menghantar sekarang</string>
+    <string name="ap_err_offline">Tiada sambungan. Cuba lagi.</string>
+    <string name="ap_err_large">Satu gambar terlalu besar atau tidak dapat dibaca</string>
+    <string name="ap_err_other">Tidak dapat dihantar. Cuba lagi.</string>
+    <string name="ap_close_cd">Tutup</string>
 </resources>

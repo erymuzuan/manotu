@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DEBUG builds only: red corner ribbon with bold white "DEV" (bottom-right, on the 66x66 safe zone's diagonal).
+     Drawn over the normal Manotu foreground by ic_launcher_dev_foreground. Release variants never see this file. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:rotation="-45" android:pivotX="71" android:pivotY="71">
+        <path android:pathData="M12,59 L130,59 L130,83 L12,83 Z" android:fillColor="#D32F2F"/>
+        <path android:pathData="M12,59 L130,59 L130,60.4 L12,60.4 Z" android:fillColor="#FFFFFF" android:fillAlpha="0.55"/>
+        <path android:pathData="M12,81.6 L130,81.6 L130,83 L12,83 Z" android:fillColor="#7F1D1D" android:fillAlpha="0.6"/>
+        <!-- D -->
+        <path android:pathData="M56.8,64.8 L56.8,77.2 L59.4,77.2 C63.6,77.2 65.4,74.6 65.4,71 C65.4,67.4 63.6,64.8 59.4,64.8 Z"
+            android:strokeColor="#FFFFFF" android:strokeWidth="2.8" android:strokeLineJoin="miter" android:fillColor="#00000000"/>
+        <!-- E -->
+        <path android:pathData="M76.4,64.8 L69.4,64.8 L69.4,77.2 L76.4,77.2 M69.4,71 L75.2,71"
+            android:strokeColor="#FFFFFF" android:strokeWidth="2.8" android:strokeLineJoin="miter" android:fillColor="#00000000"/>
+        <!-- V -->
+        <path android:pathData="M79.4,64.8 L83.4,77.2 L87.4,64.8"
+            android:strokeColor="#FFFFFF" android:strokeWidth="2.8" android:strokeLineJoin="miter" android:fillColor="#00000000"/>
+    </group>
+</vector>

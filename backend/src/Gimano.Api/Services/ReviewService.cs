@@ -10,7 +10,7 @@ namespace Gimano.Api.Services;
 
 /// <summary>Reviews: one per user per place, helpful toggle, flags (3 distinct → hidden), rate limits, cursor pages.</summary>
 public sealed class ReviewService(GimanoDbContext db, IEventPublisher bus, TimeProvider clock, AuthorHandles handles, RestrictedAreaService restricted,
-    ContentGate gate)
+    ContentGate gate, IMediaStore? media = null)
 {
     public const int PageSize = 20;
 
@@ -114,14 +114,19 @@ public sealed class ReviewService(GimanoDbContext db, IEventPublisher bus, TimeP
         return (await ToDtosAsync([review], ct, userId))[0];
     }
 
-    /// <summary>"Ask for a review" on a review the content check did not accept: once per review, held for a maintainer (note ≤ 200 characters).</summary>
-    public async Task AppealAsync(Guid userId, Guid id, string? note, CancellationToken ct)
+    /// <summary>
+    /// "Ask for a review" on a review the content check did not accept: once per review, held for a maintainer. The note is compulsory (1 to 200
+    /// characters, else 400 <c>note_required</c>); up to three private evidence photos may come with it.
+    /// </summary>
+    public async Task AppealAsync(Guid userId, Guid id, string? note, CancellationToken ct, IReadOnlyList<byte[]>? evidence = null)
     {
         var review = await OwnAsync(userId, id, ct);
         if (review.ModerationState != ContentState.Rejected) throw new ConflictException("Only a review that was not accepted can be sent for review.");
         if (review.AppealedAt is not null) throw new ConflictException("This review was already sent for review.");
         var now = clock.GetUtcNow();
         review.AppealNote = Moderation.CheckAppealNote(note);
+        if (evidence is { Count: > 0 })
+            review.AppealEvidence = await AppealEvidence.StoreAsync(media ?? throw new InvalidOperationException("No media store."), review.Id, AppealEvidence.Prepare(evidence), ct);
         review.AppealedAt = now;
         review.ModerationState = ContentState.Held;
         review.HeldForReview = true;

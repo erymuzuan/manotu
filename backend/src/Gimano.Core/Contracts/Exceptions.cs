@@ -35,3 +35,10 @@ public sealed class ContentRejectedException(IReadOnlyList<string> reasons, stri
     public IReadOnlyList<string> Reasons { get; } = reasons;
     public string? SafeText { get; } = safeText;
 }
+
+/// <summary>A refusal with a machine-readable <c>code</c> in the problem+json (appeals: <c>note_required</c> 400, <c>already_appealed</c> 409).</summary>
+public sealed class ApiCodeException(int status, string code, string message) : Exception(message)
+{
+    public int Status { get; } = status;
+    public string Code { get; } = code;
+}

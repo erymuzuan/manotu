@@ -612,6 +612,93 @@ namespace Gimano.Core.Data.Migrations
                     b.ToTable("community_places", (string)null);
                 });
 
+            modelBuilder.Entity("Gimano.Core.Domain.ContentAppeal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<string>("EvidenceKeys")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("evidence_keys");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("PlaceId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("place_id");
+
+                    b.Property<int?>("Rating")
+                        .HasColumnType("integer")
+                        .HasColumnName("rating");
+
+                    b.Property<string>("Reasons")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("reasons");
+
+                    b.Property<Guid>("RefusalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("refusal_id");
+
+                    b.Property<Guid?>("ReviewId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("review_id");
+
+                    b.Property<DateTimeOffset?>("ScrubbedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scrubbed_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Text")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_content_appeals");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_content_appeals_status");
+
+                    b.HasIndex("UserId", "RefusalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_content_appeals_user_id_refusal_id");
+
+                    b.ToTable("content_appeals", (string)null);
+                });
+
             modelBuilder.Entity("Gimano.Core.Domain.ContentRejection", b =>
                 {
                     b.Property<long>("Id")
@@ -927,6 +1014,10 @@ namespace Gimano.Core.Data.Migrations
                         .HasMaxLength(12)
                         .HasColumnType("character varying(12)")
                         .HasColumnName("status");
+
+                    b.Property<bool>("SuspectedSpam")
+                        .HasColumnType("boolean")
+                        .HasColumnName("suspected_spam");
 
                     b.Property<string>("TriageNote")
                         .HasMaxLength(2000)
@@ -1353,12 +1444,52 @@ namespace Gimano.Core.Data.Migrations
                     b.ToTable("jams", (string)null);
                 });
 
+            modelBuilder.Entity("Gimano.Core.Domain.OsmPlaceFlag", b =>
+                {
+                    b.Property<string>("PlaceId")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("place_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("SuggestedWarnings")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("suggested_warnings");
+
+                    b.HasKey("PlaceId", "UserId")
+                        .HasName("pk_osm_place_flags");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_osm_place_flags_user_id");
+
+                    b.ToTable("osm_place_flags", (string)null);
+                });
+
             modelBuilder.Entity("Gimano.Core.Domain.Photo", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("AppealEvidence")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("appeal_evidence");
 
                     b.Property<string>("AppealNote")
                         .HasMaxLength(200)
@@ -2135,6 +2266,11 @@ namespace Gimano.Core.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("AppealEvidence")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("appeal_evidence");
 
                     b.Property<string>("AppealNote")
                         .HasMaxLength(200)
@@ -2953,6 +3089,16 @@ namespace Gimano.Core.Data.Migrations
                     b.Navigation("Owner");
                 });
 
+            modelBuilder.Entity("Gimano.Core.Domain.ContentAppeal", b =>
+                {
+                    b.HasOne("Gimano.Core.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_content_appeals_users_user_id");
+                });
+
             modelBuilder.Entity("Gimano.Core.Domain.ContentRejection", b =>
                 {
                     b.HasOne("Gimano.Core.Domain.User", null)
@@ -2996,6 +3142,16 @@ namespace Gimano.Core.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_inbox_items_users_user_id");
+                });
+
+            modelBuilder.Entity("Gimano.Core.Domain.OsmPlaceFlag", b =>
+                {
+                    b.HasOne("Gimano.Core.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_osm_place_flags_users_user_id");
                 });
 
             modelBuilder.Entity("Gimano.Core.Domain.Photo", b =>

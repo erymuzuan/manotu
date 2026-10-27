@@ -51,6 +51,8 @@ public sealed class GimanoDbContext(DbContextOptions<GimanoDbContext> options) :
     public DbSet<AiUsageWeek> AiUsageWeeks => Set<AiUsageWeek>();
     public DbSet<WatchedBrand> WatchedBrands => Set<WatchedBrand>();
     public DbSet<ContentRejection> ContentRejections => Set<ContentRejection>();
+    public DbSet<ContentAppeal> ContentAppeals => Set<ContentAppeal>();
+    public DbSet<OsmPlaceFlag> OsmPlaceFlags => Set<OsmPlaceFlag>();
     public DbSet<AgentRun> AgentRuns => Set<AgentRun>();
     public DbSet<ReplyDraft> ReplyDrafts => Set<ReplyDraft>();
     public DbSet<AppBuild> AppBuilds => Set<AppBuild>();
@@ -217,6 +219,31 @@ public sealed class GimanoDbContext(DbContextOptions<GimanoDbContext> options) :
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        b.Entity<ContentAppeal>(e =>
+        {
+            e.ToTable("content_appeals");
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(8);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(10);
+            e.Property(x => x.PlaceId).HasMaxLength(40);
+            e.Property(x => x.Text).HasMaxLength(2000);
+            e.Property(x => x.Reasons).HasMaxLength(160);
+            e.Property(x => x.Note).HasMaxLength(200);
+            e.Property(x => x.EvidenceKeys).HasMaxLength(300);
+            e.HasIndex(x => new { x.UserId, x.RefusalId }).IsUnique();
+            e.HasIndex(x => x.Status);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<OsmPlaceFlag>(e =>
+        {
+            e.ToTable("osm_place_flags");
+            e.HasKey(x => new { x.PlaceId, x.UserId });
+            e.Property(x => x.PlaceId).HasMaxLength(40);
+            e.Property(x => x.Reason).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.SuggestedWarnings).HasMaxLength(40);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         b.Entity<PlaceVote>(e =>
         {
             e.Property(x => x.PlaceId).HasMaxLength(40);
@@ -273,6 +300,7 @@ public sealed class GimanoDbContext(DbContextOptions<GimanoDbContext> options) :
             e.Property(x => x.ModerationState).HasConversion<string>().HasMaxLength(10);
             e.Property(x => x.ModerationReasons).HasMaxLength(160);
             e.Property(x => x.AppealNote).HasMaxLength(200);
+            e.Property(x => x.AppealEvidence).HasMaxLength(300);
             e.HasIndex(x => new { x.PlaceId, x.UserId }).IsUnique();
             e.HasIndex(x => new { x.PlaceId, x.Status, x.Id });
             e.HasIndex(x => new { x.UserId, x.CreatedAt });
@@ -305,6 +333,7 @@ public sealed class GimanoDbContext(DbContextOptions<GimanoDbContext> options) :
             e.Property(x => x.ModerationState).HasConversion<string>().HasMaxLength(10);
             e.Property(x => x.ModerationReasons).HasMaxLength(160);
             e.Property(x => x.AppealNote).HasMaxLength(200);
+            e.Property(x => x.AppealEvidence).HasMaxLength(300);
             e.HasIndex(x => new { x.PlaceId, x.Status, x.Id });
             e.HasIndex(x => x.ReviewId);
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);

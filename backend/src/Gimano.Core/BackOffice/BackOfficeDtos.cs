@@ -20,14 +20,15 @@ public sealed record FeedbackQuery(
 
 public sealed record FeedbackListItem(
     Guid Id, FeedbackCategory Category, string Message, int? Rating, FeedbackScreen? Screen, FeedbackStatus Status,
-    Severity? Severity, string? AppVersion, string? Platform, bool HasScreenshot, bool HasContact, DateTimeOffset CreatedAt);
+    Severity? Severity, string? AppVersion, string? Platform, bool HasScreenshot, bool HasContact, DateTimeOffset CreatedAt,
+    bool SuspectedSpam = false);
 
 /// <param name="Lat">Coarse location (2 dp), only when the reporter ticked "include approximate location".</param>
 public sealed record FeedbackView(
     Guid Id, FeedbackCategory Category, string Message, int? Rating, FeedbackScreen? Screen, FeedbackStatus Status,
     Severity? Severity, DeviceInfo? Device, double? Lat, double? Lng, string? RouteId, string? PlaceId, bool HasScreenshot,
     bool ScreenshotSharedWithAgents, ContactFlags? Contact, Guid? DuplicateOfId, string? CrashSignature, string? TriageNote,
-    string? ExternalUrl, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt, DateTimeOffset? ClosedAt);
+    string? ExternalUrl, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt, DateTimeOffset? ClosedAt, bool SuspectedSpam = false);
 
 public sealed record FeedbackTriage(
     FeedbackStatus? Status = null, Severity? Severity = null, FeedbackCategory? Category = null, Guid? DuplicateOfId = null,

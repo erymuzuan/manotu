@@ -215,15 +215,21 @@ object ContentGate {
 }
 
 /**
- * `403 posting_paused` until [until] (3 AI rejections in 24 h). Kept in memory only: the server decides, and the next
- * attempt after a restart is answered with the same 403.
+ * `403 posting_paused` until [until] (3 AI rejections in 24 h). Kept in memory and, through [persist], on this phone
+ * (DataStore, never sent): a restart no longer forgets a pause that is still running. The server still decides.
  */
 object PostingPause {
     private val _until = MutableStateFlow<Instant?>(null)
     val until: StateFlow<Instant?> = _until.asStateFlow()
 
-    fun set(until: Instant?) { _until.value = until }
-    fun clear() { _until.value = null }
+    /** Told every change (a new pause, or null when cleared); set once by the app container. */
+    @Volatile var persist: ((Instant?) -> Unit)? = null
+
+    fun set(until: Instant?) { _until.value = until; persist?.invoke(until) }
+    fun clear() { _until.value = null; persist?.invoke(null) }
+
+    /** Loads the pause saved by a previous run; one that already ended is ignored (and not written back). */
+    fun restore(saved: Instant?, now: Instant = Instant.now()) { _until.value = saved?.takeIf { it.isAfter(now) } }
 
     /** The pause that is still running at [now], or null. */
     fun active(now: Instant = Instant.now()): Instant? = _until.value?.takeIf { it.isAfter(now) }

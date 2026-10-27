@@ -11,7 +11,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Gimano.Api.Endpoints;
 
 public sealed record AdminFeedbackItem(Guid Id, FeedbackCategory Category, string Message, int? Rating, FeedbackScreen? Screen, FeedbackStatus Status,
-    DeviceInfo? Device, double? Lat, double? Lng, string? RouteId, string? PlaceId, bool HasScreenshot, bool HasContact, DateTimeOffset CreatedAt, string? ExternalUrl);
+    DeviceInfo? Device, double? Lat, double? Lng, string? RouteId, string? PlaceId, bool HasScreenshot, bool HasContact, DateTimeOffset CreatedAt, string? ExternalUrl,
+    bool SuspectedSpam = false);
 public sealed record AdminCrashGroup(string Signature, string Exception, int Count, DateTimeOffset FirstSeen, DateTimeOffset LastSeen, CrashGroupStatus Status);
 public sealed record AdminCrashReport(Guid Id, CrashKind Kind, string Exception, string? Message, string? Stack, string? Screen, long? UptimeS,
     DeviceInfo? Device, DateTimeOffset? OccurredAt, bool HasContact);
@@ -60,6 +61,13 @@ public static class AdminEndpoints
         mod.MapGet("", (string? kind, string? state, Services.Moderation m, CancellationToken ct) => ModerationQueue(kind, state, m, ct));
         mod.MapPost("/{kind}/{id}/hide", (string kind, string id, Services.Moderation m, CancellationToken ct) => ModerationAct(kind, id, (k, i) => m.HideAsync(k, i, ct)));
         mod.MapPost("/{kind}/{id}/restore", (string kind, string id, Services.Moderation m, CancellationToken ct) => ModerationAct(kind, id, (k, i) => m.RestoreAsync(k, i, ct)));
+        mod.MapGet("/{kind}/{id}/evidence/{n:int}", async (string kind, string id, int n, Services.Moderation m, Gimano.Core.Community.IMediaStore media, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryKind(kind, out var k)) return Validation.Problem("kind", "kind must be review, photo, place or appeal.");
+            if (await m.EvidenceAsync(k, id, n, media, ct) is not { } bytes) return Results.NotFound();
+            http.Response.Headers.CacheControl = "no-store";
+            return Results.File(bytes, "image/webp");
+        });
         mod.MapPost("/{kind}/{id}/ban-author", (string kind, string id, Services.Moderation m, CancellationToken ct) => ModerationAuthor(kind, id, (k, i) => m.BanAuthorAsync(k, i, ct)));
         mod.MapPost("/{kind}/{id}/unban-author", (string kind, string id, Services.Moderation m, CancellationToken ct) => ModerationAuthor(kind, id, (k, i) => m.UnbanAuthorAsync(k, i, ct)));
         // DEV ONLY: seed issues for app testing (404 unless Features:DevSeed=true; never set in production).
@@ -108,21 +116,21 @@ public static class AdminEndpoints
     private static async Task<IResult> ModerationQueue(string? kind, string? state, Services.Moderation m, CancellationToken ct)
     {
         Services.ModerationKind? k = null;
-        if (!string.IsNullOrEmpty(kind)) { if (!TryKind(kind, out var kk)) return Validation.Problem("kind", "kind must be review, photo or place."); k = kk; }
+        if (!string.IsNullOrEmpty(kind)) { if (!TryKind(kind, out var kk)) return Validation.Problem("kind", "kind must be review, photo, place or appeal."); k = kk; }
         if (state is not (null or "" or "flagged" or "hidden")) return Validation.Problem("state", "state must be flagged or hidden.");
         return TypedResults.Ok(await m.QueueAsync(k, state == "hidden", ct));
     }
 
     private static async Task<IResult> ModerationAct(string kind, string id, Func<Services.ModerationKind, string, Task> act)
     {
-        if (!TryKind(kind, out var k)) return Validation.Problem("kind", "kind must be review, photo or place.");
+        if (!TryKind(kind, out var k)) return Validation.Problem("kind", "kind must be review, photo, place or appeal.");
         await act(k, id);
         return TypedResults.NoContent();
     }
 
     private static async Task<IResult> ModerationAuthor(string kind, string id, Func<Services.ModerationKind, string, Task<bool>> act)
     {
-        if (!TryKind(kind, out var k)) return Validation.Problem("kind", "kind must be review, photo or place.");
+        if (!TryKind(kind, out var k)) return Validation.Problem("kind", "kind must be review, photo, place or appeal.");
         return await act(k, id) ? TypedResults.NoContent() : TypedResults.NotFound();
     }
 
@@ -191,7 +199,7 @@ public static class AdminEndpoints
         if (GimanoJson.TryParseWire<FeedbackStatus>(status, out var st)) q = q.Where(f => f.Status == st);
         var rows = await q.OrderByDescending(f => f.CreatedAt).Take(Math.Clamp(take ?? 50, 1, 200))
             .Select(f => new AdminFeedbackItem(f.Id, f.Category, f.Message, f.Rating, f.Screen, f.Status, f.Device, f.Lat, f.Lng, f.RouteId, f.PlaceId,
-                f.Screenshot != null, db.ReportContacts.Any(c => c.SubjectType == ContactSubject.Feedback && c.SubjectId == f.Id), f.CreatedAt, f.ExternalUrl))
+                f.Screenshot != null, db.ReportContacts.Any(c => c.SubjectType == ContactSubject.Feedback && c.SubjectId == f.Id), f.CreatedAt, f.ExternalUrl, f.SuspectedSpam))
             .ToListAsync(ct);
         return TypedResults.Ok(rows);
     }

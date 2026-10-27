@@ -51,8 +51,8 @@ struct LocalStoreTests {
     func tables() throws {
         let s = try makeStore()
         let names = try s.dbQueue.read { try String.fetchAll($0, sql: "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name") }
-        #expect(names == ["identity", "outbox", "personal_routes", "planned_drives", "private_place_photos", "private_places", "recents",
-                          "saved_places", "settings"])
+        #expect(names == ["device_state", "identity", "outbox", "personal_routes", "planned_drives", "private_place_photos", "private_places",
+                          "recents", "refused_content", "saved_places", "settings"])
     }
 
     @Test("Home/Work are unique; favourites keep label, icon and order")

@@ -65,6 +65,7 @@
                                         @(f.Screen is { } s ? Fmt.Wire(s) : "no screen")
                                         @if (f.HasScreenshot) { <span> · screenshot</span> }
                                         @if (f.HasContact) { <span> · </span><Pill Text="contact sealed" Kind="lock" /> }
+                                        @if (f.SuspectedSpam) { <span> · </span><Pill Text="suspected spam" Kind="neutral" /> }
                                     </div>
                                 </div>
                             </div>

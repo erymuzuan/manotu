@@ -304,7 +304,7 @@ class DemoContentSafetyTest {
         val bad = repo.photo(ids[2])
         assertEquals(ContentState.REJECTED, ContentGate.photoState(bad))
         assertTrue(ContentGate.canAppeal(bad))
-        repo.appealPhoto(ids[2], null)
+        repo.appealPhoto(ids[2], "It is the shop sign")
         assertEquals(ContentState.PROCESSING, ContentGate.photoState(repo.photo(ids[2])))
     }
 

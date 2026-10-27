@@ -19,6 +19,8 @@ public static class MediaKeys
 {
     public static string Upload(Guid photoId) => $"uploads/{photoId:N}";
     public static string Webp(string hash) => $"{hash}.webp";
+    /// <summary>Private appeal evidence: never served by /media (not a content hash), read only by maintainers.</summary>
+    public static string Appeal(Guid ownerId, int index) => $"appeals/{ownerId:N}/{index}";
     /// <summary>Public URL path served by the API: <c>/media/{hash}.webp</c>.</summary>
     public static string? Url(string? hash) => hash is null ? null : $"/media/{hash}.webp";
     public static bool IsValidHash(string s) => s.Length == 32 && s.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');

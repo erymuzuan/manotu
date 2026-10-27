@@ -35,6 +35,14 @@ class AppContainer(val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val settings = SettingsStore(app, scope)
 
+    init {
+        // A posting pause (403 posting_paused) outlives a restart: kept in the device's DataStore, never sent anywhere.
+        my.gimano.app.core.safety.PostingPause.restore(my.gimano.app.core.safety.PausePersistence.decode(settings.current.postingPausedUntil))
+        my.gimano.app.core.safety.PostingPause.persist = { until ->
+            scope.launch { runCatching { settings.setPostingPausedUntil(my.gimano.app.core.safety.PausePersistence.encode(until)) } }
+        }
+    }
+
     /** On-device personal data (favourites, recents, private places…): never sent to our servers. */
     val db = GimanoDatabase.build(app)
     val local = LocalStore(db)
@@ -100,6 +108,10 @@ class AppContainer(val app: Application) {
         soundMode = { settings.current.soundMode }, langProvider = ::voiceLang,
     )
     val feedback = FeedbackService(db.outbox(), repo)
+    /** Content the server refused (422), kept on this phone for 30 days to edit or appeal: device-local, never backed up or synced. */
+    val refused by lazy {
+        my.gimano.app.data.safety.RefusedContentStore({ my.gimano.app.data.backup.AndroidSqlPort(db.openHelper.writableDatabase) }, File(app.filesDir, "refused"))
+    }
     /** Places waiting on this phone (rate limit, pause, offline): outbox kind `place_draft`, never backed up. */
     val placeDrafts = my.gimano.app.data.places.PlaceDrafts(db.outbox(), repo, File(app.filesDir, "place-drafts"))
     /** A1 "How adding a place works": shown once on this phone, before the first shared place. */

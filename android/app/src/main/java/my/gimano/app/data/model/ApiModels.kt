@@ -151,6 +151,10 @@ data class PlaceScreening(
 @Serializable
 data class AppealRequest(val note: String? = null)
 
+/** 202 of POST /appeals (docs/content-safety.md "Appeals"): the appeal waits for a maintainer. */
+@Serializable
+data class AppealAck(val id: String = "", val status: String = "pending")
+
 @Serializable
 data class SearchResponse(
     val results: List<PlaceSummary> = emptyList(),
@@ -299,7 +303,8 @@ data class PhotosPage(val photos: List<Photo> = emptyList(), val next: String? =
 data class ReviewRequest(val rating: Int, val text: String? = null, val photoIds: List<String>? = null)
 
 @Serializable
-data class FlagRequest(val reason: String)
+/** POST /places/{id}/flag (community or OSM place): [warnings] = what the user suggests (alcohol, gambling, tobacco), optional. */
+data class FlagRequest(val reason: String, val warnings: List<String>? = null)
 
 @Serializable
 data class CreatePlaceRequest(

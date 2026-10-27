@@ -76,8 +76,11 @@ interface GimanoRepository : my.gimano.app.data.share.ShareApi {
     /** GET /photos/{id}: one photo's current status (polled after an upload; own photos carry `moderation`). */
     suspend fun photo(photoId: String): Photo
     /** "Ask a person" about a review or photo the AI check didn't accept (once each, held for a maintainer; 202). */
-    suspend fun appealReview(reviewId: String, note: String?)
-    suspend fun appealPhoto(photoId: String, note: String?)
+    /** [note] is required by the server (1..200 after trimming); [photos] are up to 3 evidence JPEGs (<= 5 MB each). */
+    suspend fun appealReview(reviewId: String, note: String?, photos: List<ByteArray> = emptyList())
+    suspend fun appealPhoto(photoId: String, note: String?, photos: List<ByteArray> = emptyList())
+    /** POST /appeals: appeals a refusal that stored nothing (the refused text goes along, once). */
+    suspend fun submitAppeal(refusalId: String, kind: String, placeId: String?, text: String, reasons: List<String>, note: String, photos: List<ByteArray> = emptyList(), rating: Int? = null): AppealAck
 }
 
 /** Map centre for `near=lat,lng` (ranking origin when the user is looking elsewhere). */

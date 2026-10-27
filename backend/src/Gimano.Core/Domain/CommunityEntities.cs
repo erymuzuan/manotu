@@ -158,6 +158,8 @@ public sealed class Review
     public DateTimeOffset? ModeratedAt { get; set; }
     /// <summary>The author's note when asking a person to review a rejected item (once per item); shown only to maintainers.</summary>
     public string? AppealNote { get; set; }
+    /// <summary>Private evidence images sent with the appeal (media keys, comma-separated); maintainers only, deleted 30 days after the decision.</summary>
+    public string? AppealEvidence { get; set; }
     public DateTimeOffset? AppealedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? EditedAt { get; set; }
@@ -201,6 +203,8 @@ public sealed class Photo
     public DateTimeOffset? ModeratedAt { get; set; }
     /// <summary>The author's note when asking a person to review a rejected item (once per item); shown only to maintainers.</summary>
     public string? AppealNote { get; set; }
+    /// <summary>Private evidence images sent with the appeal (media keys, comma-separated); maintainers only, deleted 30 days after the decision.</summary>
+    public string? AppealEvidence { get; set; }
     public DateTimeOffset? AppealedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -212,6 +216,54 @@ public sealed class PlaceFlag
     public Guid UserId { get; set; }
     public FlagReason Reason { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// One report of an OSM (map data) place per user (POST /places/{id}/flag): the public OSM id, the reason and the warnings the user
+/// suggests (alcohol, gambling, tobacco). No location and nothing else; deleted with the account. Shown to maintainers.
+/// </summary>
+public sealed class OsmPlaceFlag
+{
+    public required string PlaceId { get; set; }
+    public Guid UserId { get; set; }
+    public FlagReason Reason { get; set; }
+    /// <summary>Suggested warnings, comma-separated (alcohol, gambling, tobacco); null when none.</summary>
+    public string? SuggestedWarnings { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public enum AppealKind { Review, Photo, Place }
+
+public enum AppealStatus { Pending, Approved, Denied }
+
+/// <summary>
+/// An appeal from POST /api/v1/appeals (docs/content-safety.md "Appeals"): the refused text the user chose to resubmit, the reason codes,
+/// the compulsory note and up to three private evidence images. One per (user, refusal id). The text, note and images are deleted 30 days
+/// after the decision (the row stays so the same refusal can't be appealed twice) and with the account. Never published.
+/// </summary>
+public sealed class ContentAppeal
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    /// <summary>The client's id of the refusal (a UUID the app made when the content was refused). For photo appeals it is the id of the refused photo.</summary>
+    public Guid RefusalId { get; set; }
+    public Guid UserId { get; set; }
+    public AppealKind Kind { get; set; }
+    public required string PlaceId { get; set; }
+    /// <summary>Review appeals: the rating the refused review carried.</summary>
+    public int? Rating { get; set; }
+    public string? Text { get; set; }
+    /// <summary>Reason codes of the refusal, comma-separated.</summary>
+    public string? Reasons { get; set; }
+    public string Note { get; set; } = "";
+    /// <summary>Media keys of the evidence images (appeals/{id}/{n}), comma-separated.</summary>
+    public string? EvidenceKeys { get; set; }
+    public AppealStatus Status { get; set; } = AppealStatus.Pending;
+    /// <summary>Review appeals, once approved: the review that was created.</summary>
+    public Guid? ReviewId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? DecidedAt { get; set; }
+    /// <summary>Set when the text, note and images were deleted (30 days after the decision).</summary>
+    public DateTimeOffset? ScrubbedAt { get; set; }
 }
 
 public sealed class PhotoFlag

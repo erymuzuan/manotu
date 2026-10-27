@@ -168,6 +168,9 @@ struct BackupService: Sendable {
         let snap = try DatabaseQueue(path: snapshot.path)
         try snap.writeWithoutTransaction { db in
             try db.execute(sql: "DROP TABLE IF EXISTS outbox")
+            // Refused public content and device flags never leave the phone (not even in the user's own backup).
+            try db.execute(sql: "DROP TABLE IF EXISTS refused_content")
+            try db.execute(sql: "DROP TABLE IF EXISTS device_state")
             // The seed leaves this phone only inside the user's own backup, as a raw base64 seed (portable across
             // platforms); the backup's passphrase encryption is what protects it.
             if let rawIdentity {

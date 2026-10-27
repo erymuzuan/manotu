@@ -215,6 +215,8 @@ public sealed class Feedback
     /// <summary>A maintainer shared this one screenshot with agent tokens.</summary>
     public bool ScreenshotSharedWithAgents { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
+    /// <summary>The message text was flagged as spam or abuse by the AI check (never blocks the feedback; maintainers see the flag).</summary>
+    public bool SuspectedSpam { get; set; }
 
     public FeedbackSummary ToSummary() => new(Id, Category, Message, Status, CreatedAt);
 }

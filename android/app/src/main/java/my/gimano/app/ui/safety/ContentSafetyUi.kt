@@ -195,11 +195,11 @@ fun ContentIssue.label(): Int = when (this) {
 
 /**
  * The 422 `content_rejected` sheet: a big shield-x, the offending items crossed out (from the reason codes), the safe part
- * when the server sent one, then "Post this part" and "Edit". Nothing was stored. No appeal here: there is no review to
- * appeal yet (docs/content-safety.md); a review that was stored and rejected later is appealed from the place page / Inbox.
+ * when the server sent one, then "Post this part", "Edit" and "Ask a person". Nothing was stored; the text is kept on the
+ * phone (Not accepted list) and the appeal (POST /appeals, with a required reason) is the only way it leaves.
  */
 @Composable
-fun CantPostSheet(f: ContentFailure.Rejected, onPostPart: () -> Unit, onEdit: () -> Unit, canPostPart: Boolean = true) {
+fun CantPostSheet(f: ContentFailure.Rejected, onPostPart: () -> Unit, onEdit: () -> Unit, canPostPart: Boolean = true, onAppeal: (() -> Unit)? = null) {
     val c = Gimano.colors
     ModalBottomSheet(
         onDismissRequest = onEdit, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = c.surface,
@@ -232,6 +232,11 @@ fun CantPostSheet(f: ContentFailure.Rejected, onPostPart: () -> Unit, onEdit: ()
             OutlinedButton(onClick = onEdit, Modifier.padding(top = 10.dp).fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(Radius.md)) {
                 Icon(Icons.Filled.Edit, null, Modifier.size(22.dp)); Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.cs_edit), style = GimanoType.button)
+            }
+            // The text is kept on this phone (Not accepted); "Ask a person" sends it, with a reason, only when pressed.
+            if (onAppeal != null) OutlinedButton(onClick = onAppeal, Modifier.padding(top = 10.dp).fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(Radius.md)) {
+                Icon(Icons.Filled.Person, null, Modifier.size(22.dp)); Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.cs_appeal), style = GimanoType.button)
             }
         }
     }

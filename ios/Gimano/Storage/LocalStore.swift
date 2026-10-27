@@ -69,6 +69,23 @@ final class LocalStore: Sendable {
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     """
 
+    /// Device-local tables (never in a backup, never on a server, no schema bump so cross-platform restore keeps working):
+    /// `refused_content` = public content the check refused, kept 30 days so the user can appeal it;
+    /// `device_state` = small device-only flags (e.g. `postingPausedUntil`).
+    static let deviceLocalSchema = """
+    CREATE TABLE IF NOT EXISTS refused_content (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL CHECK (kind IN ('review','photo','place')),
+      place_id TEXT, place_name TEXT,
+      text TEXT NOT NULL DEFAULT '',
+      reasons_json TEXT NOT NULL DEFAULT '[]',
+      photos_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      appeal_state TEXT NOT NULL DEFAULT 'none' CHECK (appeal_state IN ('none','sent','answered')),
+      rating INTEGER CHECK (rating BETWEEN 1 AND 5));
+    CREATE TABLE IF NOT EXISTS device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    """
+
     /// Tables included in backups (everything except the device-local outbox).
     static let backedUpTables = ["saved_places", "recents", "private_places", "private_place_photos", "planned_drives", "personal_routes",
                                  "settings", "identity"]
@@ -117,6 +134,7 @@ final class LocalStore: Sendable {
             if version < 3 {
                 try db.execute(sql: schemaV3)
             }
+            try db.execute(sql: deviceLocalSchema)
             if version < schemaVersion {
                 try db.execute(sql: "PRAGMA user_version = \(schemaVersion)")
             }
@@ -410,6 +428,9 @@ final class LocalStore: Sendable {
     func wipePersonalData() throws {
         try dbQueue.write { db in
             for t in Self.backedUpTables.reversed() where t != "settings" { try db.execute(sql: "DELETE FROM \(t)") }
+            try db.execute(sql: "DELETE FROM refused_content")
+            try db.execute(sql: "DELETE FROM device_state")
         }
+        try? FileManager.default.removeItem(at: refusedDirectory)
     }
 }

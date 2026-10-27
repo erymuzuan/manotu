@@ -80,6 +80,7 @@ targets:
         PRODUCT_NAME: Gimano
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GIMANO_DISPLAY_NAME: Manotu
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: $(GIMANO_ENTITLEMENTS_$(GIMANO_ICLOUD))
@@ -87,6 +88,10 @@ targets:
         # Hand-maintained; keep in sync. Debug adds the cleartext ATS exception, Release is ATS-strict.
         Debug:
           INFOPLIST_FILE: Gimano/Resources/Info-Debug.plist
+          # Debug only: red "DEV" ribbon icon and name, so a dev install is never mistaken for the store build.
+          # Release / TestFlight keep AppIcon and "Manotu".
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIconDev
+          GIMANO_DISPLAY_NAME: Manotu DEV
         Release:
           INFOPLIST_FILE: Gimano/Resources/Info.plist
 

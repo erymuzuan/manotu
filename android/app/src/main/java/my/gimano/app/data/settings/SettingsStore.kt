@@ -67,6 +67,8 @@ data class AppSettings(
     val safetyAgreedAt: String? = null,
     val safetyReminderEnabled: Boolean = true,
     val safetyReminderDisabledAt: String? = null,
+    /** 403 `posting_paused` is running until this ISO time (on this phone only, never in a backup); see PostingPause. */
+    val postingPausedUntil: String? = null,
 )
 
 /** User-facing settings that travel with a backup (DB `settings` table, shared with iOS). */
@@ -123,6 +125,7 @@ class SettingsStore(private val context: Context, private val scope: CoroutineSc
         val safetyAgreedAt = stringPreferencesKey("safetyAgreedAt")
         val safetyReminderEnabled = booleanPreferencesKey("safetyReminderEnabled")
         val safetyReminderDisabledAt = stringPreferencesKey("safetyReminderDisabledAt")
+        val postingPausedUntil = stringPreferencesKey("postingPausedUntil")
     }
 
     private val _state: MutableStateFlow<AppSettings>
@@ -178,6 +181,7 @@ class SettingsStore(private val context: Context, private val scope: CoroutineSc
         safetyAgreedAt = p[K.safetyAgreedAt],
         safetyReminderEnabled = p[K.safetyReminderEnabled] ?: true,
         safetyReminderDisabledAt = p[K.safetyReminderDisabledAt],
+        postingPausedUntil = p[K.postingPausedUntil],
     )
 
     /**
@@ -241,6 +245,8 @@ class SettingsStore(private val context: Context, private val scope: CoroutineSc
     suspend fun resetSafetyDebug() = edit {
         it.remove(K.safetyAgreedVersion); it.remove(K.safetyAgreedAt); it.remove(K.safetyReminderEnabled); it.remove(K.safetyReminderDisabledAt)
     }
+    /** The running posting pause (ISO time), or null to clear it. */
+    suspend fun setPostingPausedUntil(v: String?) = edit { if (v == null) it.remove(K.postingPausedUntil) else it[K.postingPausedUntil] = v }
     /** Local read/unread state for the inbox (kept to the last 500 ids). */
     suspend fun markInboxRead(ids: Collection<String>) = edit { p ->
         p[K.inboxRead] = ((p[K.inboxRead] ?: emptySet()) + ids).toList().takeLast(500).toSet()

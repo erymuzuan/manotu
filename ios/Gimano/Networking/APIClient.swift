@@ -230,6 +230,34 @@ actor APIClient {
         return try decode(data)
     }
 
+    /// `multipart/form-data` with repeated fields and several files (appeals). The signature covers the whole body.
+    func sendForm(_ method: String = "POST", _ path: String, fields: [(name: String, value: String)],
+                  files: [MultipartForm.File]) async throws -> Data {
+        let boundary = "gimano-\(UUID().uuidString)"
+        let body = MultipartForm.body(boundary: boundary, fields: fields, files: files)
+        var req = URLRequest(url: url(path))
+        req.httpMethod = method
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppLanguage.acceptLanguage, forHTTPHeaderField: "Accept-Language")
+        if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        sign(&req, method: method, path: path, body: body)
+        req.timeoutInterval = 120
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.upload(for: req, from: body)
+        } catch let e as URLError {
+            throw APIError.transport(e)
+        }
+        guard let http = response as? HTTPURLResponse else { throw APIError.transport(URLError(.badServerResponse)) }
+        guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 409, !data.isEmpty { throw APIError.conflict(data) }
+            throw APIError.http(status: http.statusCode, problem: try? decoder.decode(ProblemDetails.self, from: data))
+        }
+        return data
+    }
+
     private func decode<T: Decodable>(_ data: Data) throws -> T {
         do {
             return try decoder.decode(T.self, from: data)

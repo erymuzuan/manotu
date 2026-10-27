@@ -176,7 +176,7 @@ struct CantPostSheet: View {
                     .buttonStyle(SecondaryButtonStyle())
                     .accessibilityIdentifier("cantPostEdit")
                 Button(action: onAppeal) {
-                    Label("Ask a person", systemImage: "person.fill.questionmark")
+                    Label("Appeal", systemImage: "person.fill.questionmark")
                         .font(Tokens.Font.bodyBold).frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .accessibilityIdentifier("cantPostAppeal")
@@ -246,60 +246,15 @@ enum AppealSubject: Equatable, Sendable {
     case photo(id: String)
 }
 
-/// "Ask a person": an optional note (≤ 200), then `POST /reviews|photos/{id}/appeal`.
+/// "Ask a person" on the user's own held / rejected review or photo: the shared appeal screen (note required).
 struct ContentAppealSheet: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
     let subject: AppealSubject
     var onSent: () -> Void = {}
-    @State private var note = ""
-    @State private var sending = false
-    @State private var error: String?
 
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Image(systemName: "person.fill.questionmark").font(.system(size: 40)).foregroundStyle(Color.brand)
-                    .frame(maxWidth: .infinity).accessibilityHidden(true)
-                TextField(String(localized: "Anything we should know? (optional)"), text: $note, axis: .vertical)
-                    .lineLimit(3...5).padding(14)
-                    .background(Color.surfaceAlt, in: RoundedRectangle(cornerRadius: Tokens.Radius.md, style: .continuous))
-                    .onChange(of: note) { _, v in if v.count > AppealContentRequest.maxNote { note = String(v.prefix(AppealContentRequest.maxNote)) } }
-                    .accessibilityIdentifier("contentAppealNote")
-                Text(verbatim: "\(note.count) / \(AppealContentRequest.maxNote)")
-                    .font(Tokens.Font.small).foregroundStyle(Color.textMuted).frame(maxWidth: .infinity, alignment: .trailing)
-                if let error { Text(error).font(Tokens.Font.caption).foregroundStyle(Color.speeding) }
-                Button { Task { await send() } } label: {
-                    if sending { ProgressView().tint(Color.brandOn) } else { Text("Send") }
-                }
-                .buttonStyle(PrimaryButtonStyle()).disabled(sending)
-                .accessibilityIdentifier("contentAppealSend")
-                Spacer()
-            }
-            .padding(Tokens.Space.gutter)
-            .navigationTitle("Ask a person")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancel") { dismiss() } } }
-        }
-    }
-
-    private func send() async {
-        sending = true
-        defer { sending = false }
-        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        let text = trimmed.isEmpty ? nil : trimmed
-        do {
-            switch subject {
-            case .review(let id): try await model.repo.appealReview(id: id, note: text)
-            case .photo(let id): try await model.repo.appealPhoto(id: id, note: text)
-            }
-            model.showToast(String(localized: "Sent. A person will look within 24 hours."))
-            onSent()
-            dismiss()
-        } catch let e as APIError {
-            if case .conflict = e { error = String(localized: "Already sent for this one.") } else { error = e.localizedDescription }
-        } catch {
-            self.error = error.localizedDescription
+        switch subject {
+        case .review(let id): AppealScreen(source: .review(id: id), onSent: onSent)
+        case .photo(let id): AppealScreen(source: .photo(id: id), onSent: onSent)
         }
     }
 }
@@ -410,7 +365,7 @@ struct RejectedPhotoSheet: View {
                     .accessibilityIdentifier("anotherPhoto")
                 if canAppeal {
                     Button(action: onAppeal) {
-                        Label("Ask a person", systemImage: "person.fill.questionmark")
+                        Label("Appeal", systemImage: "person.fill.questionmark")
                             .font(Tokens.Font.bodyBold).frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .accessibilityIdentifier("photoAppeal")

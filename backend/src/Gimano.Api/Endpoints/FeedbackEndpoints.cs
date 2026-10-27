@@ -14,6 +14,8 @@ public static class FeedbackEndpoints
     public const int MaxMessageLength = 2000;
     public const int MaxScreenshotBytes = 1_500_000;
     public const int MaxPerHour = 10;
+    /// <summary>How long a feedback POST waits for the spam screen before it saves the feedback unflagged.</summary>
+    public static readonly TimeSpan SpamScreenBudget = TimeSpan.FromSeconds(3);
 
     public static RouteGroupBuilder MapFeedback(this RouteGroupBuilder api)
     {
@@ -28,7 +30,7 @@ public static class FeedbackEndpoints
 
     private static async Task<Results<Created<FeedbackCreatedResponse>, ValidationProblem, ProblemHttpResult>> Create(
         CreateFeedbackRequest req, HttpContext http, GimanoDbContext db, IEventPublisher bus, ContactCrypto crypto, TimeProvider clock,
-        ILogger<CreateFeedbackRequest> log, Microsoft.Extensions.Caching.Memory.IMemoryCache cache, CancellationToken ct)
+        ILogger<CreateFeedbackRequest> log, Microsoft.Extensions.Caching.Memory.IMemoryCache cache, Gimano.Core.Community.ContentGate gate, CancellationToken ct)
     {
         if (Validate(req) is { } problem) return problem;
         var (device, location, routeId, placeId) = Normalize(req);
@@ -63,11 +65,16 @@ public static class FeedbackEndpoints
                 detail: $"At most {MaxPerHour} feedback messages per hour. Terima kasih!");
         }
 
+        var message = req.Message.Trim();
+        // Spam/abuse screen: only the message text goes to the model (never contact, device info or the user). It never blocks the feedback;
+        // a "yes" only marks it for the maintainers. Off, budget used up, a failed call or a timeout: no flag, silently.
+        var suspected = await gate.IsSuspectedSpamAsync(message, SpamScreenBudget, ct);
+
         var fb = new Feedback
         {
             // A report that carries a contact is not linked to the account (privacy rule: the contact is never linkable to
             // the pseudonym). The app withdraws it with the returned contactToken instead.
-            UserId = withContact ? null : uid, Category = req.Category, Message = req.Message.Trim(), Rating = req.Rating, Screen = req.Screen,
+            UserId = withContact ? null : uid, Category = req.Category, Message = message, Rating = req.Rating, Screen = req.Screen, SuspectedSpam = suspected,
             Device = device, Lat = location?.Lat, Lng = location?.Lng, RouteId = routeId, PlaceId = placeId,
             Screenshot = screenshot, ScreenshotContentType = contentType, CreatedAt = now,
         };

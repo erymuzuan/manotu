@@ -257,6 +257,8 @@ final class AppModel {
         }
         #endif
         safety = SafetySettings(store: store)
+        postingPausedUntil = PostingPause.load(from: store)
+        reloadRefused()
         #if DEBUG
         let d = UserDefaults.standard
         skipSafetyForTests = (d.bool(forKey: "GimanoSkipSafety") || d.bool(forKey: "GimanoSkipOnboarding")) && !d.bool(forKey: "GimanoSafetyTest")
@@ -583,10 +585,19 @@ final class AppModel {
         await checkCrashReports()
     }
 
+    /// An Inbox answer to an appeal marks the saved item answered.
+    private func settleAppeals(_ items: [InboxItem]) {
+        let ids = AppealAnswers.answered(refusedItems, by: items)
+        guard !ids.isEmpty else { return }
+        for id in ids { try? store.setRefusedState(id: id, .answered) }
+        reloadRefused()
+    }
+
     func refreshInbox() async {
         do {
             inboxItems = try await repo.inbox(cursor: nil).items
             inboxAvailable = true
+            settleAppeals(inboxItems)
         } catch {
             inboxAvailable = false
         }
@@ -1876,8 +1887,42 @@ final class AppModel {
     var quickReport: QuickReportUndo?
     /// Set by the hold arc: the report sheet opens straight on this type's detail sheet.
     var reportInitialType: ReportType?
-    /// 403 `posting_paused` (3 AI rejections in 24 h): reviews and photos wait until then ("Paused" card). In memory only.
-    var postingPausedUntil: Date?
+    /// 403 `posting_paused` (3 AI rejections in 24 h): reviews and photos wait until then ("Paused" card). Kept in the
+    /// device-local `device_state` table so it survives a restart; it never goes anywhere else.
+    var postingPausedUntil: Date? {
+        didSet { PostingPause.save(postingPausedUntil, to: store) }
+    }
+    /// Public content the check refused, kept on this phone for 30 days (device-local `refused_content`).
+    private(set) var refusedItems: [RefusedContent] = []
+    var refusedBadge: Int { RefusedRules.badge(refusedItems) }
+
+    func reloadRefused() {
+        _ = try? store.purgeRefused()
+        refusedItems = (try? store.refusedItems()) ?? []
+    }
+
+    /// Stores a 422-refused review / note / photo on this phone so it can be appealed later. Returns nil if saving failed.
+    @discardableResult
+    func recordRefusal(kind: RefusedKind, placeId: String?, placeName: String?, text: String = "", reasons: [ContentReason],
+                       rating: Int? = nil, photos: [Data] = [], id: String? = nil) -> RefusedContent? {
+        let item = RefusedContent(id: id ?? UUID().uuidString.lowercased(), kind: kind, placeId: placeId, placeName: placeName, text: text, reasons: reasons.map(\.rawValue), rating: rating)
+        guard let saved = try? store.saveRefused(item, photos: photos) else { return nil }
+        reloadRefused()
+        return saved
+    }
+
+    func markRefused(id: String, _ state: AppealState) {
+        try? store.setRefusedState(id: id, state)
+        reloadRefused()
+    }
+
+    func deleteRefused(id: String) {
+        try? store.deleteRefused(id: id)
+        reloadRefused()
+    }
+
+    /// Posting is paused (403 `posting_paused`): remembers it, one day when the server gave no time.
+    func pausePosting(until: Date?) { postingPausedUntil = until ?? .now.addingTimeInterval(86400) }
     /// Reports this phone sent: never asked "still there?" about its own.
     @ObservationIgnored private var ownReportIds: Set<String> = []
     @ObservationIgnored private var quickReportCloseTask: Task<Void, Never>?

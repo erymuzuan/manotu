@@ -269,7 +269,7 @@ fun PlaceCard(sel: PlaceSel, vm: MainViewModel, cvm: ContributeViewModel, apiBas
                             onReportPlace = if (d?.isCommunity == true) ({ reportPlace = true }) else null)
                         // Content safety: the place is listed and routable; the banner only tells people before they go.
                         val warnings = PlaceWarning.of(d?.warnings?.ifEmpty { null } ?: p.warnings)
-                        if (warnings.isNotEmpty()) WarningBanner(warnings, Modifier.padding(top = 8.dp), onTell = if (d != null) ({ cvm.flagWarning(d) }) else null)
+                        if (warnings.isNotEmpty()) WarningBanner(warnings, Modifier.padding(top = 8.dp), onTell = if (priv == null && !p.id.startsWith("pin:")) ({ cvm.flagWarning(p.id) }) else null)
                         if (p.id.startsWith("pin:")) {
                             OutlinedButton(onClick = { cvm.startAdd(my.gimano.app.core.geo.GeoPoint(p.lat, p.lng), ""); vm.startAddPlace(my.gimano.app.core.geo.GeoPoint(p.lat, p.lng), "") },
                                 Modifier.fillMaxWidth().padding(top = 10.dp).heightIn(min = 52.dp), shape = RoundedCornerShape(Radius.md)) {
@@ -392,6 +392,15 @@ fun PlaceCard(sel: PlaceSel, vm: MainViewModel, cvm: ContributeViewModel, apiBas
     }
     reviews.draft?.let { if (d != null) WriteReviewSheet(d, it, cvm) }
     // A rejected photo: why, "Another photo", "Ask a person". Shown over the place card or the write-review sheet.
+    // A photo the server refused at upload (422 content_rejected): kept on the phone; reason icons, Another photo, Ask a person.
+    reviews.refusedPhotoId?.let { rid ->
+        val refusal = (reviews.placeUploads + reviews.draft?.uploads.orEmpty()).firstOrNull { it.refusal?.refusedId == rid }?.refusal
+        if (refusal != null && d != null) {
+            val pick = my.gimano.app.ui.common.rememberPhotoSource(5) { uris -> if (reviews.draft != null) cvm.addReviewPhotos(uris) else cvm.addPlacePhotos(d, uris) {} }
+            RejectedPhotoScreen(refusal.reasons, canAppeal = true,
+                onAnother = { cvm.dropRefusedPhoto(rid); pick() }, onAsk = { cvm.appealRefusedPhoto(rid) }, onClose = cvm::closeRejectedPhoto)
+        }
+    }
     reviews.rejectedPhotoId?.let { id ->
         val item = (reviews.placeUploads + reviews.draft?.uploads.orEmpty()).firstOrNull { it.photo?.id == id }
         val ph = item?.photo
@@ -618,17 +627,19 @@ fun UploadTile(u: UploadItem, sizeDp: Int, onRejected: ((String) -> Unit)? = nul
     val c = Gimano.colors
     val photo = u.photo
     val state = photo?.let { ContentGate.photoState(it) }
-    val rejected = state == ContentState.REJECTED
+    val refused = u.refusal != null   // the server refused it at upload (422): kept on the phone, tap for why + Ask a person
+    val rejected = state == ContentState.REJECTED || refused
     val cd = if (rejected) stringResource(R.string.cs_photo_rejected_cd) else null
     Box(
         Modifier.size(sizeDp.dp).clip(RoundedCornerShape(Radius.md))
-            .then(if (rejected && photo != null && onRejected != null) Modifier.clickable { onRejected(photo.id) } else Modifier)
+            .then(if (rejected && onRejected != null && (photo != null || u.refusal != null)) Modifier.clickable { onRejected(u.refusal?.refusedId ?: photo!!.id) } else Modifier)
             .then(if (cd != null) Modifier.semantics { contentDescription = cd } else Modifier),
     ) {
         if (rejected) Box(Modifier.matchParentSize().background(c.surfaceAlt), contentAlignment = Alignment.Center) {
             Icon(Icons.Filled.HideImage, null, tint = c.textMuted, modifier = Modifier.size((sizeDp / 2).dp))
         } else AsyncImage(u.uri, null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
         when {
+            refused -> StatusBadge(ContentState.REJECTED, Modifier.align(Alignment.BottomEnd).padding(6.dp))
             u.failed -> Box(Modifier.matchParentSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
                 Icon(Icons.Filled.ErrorOutline, stringResource(R.string.action_failed), tint = Color.White)
             }
@@ -759,7 +770,7 @@ private fun WriteReviewSheet(place: Place, d: my.gimano.app.ui.contribute.Review
                 }
             }
             if (!photosOn) Text(stringResource(R.string.restricted_b_photos_off), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.textMuted, modifier = Modifier.padding(top = 8.dp))
-            val uploading = d.uploads.any { it.photo == null && !it.failed }
+            val uploading = d.uploads.any { it.uploading }
             Button(onClick = { cvm.submitReview(place) }, enabled = d.rating in 1..5 && !d.sending && !uploading && lit.isEmpty(),
                 modifier = Modifier.padding(top = 12.dp).fillMaxWidth().height(56.dp), shape = RoundedCornerShape(Radius.md),
                 colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandOn)) {
@@ -768,7 +779,7 @@ private fun WriteReviewSheet(place: Place, d: my.gimano.app.ui.contribute.Review
         }
     }
     // 422 content_rejected: nothing was stored. Big shield-x, the offending items crossed out, the safe part, Edit.
-    d.rejection?.let { f -> CantPostSheet(f, onPostPart = { cvm.postSafePart(place) }, onEdit = cvm::dismissRejection) }
+    d.rejection?.let { f -> CantPostSheet(f, onPostPart = { cvm.postSafePart(place) }, onEdit = cvm::dismissRejection, onAppeal = if (d.refusedId != null) cvm::appealRejection else null) }
     // 403 posting_paused.
     d.paused?.let { PausedSheet(it, cvm.use24h) { cvm.closeReview() } }
 }

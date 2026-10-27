@@ -20,6 +20,13 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problems, ILogger
                     { Status = 400, Title = "One or more validation errors occurred." },
             });
         }
+        if (exception is ApiCodeException coded)
+        {
+            http.Response.StatusCode = coded.Status;
+            var pd = new ProblemDetails { Status = coded.Status, Title = coded.Status switch { 400 => "Bad request", 409 => "Conflict", 413 => "Too large", _ => "Request refused" }, Detail = coded.Message };
+            pd.Extensions["code"] = coded.Code;
+            return await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = http, ProblemDetails = pd });
+        }
         if (exception is DuplicatePlaceException dup)
         {
             http.Response.StatusCode = StatusCodes.Status409Conflict;

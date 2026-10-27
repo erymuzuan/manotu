@@ -181,7 +181,10 @@ struct ReviewRow: View {
             if let m = review.moderation, m.state != .passed, m.state != .skipped {
                 ModerationChip(moderation: m, onAppeal: { appealing = true })
             }
-            if let photos = review.photos, !photos.isEmpty {
+            if let photos = review.photos, !photos.isEmpty, ReviewPhotoDisplay.usesBadgeGrid(photos) {
+                // The author's own review: the same tick / clock / cross badge grid as other photos.
+                ModeratedPhotoGrid(photos: photos, onChange: onChange)
+            } else if let photos = review.photos, !photos.isEmpty {
                 let ready = photos.filter { $0.url != nil }
                 let urls = ready.compactMap { MediaURL.resolve($0.url) }
                 PhotoStrip(thumbs: ready.compactMap { MediaURL.resolve($0.thumbUrl ?? $0.url) }) { i in
@@ -290,7 +293,8 @@ struct WriteReviewSheet: View {
     @State private var rating = 0
     @State private var text = ""
     @State private var rejection: ContentRejectionItem?
-    @State private var appealFeedback = false
+    @State private var appealing: RefusedContent?
+    @State private var photoRefusals: [RefusedContent] = []
     @State private var photos: [PickedPhoto] = []
     @State private var progress: Double?
     @State private var error: String?
@@ -336,10 +340,16 @@ struct WriteReviewSheet: View {
                     if sensitive {
                         SensitiveTermsWarning { text = model.restricted.terms.removingMatchingSentences(text) }
                     }
+                    if let mine = existing?.photos, ReviewPhotoDisplay.usesBadgeGrid(mine) {
+                        ModeratedPhotoGrid(photos: mine, onChange: onDone)
+                    }
                     if proximity == .clear {
                         PhotoPickerRow(photos: $photos)
                     } else if let reviewM = model.restricted.set?.reviewM {
                         PhotosOffCaption(reviewM: reviewM)
+                    }
+                    if !photoRefusals.isEmpty {
+                        PhotosNotAcceptedNote(count: photoRefusals.count)
                     }
                     if let progress {
                         ProgressView(value: progress) { Text("Uploading photos…").font(Tokens.Font.caption) }
@@ -378,13 +388,12 @@ struct WriteReviewSheet: View {
                     Task { await send() }
                 }, onEdit: { rejection = nil }, onAppeal: {
                     rejection = nil
-                    appealFeedback = true
+                    if let saved = r.refusal { appealing = saved } else { dismiss(); model.openFeedback(from: .place, placeId: placeId) }
                 })
                 .presentationDetents([.large])
             }
-            .onChange(of: appealFeedback) { _, on in
-                // A rejected post stores nothing, so there is nothing to appeal by id: "Ask a person" opens feedback instead.
-                if on { appealFeedback = false; dismiss(); model.openFeedback(from: .place, placeId: placeId) }
+            .sheet(item: $appealing) { saved in
+                AppealScreen(source: .refused(saved)) { dismiss() }
             }
         }
     }
@@ -399,6 +408,8 @@ struct WriteReviewSheet: View {
         let id = UUID()
         let reasons: [ContentReason]
         let safeText: String?
+        /// The refused review as saved on this phone (device-local), so it can be appealed.
+        var refusal: RefusedContent? = nil
     }
 
     private var proximity: RestrictedProximity { location.map { model.restricted.proximity(of: $0) } ?? .clear }
@@ -422,6 +433,12 @@ struct WriteReviewSheet: View {
                         photoIds.append(uploaded.id)
                     } catch let e as APIError where e.isRestrictedArea {
                         continue   // photos refused near a restricted area: the review goes without them
+                    } catch where ContentFailure.isContentError(error) {
+                        // This photo was refused (422): kept on the phone to appeal; the review goes without it.
+                        guard case .rejected(let reasons, _) = ContentFailure.classify(error) else { throw error }
+                        if let saved = model.recordRefusal(kind: .photo, placeId: placeId, placeName: placeName, reasons: reasons, photos: [p.jpeg]) {
+                            photoRefusals.append(saved)
+                        }
                     }
                 }
             }
@@ -442,11 +459,17 @@ struct WriteReviewSheet: View {
                     model.showToast(String(localized: "Thanks for your review!"))
                 }
             }
+            if !photoRefusals.isEmpty {
+                model.showToast(String(localized: "A photo wasn't accepted. See Inbox, Not accepted."), seconds: 4)
+            }
             dismiss()
         } catch where ContentFailure.isContentError(error) {
             switch ContentFailure.classify(error, original: text) {
-            case .rejected(let reasons, let safe): rejection = ContentRejectionItem(reasons: reasons, safeText: safe)
-            case .paused(let until): model.postingPausedUntil = until ?? .now.addingTimeInterval(86400)
+            case .rejected(let reasons, let safe):
+                let saved = model.recordRefusal(kind: .review, placeId: placeId, placeName: placeName,
+                                                text: text.trimmingCharacters(in: .whitespacesAndNewlines), reasons: reasons, rating: rating)
+                rejection = ContentRejectionItem(reasons: reasons, safeText: safe, refusal: saved)
+            case .paused(let until): model.pausePosting(until: until)
             default: break
             }
         } catch let e as APIError where e.isServerSideGap {
@@ -649,6 +672,10 @@ struct AddPlacePhotosSheet: View {
     @State private var error: String?
     @State private var rejected: UploadedPhoto?
     @State private var appealing: Photo?
+    /// Photos the check refused at upload (422): kept on the phone, appealable.
+    @State private var refusedPhotos: [RefusedContent] = []
+    @State private var refusedOpen: RefusedContent?
+    @State private var refusedAppeal: RefusedContent?
 
     /// Photos are refused within reviewM of a restricted area (docs/safety.md B).
     private var proximity: RestrictedProximity { location.map { model.restricted.proximity(of: $0) } ?? .clear }
@@ -661,6 +688,12 @@ struct AddPlacePhotosSheet: View {
                     if let until = model.postingPausedUntil, paused { PausedCard(until: until) }
                     if !uploaded.isEmpty {
                         UploadedPhotosGrid(items: $uploaded) { rejected = $0 }
+                    }
+                    if !refusedPhotos.isEmpty {
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                            ForEach(refusedPhotos) { r in RefusedPhotoTile(item: r) { refusedOpen = r } }
+                        }
+                        .accessibilityIdentifier("refusedPhotosGrid")
                     }
                     if proximity == .blocked { RestrictedBlockedNote() }
                     if proximity == .clear {
@@ -695,6 +728,29 @@ struct AddPlacePhotosSheet: View {
                 })
                 .presentationDetents([.medium, .large])
             }
+            .onChange(of: uploaded.map { PhotoBadge.of($0.photo) }) {
+                // A photo the check rejects later (GET /photos/{id}): kept in "Not accepted", refusalId = the photo id.
+                for u in uploaded where PhotoBadge.of(u.photo) == .rejected && !model.refusedItems.contains(where: { $0.id == u.photo.id }) {
+                    model.recordRefusal(kind: .photo, placeId: placeId, placeName: placeName, reasons: ContentReason.parse(u.photo.moderation?.reasons ?? []),
+                                        id: u.photo.id)
+                }
+            }
+            .sheet(item: $refusedOpen) { r in
+                RejectedPhotoSheet(reasons: r.reasons, canAppeal: r.appealState == .none, onAnother: {
+                    refusedOpen = nil
+                    model.deleteRefused(id: r.id)
+                    refusedPhotos.removeAll { $0.id == r.id }
+                }, onAppeal: {
+                    refusedOpen = nil
+                    refusedAppeal = r
+                })
+                .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $refusedAppeal) { r in
+                AppealScreen(source: .refused(r)) {
+                    if let i = refusedPhotos.firstIndex(where: { $0.id == r.id }) { refusedPhotos[i].appealState = .sent }
+                }
+            }
             .sheet(item: $appealing) { p in
                 ContentAppealSheet(subject: .photo(id: p.id)) {
                     // Back to "being checked": the tile polls again.
@@ -717,22 +773,70 @@ struct AddPlacePhotosSheet: View {
         defer { progress = nil }
         let batch = photos
         var done: [UploadedPhoto] = []
+        var handled = 0
+        var refusedNow = 0
         do {
             for (i, p) in batch.enumerated() {
                 let base = Double(i) / Double(batch.count), share = 1 / Double(batch.count)
-                let photo = try await model.repo.uploadPhoto(p.jpeg, placeId: placeId, caption: nil) { f in
-                    Task { @MainActor in progress = base + f * share }
+                do {
+                    let photo = try await model.repo.uploadPhoto(p.jpeg, placeId: placeId, caption: nil) { f in
+                        Task { @MainActor in progress = base + f * share }
+                    }
+                    done.append(UploadedPhoto(preview: p.preview, photo: photo))
+                } catch where ContentFailure.isContentError(error) {
+                    // 422: this photo is refused. Keep it on the phone (appealable) and go on with the next one.
+                    guard case .rejected(let reasons, _) = ContentFailure.classify(error) else { throw error }
+                    if let saved = model.recordRefusal(kind: .photo, placeId: placeId, placeName: placeName, reasons: reasons, photos: [p.jpeg]) {
+                        refusedPhotos.append(saved)
+                        refusedNow += 1
+                    }
                 }
-                done.append(UploadedPhoto(preview: p.preview, photo: photo))
+                handled += 1
             }
-            model.showToast(String(localized: "Thanks! We're checking your photos."))
+            if !done.isEmpty { model.showToast(String(localized: "Thanks! We're checking your photos.")) }
         } catch where ContentFailure.isContentError(error) {
-            if case .paused(let until) = ContentFailure.classify(error) { model.postingPausedUntil = until ?? .now.addingTimeInterval(86400) }
+            if case .paused(let until) = ContentFailure.classify(error) { model.pausePosting(until: until) }
         } catch {
             self.error = error.localizedDescription
         }
         uploaded += done
-        // Photos that went up stay in the grid; the rest stay in the picker for another try.
-        photos = Array(batch.dropFirst(done.count))
+        // Photos that went up (or were refused) leave the picker; the rest stay for another try.
+        photos = Array(batch.dropFirst(handled))
+        if refusedNow == 1, let r = refusedPhotos.last { refusedOpen = r }
+    }
+}
+
+/// A refused photo in the grid: eye-slash tile with the cross badge; tap for the reasons and Appeal.
+struct RefusedPhotoTile: View {
+    let item: RefusedContent
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            ZStack(alignment: .bottomTrailing) {
+                Color.surfaceAlt.overlay(Image(systemName: "eye.slash.fill").font(.system(size: 34)).foregroundStyle(Color.textMuted))
+                Image(systemName: item.appealState == .none ? PhotoBadge.rejected.symbol : AppealState.sent.symbol)
+                    .font(.system(size: 14, weight: .black)).foregroundStyle(.white)
+                    .frame(width: 30, height: 30).background(item.appealState == .none ? Color.report : Color.amberInk, in: Circle())
+                    .overlay(Circle().strokeBorder(.white, lineWidth: 2)).padding(8)
+            }
+            .aspectRatio(1, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Photo not accepted"))
+        .accessibilityHint(Text("Opens the reasons"))
+        .accessibilityIdentifier("refusedPhotoTile")
+    }
+}
+
+/// One line under the review box when photos were refused on send.
+struct PhotosNotAcceptedNote: View {
+    let count: Int
+    var body: some View {
+        Label("\(count) photo not accepted", systemImage: "eye.slash.fill")
+            .font(Tokens.Font.label).foregroundStyle(Color.report)
+            .accessibilityIdentifier("photosNotAccepted")
     }
 }

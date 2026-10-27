@@ -260,11 +260,19 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         return new VerifyResult(place.Status, Math.Round(place.WeightedYes, 2), RequiredFor(place));
     }
 
-    /// <summary>"Report this place": one flag per user; 3 hide a community place pending moderation (as for reviews and photos).</summary>
-    public async Task FlagAsync(Guid userId, string id, FlagReason reason, CancellationToken ct)
+    /// <summary>
+    /// "Report this place": one flag per user. 3 hide a community place pending moderation (as for reviews and photos). A map (OSM) place can
+    /// be reported too: the flag, with the reason and the warnings the user suggests (alcohol, gambling, tobacco), waits for a maintainer and
+    /// changes nothing by itself; no location is stored.
+    /// </summary>
+    public async Task FlagAsync(Guid userId, string id, FlagReason reason, CancellationToken ct, IReadOnlyList<string>? suggestedWarnings = null)
     {
-        var place = await db.CommunityPlaces.FirstOrDefaultAsync(p => p.Id == id, ct)
-                    ?? throw new NotFoundException("Only community places can be reported here; use suggest-edit for map data.");
+        if (!CommunityPlace.IsCommunityId(id))
+        {
+            await FlagOsmAsync(userId, id, reason, suggestedWarnings, ct);
+            return;
+        }
+        var place = await db.CommunityPlaces.FirstOrDefaultAsync(p => p.Id == id, ct) ?? throw new NotFoundException("Place not found.");
         if (place.OwnerId == userId) return;
         if (await db.PlaceFlags.FindAsync([id, userId], ct) is not null) return;
         db.PlaceFlags.Add(new PlaceFlag { PlaceId = id, UserId = userId, Reason = reason, CreatedAt = clock.GetUtcNow() });
@@ -273,6 +281,18 @@ public sealed class CommunityService(GimanoDbContext db, IEventPublisher bus, Gi
         if (hidden) { place.Status = PlaceStatus.Hidden; place.UpdatedAt = clock.GetUtcNow(); }
         await db.SaveChangesAsync(ct);
         if (hidden) await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(id), ct);
+    }
+
+    private async Task FlagOsmAsync(Guid userId, string id, FlagReason reason, IReadOnlyList<string>? suggestedWarnings, CancellationToken ct)
+    {
+        if (id.Length > 40 || !await db.Places.AnyAsync(p => p.Id == id, ct)) throw new NotFoundException("Place not found.");
+        if (await db.OsmPlaceFlags.FindAsync([id, userId], ct) is not null) return;
+        db.OsmPlaceFlags.Add(new OsmPlaceFlag
+        {
+            PlaceId = id, UserId = userId, Reason = reason, SuggestedWarnings = PlaceWarnings.Join(suggestedWarnings), CreatedAt = clock.GetUtcNow(),
+        });
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateException) { /* the same user flagged it twice at once: already there */ }
     }
 
     /// <summary>

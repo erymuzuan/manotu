@@ -18,7 +18,9 @@ object GimanoSchema {
      * it is adopted separately and only when the backup carries one).
      */
     val REQUIRED_TABLES = BACKED_UP_TABLES - "identity"
-    val ALL_TABLES = BACKED_UP_TABLES + "outbox"
+    /** Device-local tables: never in a backup, never synced (outbox queues, refused content kept for an appeal). */
+    val LOCAL_ONLY_TABLES = listOf("outbox", "refused_content", "device_state")
+    val ALL_TABLES = BACKED_UP_TABLES + LOCAL_ONLY_TABLES
 
     val DDL: List<String> = listOf(
         """CREATE TABLE saved_places (
@@ -52,7 +54,27 @@ object GimanoSchema {
         IDENTITY_DDL,
         """CREATE TABLE outbox (id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload_json TEXT NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL)""",
+        REFUSED_CONTENT_DDL,
+        DEVICE_STATE_DDL,
     )
+
+    /**
+     * Device-only flags (docs/privacy-and-backup.md). iOS keeps `postingPausedUntil` here; Android keeps the same value in
+     * its DataStore (SettingsStore), so the table exists for schema parity and is unused on Android today.
+     */
+    const val DEVICE_STATE_DDL = "CREATE TABLE device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+
+    /** Device-local: what the server refused (422 content_rejected), kept 30 days to edit or appeal. Not backed up. */
+    const val REFUSED_CONTENT_DDL = """CREATE TABLE refused_content (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('review','photo','place')),
+  place_id TEXT, place_name TEXT,
+  text TEXT NOT NULL DEFAULT '',
+  reasons_json TEXT NOT NULL DEFAULT '[]',
+  photos_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  appeal_state TEXT NOT NULL DEFAULT 'none' CHECK (appeal_state IN ('none','sent','answered')),
+  rating INTEGER CHECK (rating BETWEEN 1 AND 5))"""
 
     /** Schema 2: the contributor pseudonym's signing key (single row). */
     const val IDENTITY_DDL = """CREATE TABLE identity (
@@ -83,6 +105,9 @@ object GimanoSchema {
      */
     fun upgrade(exec: (String) -> Unit) {
         migrations().forEach(exec)
+        // Device-local table added after the first release: not part of any backup, so not in ADDED_TABLES.
+        exec(REFUSED_CONTENT_DDL.replaceFirst("CREATE TABLE refused_content", "CREATE TABLE IF NOT EXISTS refused_content"))
+        exec(DEVICE_STATE_DDL.replaceFirst("CREATE TABLE device_state", "CREATE TABLE IF NOT EXISTS device_state"))
     }
 
     /** Migrates an attached older backup copy ([schema]) to [VERSION] before its rows are copied over. */

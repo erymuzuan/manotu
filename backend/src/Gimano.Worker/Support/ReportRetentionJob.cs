@@ -4,7 +4,7 @@ using Gimano.Core.Support;
 namespace Gimano.Worker.Support;
 
 /// <summary>Hourly: contact details (30 days after close, 90 days max), crash reports (90 days), feedback (24 months), contact-carrying
-/// reports unlinked from accounts, expired road reports unlinked from their reporter (votes deleted), search-miss counts (&lt; 5 after the week; 26 weeks).</summary>
+/// reports unlinked from accounts, appeal text/notes/evidence photos (30 days after the decision), expired road reports unlinked from their reporter (votes deleted), search-miss counts (&lt; 5 after the week; 26 weeks).</summary>
 public sealed class ReportRetentionJob(IServiceScopeFactory scopes, TimeProvider clock, ILogger<ReportRetentionJob> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -28,6 +28,8 @@ public sealed class ReportRetentionJob(IServiceScopeFactory scopes, TimeProvider
                 if (misses > 0) logger.LogInformation("Retention: dropped {Count} search-miss rows", misses);
                 if (contacts + crashes + groups > 0)
                     logger.LogInformation("Retention: deleted {Contacts} contacts, {Crashes} crash reports, {Groups} crash groups", contacts, crashes, groups);
+                var appeals = await Gimano.Core.Community.AppealRetention.RunAsync(db, scope.ServiceProvider.GetRequiredService<Gimano.Core.Community.IMediaStore>(), clock.GetUtcNow(), stoppingToken);
+                if (appeals > 0) logger.LogInformation("Retention: scrubbed {Count} decided appeals (text, note, evidence photos)", appeals);
                 var (tokens, audit) = await Gimano.Core.BackOffice.BackOfficeRetention.RunAsync(db, clock.GetUtcNow(), stoppingToken);
                 if (tokens + audit > 0) logger.LogInformation("Retention: deleted {Tokens} dead agent tokens, {Audit} audit rows", tokens, audit);
             }

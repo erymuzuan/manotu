@@ -48,6 +48,12 @@ public static class MaintainerDigest
             (p.Status == PlaceStatus.Hidden && (p.FlagCount > 0 || p.HeldForReview))
             || (p.FlagCount > 0 && (p.Status == PlaceStatus.Pending || p.Status == PlaceStatus.Published)), ct);
         var held = await db.CommunityPlaces.AsNoTracking().CountAsync(p => p.Status == PlaceStatus.Hidden && p.HeldForReview, ct);
+        // Appeals waiting for a decision and reports on map (OSM) places are in the queue too.
+        var appeals = await db.ContentAppeals.AsNoTracking().CountAsync(a => a.Status == AppealStatus.Pending, ct);
+        var osmFlagged = await db.OsmPlaceFlags.AsNoTracking().Select(f => f.PlaceId).Distinct().CountAsync(ct);
+        var oldestAppeal = await db.ContentAppeals.AsNoTracking().Where(a => a.Status == AppealStatus.Pending)
+            .OrderBy(a => a.CreatedAt).Select(a => (DateTimeOffset?)a.CreatedAt).FirstOrDefaultAsync(ct);
+        var oldestOsmFlag = await db.OsmPlaceFlags.AsNoTracking().OrderBy(f => f.CreatedAt).Select(f => (DateTimeOffset?)f.CreatedAt).FirstOrDefaultAsync(ct);
 
         // Age: since a held place was added, or since the first flag on a visible flagged review or place.
         var oldestHeld = await db.CommunityPlaces.AsNoTracking().Where(p => p.Status == PlaceStatus.Hidden && p.HeldForReview)
@@ -58,13 +64,13 @@ public static class MaintainerDigest
         var oldestPlaceFlag = await db.PlaceFlags.AsNoTracking()
             .Where(f => db.CommunityPlaces.Any(p => p.Id == f.PlaceId && p.FlagCount > 0 && (p.Status == PlaceStatus.Pending || p.Status == PlaceStatus.Published)))
             .OrderBy(f => f.CreatedAt).Select(f => (DateTimeOffset?)f.CreatedAt).FirstOrDefaultAsync(ct);
-        var oldest = new[] { oldestHeld, oldestReviewFlag, oldestPlaceFlag }.Where(t => t is not null).Min();
+        var oldest = new[] { oldestHeld, oldestReviewFlag, oldestPlaceFlag, oldestAppeal, oldestOsmFlag }.Where(t => t is not null).Min();
 
         return new DigestCounts(
             byCategory.Sum(c => c.Count), byCategory.ToDictionary(c => c.Key, c => c.Count),
             await untriaged.CountAsync(ct), now - oldestUntriaged,
             crashesNew, regressed, open,
-            reviews + photos + places, held, now - oldest);
+            reviews + photos + places + appeals + osmFlagged, held, now - oldest);
     }
 
     /// <summary>

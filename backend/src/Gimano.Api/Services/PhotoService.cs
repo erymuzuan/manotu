@@ -82,8 +82,8 @@ public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPu
         return ToDto(p, handles, viewer);
     }
 
-    /// <summary>"Ask for a review" on a photo the content check did not accept: once per photo, held for a maintainer.</summary>
-    public async Task AppealAsync(Guid userId, Guid id, string? note, CancellationToken ct)
+    /// <summary>"Ask for a review" on a photo the content check did not accept: once per photo, held for a maintainer. Note compulsory, up to three private evidence photos.</summary>
+    public async Task AppealAsync(Guid userId, Guid id, string? note, CancellationToken ct, IReadOnlyList<byte[]>? evidence = null)
     {
         var p = await db.Photos.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException("Photo not found.");
         if (p.UserId != userId) throw new ForbiddenException("Only the uploader can ask for a review of this photo.");
@@ -91,6 +91,7 @@ public sealed class PhotoService(GimanoDbContext db, IMediaStore media, IEventPu
         if (p.AppealedAt is not null) throw new ConflictException("This photo was already sent for review.");
         var now = clock.GetUtcNow();
         p.AppealNote = Moderation.CheckAppealNote(note);
+        if (evidence is { Count: > 0 }) p.AppealEvidence = await AppealEvidence.StoreAsync(media, p.Id, AppealEvidence.Prepare(evidence), ct);
         p.AppealedAt = now;
         p.ModerationState = ContentState.Held;
         p.Status = PhotoStatus.Processing;

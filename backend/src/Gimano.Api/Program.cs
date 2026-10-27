@@ -50,7 +50,7 @@ builder.Services.AddHttpClient<ValhallaClient>(c =>
 builder.Services.AddScoped<GeoLookup>().AddScoped<ReportService>().AddScoped<RouteService>().AddScoped<RouteMatchService>().AddScoped<PlaceService>()
     .AddScoped<PlaceCorrectionService>().AddScoped<CommunityService>().AddScoped<ReviewService>().AddScoped<PhotoService>()
     .AddScoped<SearchService>().AddScoped<SearchMissRecorder>().AddScoped<IssueService>().AddScoped<Moderation>()
-    .AddScoped<RestrictedAreaService>();
+    .AddScoped<RestrictedAreaService>().AddScoped<AppealService>();
 builder.Services.AddSingleton<RestrictedAreaMetrics>().AddSingleton<RestrictedAreaSnapshot>();
 builder.Services.AddSingleton<IssueDirectory>();
 builder.Services.AddSingleton<AliasStore>().AddHostedService(sp => sp.GetRequiredService<AliasStore>());

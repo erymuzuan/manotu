@@ -85,7 +85,7 @@ public sealed class HaikuContentScreener(GimanoDbContext db, IOptions<ScreeningO
     {
         var payload = JsonSerializer.Serialize(new
         {
-            kind = input.Kind switch { ContentKind.Review => "review", ContentKind.ReviewEdit => "review", ContentKind.ReportNote => "road_report_note", _ => "photo" },
+            kind = input.Kind switch { ContentKind.Review => "review", ContentKind.ReviewEdit => "review", ContentKind.ReportNote => "road_report_note", ContentKind.Feedback => "feedback", _ => "photo" },
             isEdit = input.Kind == ContentKind.ReviewEdit,
             place = input.PlaceName,
             text = input.Kind == ContentKind.Photo ? null : input.Text,
@@ -107,7 +107,7 @@ public sealed class HaikuContentScreener(GimanoDbContext db, IOptions<ScreeningO
         {
             Model = ContentScreening.Model,
             MaxTokens = 1024,
-            System = ContentScreening.SystemPrompt,
+            System = input.Kind == ContentKind.Feedback ? ContentScreening.FeedbackSystemPrompt : ContentScreening.SystemPrompt,
             Messages = [message],
             OutputConfig = new OutputConfig { Effort = Effort.Low, Format = new JsonOutputFormat { Schema = Schema } },
         };

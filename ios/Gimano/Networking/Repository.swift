@@ -43,7 +43,7 @@ protocol GimanoRepository: PlaceCardDataSource, DepartureTimesSource {
     func deleteFeedbackContact(id: String, contactToken: String?) async throws
     /// `DELETE /crash-reports/{id}/contact` with X-Contact-Token.
     func deleteCrashContact(id: String, contactToken: String) async throws
-    /// `POST /places/{id}/flag` (community places only).
+    /// `POST /places/{id}/flag` (community and OSM places; the warning banner's "Not right? Tell us").
     func flagPlace(id: String, reason: FlagReason) async throws
     func sendCrashReport(_ report: CrashReport) async throws -> CrashCreated
 
@@ -78,8 +78,11 @@ protocol GimanoRepository: PlaceCardDataSource, DepartureTimesSource {
     /// `GET /photos/{id}`: the uploader's view (status + moderation) while the content check runs.
     func photo(id: String) async throws -> Photo
     /// `POST /reviews/{id}/appeal` and `POST /photos/{id}/appeal` `{note?}` → 202 (once per item, held for a maintainer).
-    func appealReview(id: String, note: String?) async throws
-    func appealPhoto(id: String, note: String?) async throws
+    /// The note is required (1…200); up to 3 evidence photos (JPEG, ≤ 5 MB each) are optional.
+    func appealReview(id: String, note: String, photos: [Data]) async throws
+    func appealPhoto(id: String, note: String, photos: [Data]) async throws
+    /// `POST /appeals` (multipart): appeals content the check refused (422), which the server never stored.
+    func appeal(_ request: AppealRequest) async throws -> AppealCreated
     func deletePhoto(id: String) async throws
     func flagPhoto(id: String, reason: FlagReason) async throws
 
@@ -487,12 +490,34 @@ final class LiveRepository: GimanoRepository {
         try await authed { try await self.client.get("photos/\(id)") }
     }
 
-    func appealReview(id: String, note: String?) async throws {
-        try await authed { try await self.client.sendNoContent("POST", "reviews/\(id)/appeal", body: AppealContentRequest(note: note)) }
+    func appealReview(id: String, note: String, photos: [Data]) async throws {
+        try await sendAppeal("reviews/\(id)/appeal", note: note, photos: photos)
     }
 
-    func appealPhoto(id: String, note: String?) async throws {
-        try await authed { try await self.client.sendNoContent("POST", "photos/\(id)/appeal", body: AppealContentRequest(note: note)) }
+    func appealPhoto(id: String, note: String, photos: [Data]) async throws {
+        try await sendAppeal("photos/\(id)/appeal", note: note, photos: photos)
+    }
+
+    /// JSON `{note}` when there are no photos (as before), multipart `note` + `photos` otherwise.
+    private func sendAppeal(_ path: String, note: String, photos: [Data]) async throws {
+        let note = AppealRules.trimmed(note)
+        let files = AppealRules.filesToSend(photos).enumerated().map {
+            MultipartForm.File(field: "photos", fileName: "evidence-\($0.offset + 1).jpg", mimeType: "image/jpeg", data: $0.element)
+        }
+        if files.isEmpty {
+            try await authed { try await self.client.sendNoContent("POST", path, body: AppealContentRequest(note: note)) }
+        } else {
+            _ = try await authed { try await self.client.sendForm("POST", path, fields: [("note", note)], files: files) }
+        }
+    }
+
+    func appeal(_ request: AppealRequest) async throws -> AppealCreated {
+        let files = AppealRules.filesToSend(request.photos).enumerated().map {
+            MultipartForm.File(field: "photos", fileName: "photo-\($0.offset + 1).jpg", mimeType: "image/jpeg", data: $0.element)
+        }
+        let fields = request.fields
+        let data = try await authed { try await self.client.sendForm("POST", "appeals", fields: fields, files: files) }
+        do { return try JSON.makeDecoder().decode(AppealCreated.self, from: data) } catch { return AppealCreated(id: "", status: "pending") }
     }
 
     func deletePhoto(id: String) async throws {
@@ -698,11 +723,14 @@ final class FallbackRepository: GimanoRepository {
     func photo(id: String) async throws -> Photo {
         try await run({ try await $0.photo(id: id) }, demoOp: { try await $0.photo(id: id) })
     }
-    func appealReview(id: String, note: String?) async throws {
-        try await run(gapFallback: false, { try await $0.appealReview(id: id, note: note) }, demoOp: { try await $0.appealReview(id: id, note: note) })
+    func appeal(_ request: AppealRequest) async throws -> AppealCreated {
+        try await run(gapFallback: false, { try await $0.appeal(request) }, demoOp: { try await $0.appeal(request) })
     }
-    func appealPhoto(id: String, note: String?) async throws {
-        try await run(gapFallback: false, { try await $0.appealPhoto(id: id, note: note) }, demoOp: { try await $0.appealPhoto(id: id, note: note) })
+    func appealReview(id: String, note: String, photos: [Data]) async throws {
+        try await run(gapFallback: false, { try await $0.appealReview(id: id, note: note, photos: photos) }, demoOp: { try await $0.appealReview(id: id, note: note, photos: photos) })
+    }
+    func appealPhoto(id: String, note: String, photos: [Data]) async throws {
+        try await run(gapFallback: false, { try await $0.appealPhoto(id: id, note: note, photos: photos) }, demoOp: { try await $0.appealPhoto(id: id, note: note, photos: photos) })
     }
     func deletePhoto(id: String) async throws {
         try await run(gapFallback: false, { try await $0.deletePhoto(id: id) }, demoOp: { try await $0.deletePhoto(id: id) })

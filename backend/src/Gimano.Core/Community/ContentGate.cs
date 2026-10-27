@@ -23,6 +23,22 @@ public sealed class ContentGate(GimanoDbContext db, IContentScreener screener, B
         return ContentScreening.OutcomeFor(await AskAsync(c => screener.ScreenTextAsync(withBrands, c), wait, ct), input.Text);
     }
 
+    /// <summary>
+    /// Is this feedback message spam or abuse? Only the message text goes to the model (no brand pre-filter, no place, never contact
+    /// details, device info or the user). Never throws and never blocks the feedback: off, budget used up, a failed call and a timeout all say false.
+    /// </summary>
+    public async Task<bool> IsSuspectedSpamAsync(string message, TimeSpan wait, CancellationToken ct)
+    {
+        if (!screener.Enabled || string.IsNullOrWhiteSpace(message)) return false;
+        try
+        {
+            var result = await AskAsync(c => screener.ScreenTextAsync(new ContentInput(ContentKind.Feedback, message), c), wait, ct);
+            return result.Verdict is { Decision: ScreeningDecision.Reject };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return false; }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return false; }
+    }
+
     public async Task<ContentOutcome> CheckImageAsync(byte[] jpeg, ContentInput input, TimeSpan? wait, CancellationToken ct)
     {
         var (pre, withBrands) = await PreFilterAsync(input, ct);

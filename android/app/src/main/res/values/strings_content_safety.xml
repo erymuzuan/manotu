@@ -92,4 +92,43 @@
     <string name="cs_inbox_held">A person is checking</string>
     <string name="cs_inbox_rejected">Not accepted</string>
     <string name="cs_inbox_edit_cd">Edit</string>
+
+    <!-- Not accepted (refused content kept on this phone) and appeals -->
+    <string name="na_title">Not accepted</string>
+    <string name="na_intro">Kept only on this phone for 30 days. Nothing was posted.</string>
+    <string name="na_empty">Nothing here</string>
+    <string name="na_row">Not accepted</string>
+    <string name="na_row_cd">Not accepted, %1$d waiting</string>
+    <string name="na_delete">Delete</string>
+    <string name="na_delete_cd">Delete this copy from the phone</string>
+    <string name="na_days_left">%1$d d left</string>
+    <string name="na_sent">Sent to a person</string>
+    <string name="na_answered">Answered, see Inbox</string>
+    <string name="na_kind_review">Review</string>
+    <string name="na_kind_photo">Photo</string>
+    <string name="na_kind_place">Place</string>
+    <string name="ap_title">Ask a person</string>
+    <string name="ap_your_text">What you wrote</string>
+    <string name="ap_photo_kept">Your photo</string>
+    <string name="ap_why_label">Why is this OK?</string>
+    <string name="ap_why_hint">One short line for the person who reads it</string>
+    <string name="ap_why_required">Required</string>
+    <string name="ap_count">%1$d / %2$d</string>
+    <string name="ap_add_photos">Add photos (optional)</string>
+    <string name="ap_photos_cd">Add evidence photos, up to 3</string>
+    <string name="ap_remove_photo_cd">Remove photo</string>
+    <string name="ap_send">Send</string>
+    <string name="ap_sending_cd">Sending</string>
+    <string name="ap_privacy">This text and your note go to a person only because you press Send.</string>
+    <string name="ap_pending_title">Sent</string>
+    <string name="ap_pending_body">A person will look at it. The answer comes to your Inbox.</string>
+    <string name="ap_err_already">Already sent for this one</string>
+    <string name="ap_err_note">Write why first</string>
+    <string name="ap_err_paused">Paused until %1$s</string>
+    <string name="ap_err_paused_later">Paused for a while</string>
+    <string name="ap_err_banned">This account can\'t send now</string>
+    <string name="ap_err_offline">No connection. Try again.</string>
+    <string name="ap_err_large">A photo is too big or can\'t be read</string>
+    <string name="ap_err_other">Couldn\'t send. Try again.</string>
+    <string name="ap_close_cd">Close</string>
 </resources>

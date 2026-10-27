@@ -42,7 +42,8 @@ public sealed record PlaceVerifiedEvent(string PlaceId, PlaceStatus Status);
 /// <summary>The AI check decided (<paramref name="Late"/>: after the app stopped waiting, so the owner hears it in the Inbox).</summary>
 public sealed record PlaceScreenedEvent(string PlaceId, Community.ScreeningState State, bool Late);
 /// <summary>The content check decided on a review or photo (<paramref name="Late"/>: after the app stopped waiting, or a maintainer decided).</summary>
-public sealed record ContentScreenedEvent(string SubjectKind, string SubjectId, string PlaceId, Community.ContentState State, bool Late);
+/// <param name="AppealId">Set when a maintainer decided an appeal from POST /appeals: the Inbox item then reads the reasons from the appeal and has canAppeal=false.</param>
+public sealed record ContentScreenedEvent(string SubjectKind, string SubjectId, string PlaceId, Community.ContentState State, bool Late, Guid? AppealId = null);
 public sealed record SuggestionAppliedEvent(Guid SuggestionId);
 public sealed record FeedbackStatusEvent(Guid FeedbackId, FeedbackStatus Status);
 

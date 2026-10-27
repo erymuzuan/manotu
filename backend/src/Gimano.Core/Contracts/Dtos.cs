@@ -125,7 +125,11 @@ public sealed record CreateReviewRequest(int Rating, string? Text, IReadOnlyList
 
 public sealed record PatchReviewRequest(int? Rating, string? Text, IReadOnlyList<Guid>? PhotoIds);
 
-public sealed record FlagRequest(FlagReason Reason);
+/// <param name="Warnings">Only on places: warnings the reporter suggests (alcohol, gambling, tobacco); the place stays listed.</param>
+public sealed record FlagRequest(FlagReason Reason, IReadOnlyList<string>? Warnings = null);
+
+/// <summary>202 for POST /appeals: the appeal waits for a maintainer.</summary>
+public sealed record AppealAccepted(Guid Id, string Status);
 
 public sealed record PhotoDto(
     Guid Id, string? Url, string? ThumbUrl, int Width, int Height, string? Caption, AddedBy UploadedBy, DateTimeOffset CreatedAt,

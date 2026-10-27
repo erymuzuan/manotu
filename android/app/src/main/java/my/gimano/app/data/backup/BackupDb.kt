@@ -30,7 +30,7 @@ object BackupDb {
 
     /** Drops what must not be in a backup: the outbox and Room's/Android's bookkeeping tables. */
     fun cleanSnapshot(snapshot: SqlPort) {
-        snapshot.exec("DROP TABLE IF EXISTS outbox")
+        GimanoSchema.LOCAL_ONLY_TABLES.forEach { snapshot.exec("DROP TABLE IF EXISTS $it") }
         snapshot.exec("DROP TABLE IF EXISTS room_master_table")
         snapshot.exec("DROP TABLE IF EXISTS android_metadata")
         // The live DB carries Room's version; a backup carries the shared schema version (docs/privacy-and-backup.md).
