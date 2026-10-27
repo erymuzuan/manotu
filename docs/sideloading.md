@@ -46,9 +46,9 @@ Do not present a successful compiler run as a successful AltStore installation o
 
 ## TestFlight ownership
 
-Manotu must be registered under Erymuzuan Mustapa's individual Apple Developer membership, **not STAFY**.
-Verify the team in App Store Connect and signing settings before creating identifiers or uploading.
-Enrollment, agreement acceptance and payment do not by themselves confirm membership activation.
+Manotu uses **STAFY COMPANY LIMITED (98KY9PMPX3)** for device signing, TestFlight and App Store distribution,
+as reconfirmed by the owner on 26 October 2026. Use the existing `my.manotu.app` identifier and App Store Connect
+app `6826478029`; do not create a duplicate app. Verify the team before signing or uploading.
 
 ## Coordination with Mac.Gimano
 
