@@ -85,7 +85,7 @@ if (config["Authentication:Google:ClientId"] is { Length: > 0 } googleId &&
         o.ClientSecret = googleSecret;
         o.CallbackPath = "/signin-google";
         o.SaveTokens = false;
-        o.ClaimActions.MapJsonKey("google:email_verified", "verified_email");
+        GoogleMaintainerLogin.ConfigureClaims(o);
         o.Events.OnRemoteFailure = context =>
         {
             context.HandleResponse();

@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Text.Json;
+using Microsoft.AspNetCore.Authentication.Google;
 using Gimano.BackOffice.Components.Account;
 using Microsoft.AspNetCore.Identity;
 
@@ -6,6 +8,19 @@ namespace Gimano.Tests;
 
 public class BackOfficeGoogleTests
 {
+    [Fact]
+    public void Google_v3_userinfo_maps_verified_email_for_login()
+    {
+        var options = new GoogleOptions();
+        GoogleMaintainerLogin.ConfigureClaims(options);
+        using var payload = JsonDocument.Parse("""{"sub":"google-subject","email":"moderator@gmail.com","email_verified":true}""");
+        var identity = new ClaimsIdentity();
+        foreach (var action in options.ClaimActions)
+            action.Run(payload.RootElement, identity, "Google");
+        var info = new ExternalLoginInfo(new ClaimsPrincipal(identity), "Google", "google-subject", "Google");
+        Assert.Equal("moderator@gmail.com", GoogleMaintainerLogin.VerifiedEmail(info));
+    }
+
     [Theory]
     [InlineData("Google", "true", "moderator@gmail.com", true)]
     [InlineData("Google", "false", "moderator@gmail.com", false)]

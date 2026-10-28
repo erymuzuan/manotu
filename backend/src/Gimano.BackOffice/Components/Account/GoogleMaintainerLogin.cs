@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
 using Gimano.BackOffice.Data;
 using Microsoft.AspNetCore.Identity;
 
@@ -8,6 +10,9 @@ namespace Gimano.BackOffice.Components.Account;
 public sealed class GoogleMaintainerLogin(SignInManager<ApplicationUser> signIn, UserManager<ApplicationUser> users,
     MaintainerAllowlist allowlist)
 {
+    public static void ConfigureClaims(GoogleOptions options) =>
+        options.ClaimActions.MapJsonKey("google:email_verified", "email_verified");
+
     public static string? VerifiedEmail(ExternalLoginInfo? info)
     {
         if (info?.LoginProvider != "Google" || string.IsNullOrWhiteSpace(info.ProviderKey) ||
