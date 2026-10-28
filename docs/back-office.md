@@ -276,8 +276,8 @@ Production sign-in uses a passkey or Google OAuth, followed by the existing emai
 Password sign-in is denied by the sign-in manager; old registration, password/reset and identity-change routes return 410.
 Google may provision a passwordless account or link an existing one only when Google verifies a Gmail address
 and that exact address is on `BackOffice:Maintainers`. No third-party email auto-linking, no Drive scopes, no stored Google tokens.
-The approved production allowlist is erymuzuan@gmail.com, adam.erymuzuan@gmail.com, rodin859@gmail.com.
-Set `BACKOFFICE_MAINTAINERS` to exactly those comma-separated addresses. This replaces the older invite/password setup above.
+Set `BACKOFFICE_MAINTAINERS` to exactly the owner-approved moderator addresses in the production environment.
+This replaces the older invite/password setup above; do not keep operator email lists in public documentation.
 
 Google Cloud project `gimano-512501` (Manotu), web client **Manotu BackOffice**.
 Client ID: `513325189112-tsdgun9i2olmpkbgdfh2jngfjrq4a16d.apps.googleusercontent.com`.
