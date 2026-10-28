@@ -205,7 +205,9 @@ app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    // The production IIS ARR path closes compressed WebSocket frames (1006) before the circuit starts.
+    // Keep WebSockets, but do not negotiate permessage-deflate through that proxy.
+    .AddInteractiveServerRenderMode(options => options.DisableWebSocketCompression = true);
 
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
