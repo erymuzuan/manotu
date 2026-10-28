@@ -269,3 +269,20 @@ a worker restarted inside the send hour may send that day's digest twice, and on
 | Appeal text, note and evidence photos | 30 days after the decision (and with `DELETE /me`); the appeal row stays until the account is deleted |
 | Agent tokens | deleted 30 days after expiry or revocation |
 | Audit log | 1 year |
+
+## Passwordless moderator access (29 October 2026)
+
+Production sign-in uses a passkey or Google OAuth, followed by the existing emailed verification code.
+Password sign-in is denied by the sign-in manager; old registration, password/reset and identity-change routes return 410.
+Google may provision a passwordless account or link an existing one only when Google verifies a Gmail address
+and that exact address is on `BackOffice:Maintainers`. No third-party email auto-linking, no Drive scopes, no stored Google tokens.
+The approved production allowlist is erymuzuan@gmail.com, adam.erymuzuan@gmail.com, rodin859@gmail.com.
+Set `BACKOFFICE_MAINTAINERS` to exactly those comma-separated addresses. This replaces the older invite/password setup above.
+
+Google Cloud project `gimano-512501` (Manotu), web client **Manotu BackOffice**.
+Client ID: `513325189112-tsdgun9i2olmpkbgdfh2jngfjrq4a16d.apps.googleusercontent.com`.
+Callback: `https://backoffice.manotu.app/signin-google`. Configure `BACKOFFICE_GOOGLE_CLIENT_ID` and
+`BACKOFFICE_GOOGLE_CLIENT_SECRET` in the production environment; never in Git, logs, or image layers.
+Keep forwarded HTTPS/host headers restricted to the trusted IIS proxy. Existing passkeys and data-protection keys
+remain intact. Sign in with Google first, then register a passkey under Account → Passkeys.
+The production Google secret must be configured before deploying the passwordless image.

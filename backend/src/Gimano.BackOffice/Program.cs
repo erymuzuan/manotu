@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Gimano.BackOffice.Components;
 using Gimano.BackOffice.Components.Account;
 using Gimano.BackOffice.Data;
@@ -74,6 +75,26 @@ builder.Services.AddAuthentication(options =>
             }
         };
     }));
+// Google is an authentication method, never an authorization grant.
+if (config["Authentication:Google:ClientId"] is { Length: > 0 } googleId &&
+    config["Authentication:Google:ClientSecret"] is { Length: > 0 } googleSecret)
+{
+    builder.Services.AddAuthentication().AddGoogle(o =>
+    {
+        o.ClientId = googleId;
+        o.ClientSecret = googleSecret;
+        o.CallbackPath = "/signin-google";
+        o.SaveTokens = false;
+        o.ClaimActions.MapJsonKey("google:email_verified", "verified_email");
+        o.Events.OnRemoteFailure = context =>
+        {
+            context.HandleResponse();
+            context.Response.Redirect("/Account/Login?externalError=1");
+            return Task.CompletedTask;
+        };
+    });
+}
+builder.Services.AddScoped<GoogleMaintainerLogin>();
 builder.Services.AddAuthorization();
 
 // Same database and credentials as AddGimanoData (password from ConnectionStrings__Postgres or Postgres:Password, never committed).
@@ -199,6 +220,18 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 // Explicitly after the re-executing handlers: the implicit ones run before them, so a re-executed /not-found or /Error
 // (pages under [Authorize] in _Imports, opened with [AllowAnonymous]) would reach the endpoint without authorization
 // having run, and every 404 became a 500.
+// Retired password/account-edit routes are disabled for GET and POST, including old bookmarks.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value?.TrimEnd('/');
+    if (PasswordlessRoutes.IsRetired(path))
+    {
+        context.Response.StatusCode = StatusCodes.Status410Gone;
+        await context.Response.WriteAsync("Password access is retired. Sign in with Google or a passkey at /Account/Login.");
+        return;
+    }
+    await next(context);
+});
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();

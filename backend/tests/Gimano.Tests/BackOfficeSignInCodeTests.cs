@@ -16,6 +16,8 @@ public class BackOfficeSignInCodeTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.Configure<BackOfficeOptions>(o => o.Maintainers = [Email]);
+        services.AddSingleton<MaintainerAllowlist>();
         services.AddDataProtection();
         services.Configure<EmailCodeOptions>(o => o.Required = required);
         services.AddAuthentication(o =>
@@ -42,7 +44,7 @@ public class BackOfficeSignInCodeTests
     }
 
     [Fact]
-    public async Task Password_sign_in_always_needs_the_emailed_code()
+    public async Task Password_sign_in_is_disabled()
     {
         var (sp, _) = await SetupAsync();
         var signIn = sp.GetRequiredService<SignInManager<ApplicationUser>>();
@@ -50,7 +52,7 @@ public class BackOfficeSignInCodeTests
 
         var result = await signIn.PasswordSignInAsync(Email, Password, isPersistent: false, lockoutOnFailure: true);
 
-        Assert.True(result.RequiresTwoFactor);
+        Assert.True(result.IsNotAllowed);
         Assert.False(result.Succeeded);
     }
 
@@ -73,7 +75,8 @@ public class BackOfficeSignInCodeTests
         var (sp, user) = await SetupAsync();
         var signIn = sp.GetRequiredService<SignInManager<ApplicationUser>>();
         var users = sp.GetRequiredService<UserManager<ApplicationUser>>();
-        Assert.True((await signIn.PasswordSignInAsync(Email, Password, false, true)).RequiresTwoFactor);
+        var method = typeof(SignInManager<ApplicationUser>).GetMethod("SignInOrTwoFactorAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        Assert.True((await (Task<SignInResult>)method.Invoke(signIn, [user, false, "Google", false])!).RequiresTwoFactor);
 
         var code = await users.GenerateTwoFactorTokenAsync(user, EmailSignInCodeProvider.Name);
         Assert.Matches(@"^\d{6}$", code);
@@ -100,12 +103,24 @@ public class BackOfficeSignInCodeTests
     }
 
     [Fact]
-    public async Task Without_the_requirement_password_alone_signs_in()
+    public async Task Password_is_disabled_even_without_email_code_requirement()
     {
         var (sp, _) = await SetupAsync(required: false);
         var signIn = sp.GetRequiredService<SignInManager<ApplicationUser>>();
 
-        Assert.True((await signIn.PasswordSignInAsync(Email, Password, false, true)).Succeeded);
+        Assert.True((await signIn.PasswordSignInAsync(Email, Password, false, true)).IsNotAllowed);
+    }
+
+    [Fact]
+    public async Task Removed_moderator_cannot_finish_passkey_sign_in()
+    {
+        var (sp, user) = await SetupAsync();
+        user.Email = "not-approved@gmail.com";
+        var signIn = sp.GetRequiredService<SignInManager<ApplicationUser>>();
+        Assert.False(await signIn.CanSignInAsync(user));
+        var method = typeof(SignInManager<ApplicationUser>).GetMethod("SignInOrTwoFactorAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var result = await (Task<SignInResult>)method.Invoke(signIn, [user, false, null, true])!;
+        Assert.True(result.IsNotAllowed);
     }
 
     private sealed class FixedContext(HttpContext http) : IHttpContextAccessor

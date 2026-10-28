@@ -228,6 +228,8 @@ services:
       # Same key as the api: needed to reveal volunteered contacts (with a reason, audited).
       Feedback__ContactKey: ${FEEDBACK_CONTACT_KEY:?Set FEEDBACK_CONTACT_KEY in deploy/.env.prod}
       BackOffice__Maintainers__0: ${BACKOFFICE_MAINTAINERS:-}
+      Authentication__Google__ClientId: ${BACKOFFICE_GOOGLE_CLIENT_ID:-}
+      Authentication__Google__ClientSecret: ${BACKOFFICE_GOOGLE_CLIENT_SECRET:-}
       # Shown on "Agent access" as the API address agents use for /mcp (the api as reached over the tailnet).
       BackOffice__ApiBaseUrl: ${BACKOFFICE_API_BASE_URL:-http://172.30.30.150:5080}
       # Base of the one-time invite links printed by `run --rm backoffice invite <email>`.

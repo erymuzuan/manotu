@@ -24,15 +24,16 @@ plain GET forms and stay static.
 ## Authentication
 ASP.NET Core Identity with passkeys is configured (`Data/ApplicationDbContext`, schema `backoffice`). Only emails in
 `BackOffice:Maintainers` can register or stay signed in (`MaintainerUserValidator`, cookie `OnValidatePrincipal`).
-There is no self-registration: `Account/Register` needs a one-time invite (`Data/MaintainerInvites`, minted with
-`invite <email>` on the command line); external-login account creation is disabled. Keep it that way.
+There is no public registration. Google may provision/link only an explicitly allowlisted, verified Gmail identity;
+other emails are denied. Password sign-in, registration/reset and identity-change pages are retired.
+Passkey enrollment requires an authenticated moderator session. Preserve the emailed-code step for both sign-in methods.
 Every page under `Components/Pages` requires sign-in (`_Imports.razor` has `[Authorize]`). The Identity pages under
 `Components/Account/` are always static SSR: don't add `@rendermode` to them. They are the only pages that load Bootstrap.
 
 ## Environment constraints
 - Interactive components run on the server via SignalR. `HttpContext` is available in static components but NOT in
   interactive components during the SignalR circuit lifetime; use `BackOfficePage.MeAsync()` for the signed-in maintainer.
-- Passkeys need HTTPS (or localhost). Over plain HTTP on Tailscale, use password + authenticator.
+- Passkeys need HTTPS (or localhost). Use HTTPS for development sign-in; password fallback is disabled.
 
 ## Don'ts
 - Don't add `@rendermode InteractiveServer` to read-only pages.

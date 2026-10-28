@@ -46,9 +46,18 @@ public sealed class EmailSignInCodeProvider : TotpSecurityStampBasedTokenProvide
 public sealed class MaintainerSignInManager(UserManager<ApplicationUser> userManager, IHttpContextAccessor contextAccessor,
     IUserClaimsPrincipalFactory<ApplicationUser> claimsFactory, IOptions<IdentityOptions> optionsAccessor,
     ILogger<SignInManager<ApplicationUser>> logger, IAuthenticationSchemeProvider schemes, IUserConfirmation<ApplicationUser> confirmation,
-    IOptions<EmailCodeOptions> emailCode)
+    IOptions<EmailCodeOptions> emailCode, MaintainerAllowlist allowlist)
     : SignInManager<ApplicationUser>(userManager, contextAccessor, claimsFactory, optionsAccessor, logger, schemes, confirmation)
 {
+    public override Task<SignInResult> PasswordSignInAsync(string userName, string password, bool isPersistent, bool lockoutOnFailure) =>
+        Task.FromResult(SignInResult.NotAllowed);
+
+    public override Task<SignInResult> PasswordSignInAsync(ApplicationUser user, string password, bool isPersistent, bool lockoutOnFailure) =>
+        Task.FromResult(SignInResult.NotAllowed);
+
+    public override async Task<bool> CanSignInAsync(ApplicationUser user) =>
+        allowlist.Allows(user.Email) && await base.CanSignInAsync(user);
+
     private bool Required => emailCode.Value.Required;
 
     public override async Task<bool> IsTwoFactorEnabledAsync(ApplicationUser user) => Required || await base.IsTwoFactorEnabledAsync(user);
@@ -56,9 +65,10 @@ public sealed class MaintainerSignInManager(UserManager<ApplicationUser> userMan
     public override async Task<bool> IsTwoFactorClientRememberedAsync(ApplicationUser user) =>
         !Required && await base.IsTwoFactorClientRememberedAsync(user);
 
-    protected override Task<SignInResult> SignInOrTwoFactorAsync(ApplicationUser user, bool isPersistent, string? loginProvider = null,
+    protected override async Task<SignInResult> SignInOrTwoFactorAsync(ApplicationUser user, bool isPersistent, string? loginProvider = null,
         bool bypassTwoFactor = false) =>
-        base.SignInOrTwoFactorAsync(user, isPersistent, loginProvider, bypassTwoFactor && !Required);
+        !allowlist.Allows(user.Email) ? SignInResult.NotAllowed :
+        await base.SignInOrTwoFactorAsync(user, isPersistent, loginProvider, bypassTwoFactor && !Required);
 }
 
 /// <summary>Emails a sign-in code; at most one email per account per <see cref="MinInterval"/>.</summary>
@@ -90,13 +100,13 @@ public sealed class EmailSignInCodeSender(IOptions<EmailCodeOptions> options, Us
             Your Manotu back office sign-in code is {code}
 
             It works for a few minutes, once. Requested at {at} (Malaysia time).
-            If this wasn't you, someone has your password: change it, and tell the other maintainers.
+            If this wasn't you, do not share this code. Review your Google account and passkeys, and tell the other maintainers.
             """;
         var html = $"""
             <p>Your Manotu back office sign-in code is</p>
             <p style="font-size:28px;font-weight:700;letter-spacing:6px;font-family:monospace">{WebUtility.HtmlEncode(code)}</p>
             <p>It works for a few minutes, once. Requested at {WebUtility.HtmlEncode(at)} (Malaysia time).</p>
-            <p>If this wasn't you, someone has your password: change it, and tell the other maintainers.</p>
+            <p>If this wasn't you, do not share this code. Review your Google account and passkeys, and tell the other maintainers.</p>
             """;
         try
         {
