@@ -102,6 +102,7 @@ builder.Services.AddAuthorization(o => o.AddPolicy(AgentTokenAuthenticationHandl
 
 // Back office for AI agents (docs/back-office.md): /admin/v1 REST + the MCP server at /mcp, same rules as the Blazor app.
 builder.Services.AddScoped<TriageService>();
+builder.Services.AddScoped<PlaceContributorReplies>();
 builder.Services.AddScoped<Gimano.Core.AppVersions.AppVersionService>();
 builder.Services.Configure<AdminOptions>(config.GetSection(AdminOptions.Section));
 builder.Services.AddHttpContextAccessor();

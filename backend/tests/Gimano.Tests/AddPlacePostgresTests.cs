@@ -97,6 +97,183 @@ public sealed class PostgresIntegrationAddPlaceTests : IAsyncLifetime
 
     private IEnumerable<PlaceScreenedEvent> Screened => _bus.Sent.Where(s => s.Key == RoutingKeys.PlaceScreened).Select(s => (PlaceScreenedEvent)s.Payload);
 
+    private async Task<CommunityPlace> SeedReplyPlaceAsync(Guid? owner)
+    {
+        await using var db = NewDb();
+        var place = new CommunityPlace { Name = "Public test cafe", OwnerId = owner,
+            Location = new GeoPoint(Lat, Lng).ToPoint(), Status = PlaceStatus.Hidden, HeldForReview = true,
+            ScreeningState = ScreeningState.Held };
+        db.CommunityPlaces.Add(place);
+        await db.SaveChangesAsync();
+        return place;
+    }
+
+    [Fact]
+    public async Task Contributor_reply_is_private_to_author_audited_and_does_not_publish_or_fabricate_feedback()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var place = await SeedReplyPlaceAsync(_regular);
+        await using var db = NewDb();
+        var request = new PlaceContributorReplyRequest(Guid.NewGuid(), "Terima kasih. Sila cari nama sedia ada.", "duplicate");
+        var result = await new PlaceContributorReplies(db, _clock).SendAsync(place.Id, request, "admin:testkey", default);
+        Assert.Equal("sent", result.Status);
+        Assert.False(result.Replay);
+        var inbox = await db.InboxItems.SingleAsync();
+        Assert.Equal(_regular, inbox.UserId);
+        Assert.Equal(request.Message, inbox.Body);
+        Assert.Equal((inbox.Title, inbox.Body), InboxRules.Render(inbox, "en"));
+        Assert.Equal("place", inbox.RefType);
+        Assert.Equal(place.Id, inbox.RefId);
+        Assert.Empty(await db.Feedback.ToListAsync());
+        Assert.Empty(await db.Announcements.ToListAsync());
+        var audit = await db.AuditLog.SingleAsync();
+        Assert.Equal("admin:testkey", audit.Actor);
+        Assert.Equal("place.reply", audit.Action);
+        Assert.Contains("duplicate", audit.Detail);
+        Assert.DoesNotContain(request.Message!, audit.Detail!);
+        Assert.DoesNotContain(_regular.ToString(), audit.Detail!);
+        var current = await db.CommunityPlaces.SingleAsync(p => p.Id == place.Id);
+        Assert.Equal(PlaceStatus.Hidden, current.Status);
+        Assert.True(current.HeldForReview);
+        Assert.False(current.Listed);
+    }
+
+    [Fact]
+    public async Task Contributor_reply_retries_and_concurrent_delivery_create_one_item_and_one_audit()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var place = await SeedReplyPlaceAsync(_regular);
+        var request = new PlaceContributorReplyRequest(Guid.NewGuid(), "Thank you for this public contribution.", "approved");
+        async Task<PlaceContributorReplyResult> Send()
+        {
+            await using var db = NewDb();
+            return await new PlaceContributorReplies(db, _clock).SendAsync(place.Id, request, "admin:testkey", default);
+        }
+        var results = await Task.WhenAll(Send(), Send());
+        Assert.Single(results, r => !r.Replay);
+        Assert.Equal(results[0].InboxId, results[1].InboxId);
+        await using var check = NewDb();
+        Assert.Equal(1, await check.InboxItems.CountAsync());
+        Assert.Equal(1, await check.AuditLog.CountAsync());
+        await Assert.ThrowsAsync<ConflictException>(() => new PlaceContributorReplies(check, _clock)
+            .SendAsync(place.Id, request with { Message = "A different message" }, "admin:testkey", default));
+    }
+
+    [Fact]
+    public async Task Contributor_reply_retry_after_inbox_retention_does_not_resend()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var place = await SeedReplyPlaceAsync(_regular);
+        var request = new PlaceContributorReplyRequest(Guid.NewGuid(), "Thank you.", "approved");
+        await using (var db = NewDb())
+        {
+            await new PlaceContributorReplies(db, _clock).SendAsync(place.Id, request, "admin:testkey", default);
+            await db.InboxItems.ExecuteDeleteAsync();
+        }
+        await using var check = NewDb();
+        var result = await new PlaceContributorReplies(check, _clock).SendAsync(place.Id, request, "admin:testkey", default);
+        Assert.True(result.Replay);
+        Assert.Empty(await check.InboxItems.ToListAsync());
+        Assert.Equal(1, await check.AuditLog.CountAsync());
+    }
+
+    [Fact]
+    public async Task Contributor_reply_with_deleted_author_is_audited_as_undeliverable()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var place = await SeedReplyPlaceAsync(null);
+        await using var db = NewDb();
+        var request = new PlaceContributorReplyRequest(Guid.NewGuid(), "Thank you.", "approved");
+        var result = await new PlaceContributorReplies(db, _clock).SendAsync(place.Id, request, "admin:testkey", default);
+        Assert.Equal("recipient_unavailable", result.Status);
+        Assert.Null(result.InboxId);
+        Assert.Empty(await db.InboxItems.ToListAsync());
+        Assert.Single(await db.AuditLog.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Contributor_reply_invalid_input_and_missing_submission_write_nothing()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var place = await SeedReplyPlaceAsync(_regular);
+        await using var db = NewDb();
+        var service = new PlaceContributorReplies(db, _clock);
+        var valid = new PlaceContributorReplyRequest(Guid.NewGuid(), "Thank you.", "approved");
+        foreach (var invalid in new[] { valid with { RequestId = Guid.Empty }, valid with { Message = " " },
+            valid with { Message = new string('x', 1001) }, valid with { Reason = "arbitrary private text" } })
+            await Assert.ThrowsAsync<ValidationException>(() => service.SendAsync(place.Id, invalid, "admin:testkey", default));
+        await Assert.ThrowsAsync<NotFoundException>(() => service.SendAsync(CommunityPlace.NewId(), valid, "admin:testkey", default));
+        Assert.Empty(await db.InboxItems.ToListAsync());
+        Assert.Empty(await db.AuditLog.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Explicit_restore_reaches_public_OpenSearch_without_exposing_unapproved_place()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        var prefix = "gimano-approval" + Guid.NewGuid().ToString("N")[..10] + "-";
+        var index = OpenSearchIntegrationTests.Create(prefix, out var client);
+        if (index is null) { Assert.Skip("GIMANO_OS_URL not set"); return; }
+        await using var db = NewDb();
+        var selected = new CommunityPlace { Name = "Legacy Approval Cafe Alpha", OwnerId = _regular,
+            Location = new GeoPoint(Lat, Lng).ToPoint(), Status = PlaceStatus.Pending };
+        var untouched = new CommunityPlace { Name = "Legacy Approval Cafe Beta", OwnerId = _regular,
+            Location = new GeoPoint(Lat, Lng + 0.001).ToPoint(), Status = PlaceStatus.Pending };
+        db.CommunityPlaces.AddRange(selected, untouched);
+        await db.SaveChangesAsync();
+        try
+        {
+            await index.EnsureIndexAsync();
+            await index.BulkIndexAsync(new[] { Core.Search.SearchQueryBuilder.ToDocument(selected), Core.Search.SearchQueryBuilder.ToDocument(untouched) });
+            await index.RefreshAsync();
+            var query = new Core.Search.SearchQuery("Legacy Approval Cafe", Lat, Lng);
+            Assert.Empty(await index.SearchAsync(query));
+            await new Moderation(db, _bus, new AuthorHandles(new byte[32]), _clock)
+                .RestoreAsync(ModerationKind.Place, selected.Id, default, "admin:testkey");
+            var changed = Assert.Single(_bus.Sent, e => e.Key == RoutingKeys.PlaceChanged);
+            var doc = await Core.Search.PlaceDocuments.ForIdAsync(db, ((PlaceChangedEvent)changed.Payload).PlaceId, default);
+            Assert.NotNull(doc);
+            Assert.Equal(1, await index.BulkIndexAsync(new[] { doc }));
+            await index.RefreshAsync();
+            Assert.Equal(selected.Id, Assert.Single(await index.SearchAsync(query)).Id);
+        }
+        finally
+        {
+            var response = await client.Indices.GetAsync<OpenSearch.Net.StringResponse>(prefix + "*");
+            if (response.Success && System.Text.Json.Nodes.JsonNode.Parse(response.Body) is System.Text.Json.Nodes.JsonObject rows)
+                foreach (var (name, _) in rows) await client.Indices.DeleteAsync<OpenSearch.Net.StringResponse>(name);
+        }
+    }
+
+    [Fact]
+    public async Task Explicit_restore_lists_only_selected_legacy_pending_place_and_emits_index_and_inbox_events()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        await using var db = NewDb();
+        var selected = new CommunityPlace { Name = "Verified public cafe", OwnerId = _regular,
+            Location = new GeoPoint(Lat, Lng).ToPoint(), Status = PlaceStatus.Pending, ScreeningState = ScreeningState.None };
+        var untouched = new CommunityPlace { Name = "Unverified public cafe", OwnerId = _regular,
+            Location = new GeoPoint(Lat, Lng + 0.01).ToPoint(), Status = PlaceStatus.Pending, ScreeningState = ScreeningState.None };
+        db.CommunityPlaces.AddRange(selected, untouched);
+        await db.SaveChangesAsync();
+        var moderation = new Moderation(db, _bus, new AuthorHandles(new byte[32]), _clock);
+        await moderation.RestoreAsync(ModerationKind.Place, selected.Id, TestContext.Current.CancellationToken);
+        await db.Entry(selected).ReloadAsync();
+        await db.Entry(untouched).ReloadAsync();
+        Assert.True(selected.Listed);
+        Assert.Equal(ScreeningState.Passed, selected.ScreeningState);
+        Assert.Equal(PlaceStatus.Pending, selected.Status);
+        Assert.Equal(0, selected.WeightedYes);
+        Assert.Contains(await db.AuditLog.ToListAsync(), a => a.Action == "place.restore" && a.TargetId == selected.Id);
+        Assert.True(CommunityRules.IsSearchableBy(selected.Status, selected.OwnerId, null, selected.Listed));
+        Assert.False(untouched.Listed);
+        Assert.Equal(ScreeningState.None, untouched.ScreeningState);
+        Assert.Contains(_bus.Sent, e => e.Key == RoutingKeys.PlaceChanged && ((PlaceChangedEvent)e.Payload).PlaceId == selected.Id);
+        Assert.Single(Screened, e => e.PlaceId == selected.Id && e.State == ScreeningState.Passed && e.Late);
+        await moderation.RestoreAsync(ModerationKind.Place, selected.Id, TestContext.Current.CancellationToken);
+        Assert.Single(Screened, e => e.PlaceId == selected.Id && e.State == ScreeningState.Passed && e.Late);
+    }
+
     [Fact]
     public async Task Street_rename_and_locality_enrichment_survive_index_rebuild()
     {

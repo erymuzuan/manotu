@@ -198,8 +198,12 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
     }
 
     /// <summary>Restores an item a moderator found fine (also "dismiss": its flags are cleared, so it leaves the queue).</summary>
-    public async Task RestoreAsync(ModerationKind kind, string id, CancellationToken ct)
+    public async Task RestoreAsync(ModerationKind kind, string id, CancellationToken ct, string? adminActor = null)
     {
+        await using var transaction = kind == ModerationKind.Place && CommunityPlace.IsCommunityId(id)
+            ? await db.Database.BeginTransactionAsync(ct) : null;
+        if (transaction is not null)
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"place-restore:" + id}, 0))", ct);
         string placeId;
         string? acceptedScreened = null;
         (string Kind, string Id)? contentApproved = null;
@@ -241,21 +245,32 @@ public sealed class Moderation(GimanoDbContext db, IEventPublisher bus, AuthorHa
                     return;
                 }
                 var c = await db.CommunityPlaces.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException("Place not found.");
+                await db.Entry(c).ReloadAsync(ct);
+                var before = $"status={c.Status} screening={c.ScreeningState} listed={c.Listed}";
                 // Back to what it was before the flags: published once verified, otherwise still waiting for verification.
                 if (c.Status is PlaceStatus.Hidden or PlaceStatus.Rejected) c.Status = c.ResolvedAt is null ? PlaceStatus.Pending : PlaceStatus.Published;
                 // A place the AI check held or rejected that a maintainer accepts goes live like a passed one, and its owner hears it.
-                if (c.ScreeningState is Core.Community.ScreeningState.Held or Core.Community.ScreeningState.Rejected)
+                if (c.ScreeningState is Core.Community.ScreeningState.Held or Core.Community.ScreeningState.Rejected
+                    || (c.Status == PlaceStatus.Pending && c.ScreeningState == Core.Community.ScreeningState.None))
                 {
                     c.ScreeningState = Core.Community.ScreeningState.Passed;
+                    c.ScreenedAt = clock.GetUtcNow();
                     c.Listed = c.Status == PlaceStatus.Pending;
                     acceptedScreened = c.Id;
                 }
                 c.FlagCount = 0; c.HeldForReview = false; c.UpdatedAt = clock.GetUtcNow(); placeId = c.Id;
+                db.AuditLog.Add(new AuditEntry
+                {
+                    At = clock.GetUtcNow(), Actor = adminActor ?? "moderation-service", ActorKind = adminActor is null ? "system" : "admin",
+                    Action = "place.restore", TargetType = "community_place", TargetId = c.Id,
+                    Detail = $"{before} -> status={c.Status} screening={c.ScreeningState} listed={c.Listed}",
+                });
                 await db.PlaceFlags.Where(f => f.PlaceId == id).ExecuteDeleteAsync(ct);
                 break;
             }
         }
         await db.SaveChangesAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
         await bus.PublishAsync(RoutingKeys.PlaceChanged, new PlaceChangedEvent(placeId), ct);
         if (contentApproved is { } ca) await bus.PublishAsync(RoutingKeys.ContentScreened, new ContentScreenedEvent(ca.Kind, ca.Id, placeId, ContentState.Passed, Late: true), ct);
         if (acceptedScreened is not null)

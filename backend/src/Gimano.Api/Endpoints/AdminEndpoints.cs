@@ -60,7 +60,11 @@ public static class AdminEndpoints
         var mod = g.MapGroup("/moderation");
         mod.MapGet("", (string? kind, string? state, Services.Moderation m, CancellationToken ct) => ModerationQueue(kind, state, m, ct));
         mod.MapPost("/{kind}/{id}/hide", (string kind, string id, Services.Moderation m, CancellationToken ct) => ModerationAct(kind, id, (k, i) => m.HideAsync(k, i, ct)));
-        mod.MapPost("/{kind}/{id}/restore", (string kind, string id, Services.Moderation m, CancellationToken ct) => ModerationAct(kind, id, (k, i) => m.RestoreAsync(k, i, ct)));
+        mod.MapPost("/{kind}/{id}/restore", (string kind, string id, HttpContext http, Services.Moderation m, CancellationToken ct) =>
+            ModerationAct(kind, id, (k, i) => m.RestoreAsync(k, i, ct, "admin:" + AdminKeyFilter.Fingerprint(http))));
+        mod.MapPost("/place/{id}/reply", async (string id, Services.PlaceContributorReplyRequest request, HttpContext http,
+            Services.PlaceContributorReplies replies, CancellationToken ct) =>
+            Results.Ok(await replies.SendAsync(id, request, "admin:" + AdminKeyFilter.Fingerprint(http), ct)));
         mod.MapGet("/{kind}/{id}/evidence/{n:int}", async (string kind, string id, int n, Services.Moderation m, Gimano.Core.Community.IMediaStore media, HttpContext http, CancellationToken ct) =>
         {
             if (!TryKind(kind, out var k)) return Validation.Problem("kind", "kind must be review, photo, place or appeal.");
