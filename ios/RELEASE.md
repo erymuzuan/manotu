@@ -1,6 +1,7 @@
-# Releasing Gimano for iOS (TestFlight)
+# Releasing Manotu for iOS (TestFlight and App Store)
 
-Bundle id `my.gimano.app` · version `0.3.4` (build 10) (`MARKETING_VERSION` in `project.yml`) · build number = `CURRENT_PROJECT_VERSION` in `project.yml`
+Bundle id `my.manotu.app` · existing App Store Connect app `6826478029`, STAFY team `98KY9PMPX3`.
+Read the release version from `MARKETING_VERSION` in `project.yml`; build number = `CURRENT_PROJECT_VERSION` in `project.yml`
 (override per upload: `scripts/testflight.sh <n>`).
 
 The Release configuration talks to **https://gimano-api.bukitbunga.com/api/v1/** (live hub: `wss://gimano-api.bukitbunga.com/hubs/live`).
@@ -37,17 +38,17 @@ Build the legacy app with `APP_VARIANT=gimano` (Local.xcconfig or the xcodebuild
 > 26 Oct 2026). `scripts/testflight.sh` passes `DEVELOPMENT_TEAM=$ASC_TEAM_ID` explicitly and refuses to upload an
 > archive signed by any other team. The App Store Connect app (`6826478029`) and the API key belong to that team.
 
-1. **App Store Connect app**: My Apps → + → New App → iOS, name "Gimano", bundle id `my.gimano.app`, SKU `gimano-ios`.
+1. **App Store Connect app**: use the existing **Manotu** app `6826478029`, bundle id `my.manotu.app`. Do not create a duplicate app.
 2. **API key**: App Store Connect → Users and Access → Integrations → App Store Connect API → generate a key with the
    **App Manager** role. Download `AuthKey_<KEY_ID>.p8` (it can be downloaded only once) and note the Issuer ID and Key ID.
 3. `cp Config/asc.env.example Config/asc.env` and fill in `ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_KEY_PATH`, `ASC_TEAM_ID` (STAFY, 98KY9PMPX3).
    `Config/asc.env` and `*.p8` are git-ignored; never commit them.
 4. `Config/Local.xcconfig` (git-ignored) must contain `DEVELOPMENT_TEAM = <your team id>`, as for development builds.
    `Config/Google.xcconfig` (git-ignored) holds the Google Drive client ids (see `Config/Google.xcconfig.example`).
-5. **Capabilities on the App ID** (developer.apple.com → Identifiers → my.gimano.app). Automatic signing with the API key creates the
+5. **Capabilities on the App ID** (developer.apple.com → Identifiers → my.manotu.app). Automatic signing with the API key creates the
    Apple Distribution certificate and the App Store profile itself. It can't create an iCloud container that doesn't exist yet, so:
-   - enable **iCloud (CloudKit)** with container `iCloud.my.gimano.app`, then build with `GIMANO_ICLOUD=YES` (the default).
-     Until this is done, build with `GIMANO_ICLOUD=NO scripts/testflight.sh`: iCloud backup is hidden and file backups still work.
+   - Keep **iCloud disabled in the store build** (`GIMANO_ICLOUD=NO`). Enabling the
+     `iCloud.my.manotu.app` container and changing the release's backup capabilities requires a deliberate release decision.
    - **Google Drive backup is excluded from the store build** (owner decision 2026-10-24): `scripts/testflight.sh` passes
      `GIMANO_DRIVE=NO` (and `GIMANO_ICLOUD=NO`) unless overridden, and refuses an archive whose Info.plist holds a Google
      OAuth client. Every user of that build sees the same backup screen: a file backup, Drive and iCloud shown as unavailable.
@@ -106,7 +107,9 @@ Every upload needs a new build number: bump `CURRENT_PROJECT_VERSION` in `projec
 
 ## Checklist before each upload
 
-- [ ] `xcodebuild test` (unit tests) green; device UI tests: `ProdUserUITests` against production on a Release build
-      (uninstall first: `xcrun devicectl device uninstall app --device <udid> my.gimano.app`, then
-      `xcodebuild test -configuration Release ENABLE_TESTABILITY=YES -only-testing:GimanoUITests/ProdUserUITests …`).
+- [ ] `xcodebuild test` (unit tests) green; inspect `ProdUserUITests` for destructive operations before using a
+      physical device. Run Release QA against production with isolated DerivedData. **Do not uninstall or reset
+      the owner's app/data.** Use a dedicated test identity/device for deletion or reset tests.
 - [ ] Bump `MARKETING_VERSION` in `project.yml` for a new user-visible version; `xcodegen generate`.
+- [ ] Complete [App Store review evidence](../docs/app-store-review.md), including the physical-device video
+      and matching App Review Notes/reply. An information-only rejection does not automatically require a new binary.

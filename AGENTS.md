@@ -187,6 +187,31 @@ must be rejected in review.
 - **Apple distribution uses STAFY COMPANY LIMITED (98KY9PMPX3)** for Manotu (`my.manotu.app`, App Store Connect app `6826478029`), including local signing/USB device tests, TestFlight and production App Store releases (owner explicitly reconfirmed 26 October 2026: “use STAFY, not individual Apple account”). This supersedes the previous individual-team-only rule. Verify the selected team before any identifier, signing or upload operation. Do not create a duplicate app or transfer ownership without the owner's instruction.
 - AltStore builds have no team-bound iCloud/Google configuration; publish the limitation and retain file backup/restore. Never distribute personal provisioning profiles.
 
+## App Store review evidence (required before submission/resubmission)
+
+- Follow `docs/app-store-review.md` and `.agents/skills/release-stores/SKILL.md`. Apple's 31 October 2026
+  Guideline 2.1 rejection of 0.4.2 (14) requested review information and a physical-device recording;
+  do not treat a new binary alone as resolving it.
+- Answer every reviewer request in both the App Review reply and App Review Information **Notes**.
+  Cover purpose/audience, setup and main-feature steps, external services (including AI), regional
+  coverage/differences, and applicable data/material licences. Verify against the submitted artifact
+  and production, not just current source or an old handoff.
+- Provide a screen recording of the exact submitted build on a physical device running the latest
+  supported public OS: start at app launch; demonstrate the normal flow, public-content reporting
+  and user blocking, and account creation/login/deletion and paid features where applicable.
+  Explain absent flows explicitly. A simulator recording or marketing image is not a substitute.
+- Preserve the owner's on-device data. Never uninstall, reset, or delete the owner's account to
+  record a demonstration. Use a dedicated test identity/device for destructive flows; obtain
+  action-time approval where required. Remove private data from review evidence before sharing.
+- Record version/build, committed SHA, device/OS, physical-device QA results, recording location,
+  and evidence of production prerequisites. Check video access as a reviewer without your login.
+  Keep incomplete evidence marked pending; never claim a test/video/upload succeeded without proof.
+- For information-only rejection, retain the existing build unless QA finds a binary defect. If a
+  replacement is necessary, coordinate a committed release SHA, use an unused increasing build
+  number, retest and re-record it, and verify which build is selected before resubmitting.
+- TestFlight approval is separate from App Store general availability. Do not switch the main
+  iPhone download link or announce production availability until the public listing is verified.
+
 ## Approved proprietary platform dependencies
 
 On 23 October 2026 the product owner approved Google Play services Location, Google sign-in /
