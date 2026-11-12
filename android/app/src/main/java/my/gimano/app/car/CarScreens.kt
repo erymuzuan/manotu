@@ -17,6 +17,8 @@ import androidx.car.app.model.MessageTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.SearchTemplate
 import androidx.car.app.model.Template
+import androidx.car.app.navigation.model.MapWithContentTemplate
+import androidx.car.app.versioning.CarAppApiLevels
 import androidx.car.app.navigation.model.Maneuver
 import androidx.car.app.navigation.model.MessageInfo
 import androidx.car.app.navigation.model.NavigationTemplate
@@ -180,6 +182,22 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
         if (p == null) {
             if (!failed) return b.setLoading(true).build()
             return MessageTemplate.Builder(s.str(R.string.car_no_route)).setTitle(dest.name).setHeaderAction(Action.BACK).build()
+        }
+        if (carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_7) {
+            val rows = ItemList.Builder()
+            p.routes.forEachIndexed { index, route ->
+                val title = android.text.SpannableString("  ·  ${Formatters.distance(route.distanceM)}")
+                title.setSpan(androidx.car.app.model.DurationSpan.create(route.effectiveDurationS.toLong()), 0, 1, android.text.Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+                rows.addItem(Row.Builder().setTitle(title)
+                    .addText(listOfNotNull(CarRules.tollLabel(route, s.lang), CarRules.shortVia(route.summary, s.lang)).joinToString(" · "))
+                    .addAction(Action.Builder().setTitle(s.str(R.string.car_go)).setOnClickListener {
+                        current = p.select(index)
+                        s.preview.value = current
+                        s.start(current!!)
+                    }.build()).build())
+            }
+            return MapWithContentTemplate.Builder().setContentTemplate(ListTemplate.Builder()
+                .setTitle(dest.name).setHeaderAction(Action.BACK).setSingleList(rows.build()).build()).build()
         }
         val items = ItemList.Builder()
         p.routes.forEach { r ->
