@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import android.graphics.Color
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,8 @@ import my.gimano.app.ui.SearchPurpose
 import my.gimano.app.ui.theme.GimanoTheme
 
 class MainActivity : AppCompatActivity() {
+    private var carConnected by mutableStateOf(false)
+
     /** Debug builds only: `adb shell am start -n my.gimano.app/.MainActivity --ez gimano.simulateDrive true`. */
     /** "Leave by" reminder tapped → route preview for that planned drive. */
     private fun handlePlannedIntent(i: Intent?) {
@@ -64,6 +67,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        handleCarNavigationIntent(intent)
         applyDebugExtras(intent)
         handlePlannedIntent(intent)
         handleEventIntent(intent)
@@ -130,6 +134,13 @@ class MainActivity : AppCompatActivity() {
         if (sent != null) { i.removeExtra(Intent.EXTRA_STREAM); i.action = Intent.ACTION_MAIN }
     }
 
+    private fun handleCarNavigationIntent(intent: Intent) {
+        val target = my.gimano.app.core.car.CarNavigationIntent.parse(intent.action, intent.dataString) ?: return
+        if (target.query != null) vm.openSearch(SearchPurpose.NAVIGATE, target.query)
+        else vm.offerNavLink(my.gimano.app.core.links.NavLink(target.lat!!, target.lng!!, null))
+        intent.data = null
+    }
+
     private val vm: MainViewModel by viewModels { MainViewModel.Factory((application as GimanoApp).container) }
 
     /** Deferred short link (§5.6): Android lets only the focused app read the clipboard. Manotu builds only. */
@@ -141,10 +152,25 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        handleCarNavigationIntent(intent)
         applyDebugExtras(intent)
         handlePlannedIntent(intent)
         if (savedInstanceState == null) handleEventIntent(intent)
+        androidx.car.app.connection.CarConnection(this).type.observe(this) {
+            carConnected = it == androidx.car.app.connection.CarConnection.CONNECTION_TYPE_PROJECTION
+        }
         setContent {
+            if (carConnected) {
+                GimanoTheme {
+                    androidx.compose.material3.Surface(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+                        androidx.compose.foundation.layout.Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
+                            androidx.compose.material3.Text(getString(R.string.car_phone_locked))
+                        }
+                    }
+                }
+                return@setContent
+            }
+
             // Theme: Light by default (even on a dark-mode phone), Dark, Follow phone, or Auto by sunset.
             val st by vm.settingsState.collectAsStateWithLifecycle()
             val uiState by vm.ui.collectAsStateWithLifecycle()

@@ -1271,7 +1271,7 @@
     <string name="flag_sensitive_desc">Kawasan tentera atau strategik, rumah perlindungan, rumah persendirian, atau butiran seperti pengawal dan CCTV. Disembunyikan serta-merta sementara disemak.</string>
     <string name="safety_debug_reset">Set semula keselamatan (debug)</string>
     <!-- Android Auto (docs/driving.md §5) -->
-    <string name="car_open_phone">Buka Manotu di telefon untuk bermula</string>
+    <string name="car_open_phone">Parkir dan putuskan sambungan Android Auto, kemudian buka Manotu pada telefon untuk menyediakan aplikasi</string>
     <string name="car_got_it">Faham</string>
     <string name="car_where_to">Ke mana?</string>
     <string name="car_search">Cari</string>
@@ -1359,4 +1359,5 @@
     <string name="nav_link_cancel">Batal</string>
     <string name="nav_link_finish_drive">Tamatkan perjalanan anda sebelum membuat laluan dari pautan aplikasi lain.</string>
     <string name="nav_link_pin_desc">Pin di %1$s</string>
+    <string name="car_phone_locked">Android Auto disambungkan. Gunakan skrin kereta. Putuskan sambungan Android Auto untuk menggunakan Manotu pada telefon.</string>
 </resources>

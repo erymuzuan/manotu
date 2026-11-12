@@ -1280,7 +1280,7 @@
     <string name="flag_sensitive_desc">A military or strategic site, a shelter, a private home, or details such as guards and CCTV. Hidden at once while it\'s checked.</string>
     <string name="safety_debug_reset">Reset safety (debug)</string>
     <!-- Android Auto (docs/driving.md §5) -->
-    <string name="car_open_phone">Open Manotu on your phone to start</string>
+    <string name="car_open_phone">Park and disconnect Android Auto, then open Manotu on your phone to complete setup</string>
     <string name="car_got_it">Got it</string>
     <string name="car_where_to">Where to?</string>
     <string name="car_search">Search</string>
@@ -1368,4 +1368,5 @@
     <string name="nav_link_cancel">Cancel</string>
     <string name="nav_link_finish_drive">Finish your drive before routing to a link from another app.</string>
     <string name="nav_link_pin_desc">Pin at %1$s</string>
+    <string name="car_phone_locked">Android Auto is connected. Use the car screen. Disconnect Android Auto to use Manotu on your phone.</string>
 </resources>

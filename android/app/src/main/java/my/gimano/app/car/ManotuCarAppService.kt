@@ -82,6 +82,8 @@ class ManotuCarSession : Session() {
     private val tinjauAlerts = OncePerKey()
     private val stillThere = StillThereGate()
     private val odometer = Odometer()
+    private var autoDrive = false
+    private var pendingNavigation: Intent? = null
     private var navigating = false
     private var alertsTrip: String? = null
     private var homeCamera = false
@@ -120,6 +122,7 @@ class ManotuCarSession : Session() {
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(surface)
         navManager.setNavigationManagerCallback(object : NavigationManagerCallback {
             override fun onStopNavigation() = c.navigation.stop()
+            override fun onAutoDriveEnabled() { autoDrive = true }
         })
         lifecycleScope.launch { lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { observe() } }
         lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
@@ -129,7 +132,9 @@ class ManotuCarSession : Session() {
             }
         })
         // docs/driving.md §5: the agreement is never shown in the car; until it is agreed on the phone, say so.
+        pendingNavigation = intent
         if (!agreed()) return CarAgreementScreen(this)
+        navigationIntentScreen()?.let { screens.push(CarHomeScreen(this)); return it }
         val home = CarHomeScreen(this)
         if (c.navigation.state.value.active) {
             // The car connected mid-drive: the host needs navigationStarted() before the first NavigationTemplate.
@@ -139,6 +144,19 @@ class ManotuCarSession : Session() {
             return navigationScreen()
         }
         return home
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        pendingNavigation = intent
+        if (agreed()) navigationIntentScreen()?.let { screens.popToRoot(); screens.push(it) }
+    }
+
+    fun navigationIntentScreen(): Screen? {
+        val intent = pendingNavigation ?: return null
+        pendingNavigation = null
+        val target = my.gimano.app.core.car.CarNavigationIntent.parse(intent.action, intent.dataString) ?: return null
+        return target.query?.let { CarSearchScreen(this, it) } ?: CarRoutePreviewScreen(this,
+            NavDestination("${target.lat}, ${target.lng}", "", GeoPoint(target.lat!!, target.lng!!), null))
     }
 
     /** A new screen each time: a popped (destroyed) Screen can never be pushed again. */
@@ -255,7 +273,7 @@ class ManotuCarSession : Session() {
         val odo = n.progress?.let { odometer.update(it.distanceAlongM, n.route?.id) } ?: odometer.metres
         val a = n.upcomingAlert
         val ahead = n.alertDistanceM
-        if (a != null && ahead != null && carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_5 && stillThere.shouldAsk(a.id, ahead, odo)) {
+        if (!n.simulated && a != null && ahead != null && carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_5 && stillThere.shouldAsk(a.id, ahead, odo)) {
             val title = str(my.gimano.app.ui.common.Labels.reportType(a.type)) + " · " + my.gimano.app.core.format.Formatters.navDistance(ahead)
             val yes = Action.Builder().setTitle(str(R.string.car_yes)).setOnClickListener { vote(a.id, true) }.build()
             val no = Action.Builder().setTitle(str(R.string.car_gone)).setOnClickListener { vote(a.id, false) }.build()
@@ -265,6 +283,7 @@ class ManotuCarSession : Session() {
     }
 
     private fun vote(id: String, still: Boolean) {
+        if (c.navigation.state.value.simulated) return
         val cm = carContext.getCarService(AppManager::class.java)
         runCatching { cm.dismissAlert(id.hashCode()) }
         if (!c.terms.accepted()) { toast(str(R.string.car_open_phone)); return }
@@ -288,7 +307,7 @@ class ManotuCarSession : Session() {
     fun start(p: CarPreview) {
         if (!agreed()) { toast(str(R.string.car_open_phone)); return }
         val route = p.routes.getOrNull(p.selected) ?: return
-        val simulate = c.repo.isDemo || c.settings.current.simulateDrive
+        val simulate = autoDrive || c.repo.isDemo || c.settings.current.simulateDrive
         c.navigation.start(route.copy(vehicle = route.vehicle ?: p.request.vehicle), p.destination, p.request, simulate)
         // docs/driving.md §5: no reminder card in the car; a toast at the start when the reminder is on.
         if (c.settings.current.safetyReminderEnabled) CarToast.makeText(carContext, str(R.string.safety_banner), CarToast.LENGTH_LONG).show()

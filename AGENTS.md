@@ -220,3 +220,23 @@ now. See `docs/supply-chain.md`. This is not permission to add other proprietary
 or tracking. Private data must still never be stored on Manotu servers. Manotu-authored code
 remains MIT-licensed; marketing must disclose these exceptions and Apple platform dependencies,
 and must not claim the entire app or dependency stack is “100% open source” or has “no closed-source SDKs”.
+
+## Android Auto review gate (required for every Play submission)
+
+- The 12 November 2026 rejection of build 14 identified navigation intents, missing test-drive simulation,
+  and phone interaction while driving. Keep all three in the release checklist; a successful build is not QA.
+- Handle `androidx.car.app.action.NAVIGATE` / `geo:` in both cold `Session.onCreateScreen` and warm
+  `onNewIntent`; declare the activity intent filter. Test named queries, encoded queries, coordinate-only
+  destinations, no results, invalid input, and replacing a request during a drive on Android Auto.
+- Implement `NavigationManagerCallback.onAutoDriveEnabled` in the signed Play variant, not only debug.
+  Test the host AUTO_DRIVE command followed by destination selection: route progress, voice, arrival and End.
+  Simulated fixes must never create traffic probes, public reports or votes.
+- Disable phone interaction during Android Auto projection. Test connection, foreground/background,
+  activity recreation and disconnection; phone controls must not become accessible while projecting.
+  Keep setup/permissions outside the driving flow and preserve the owner's on-device data.
+- Run release unit tests and existing Play manifest/Drive guards. Test the exact signed release on a physical
+  Android phone with the Desktop Head Unit or real head unit; retain screenshots/video, device/OS, version,
+  SHA and artifact hashes. Do not claim device QA or submit while this evidence is incomplete.
+- Inspect all Play tracks for affected bundles and the highest version code before choosing the replacement.
+  Exclude rejected bundles from replacement releases. Record submitted/in-review separately from live;
+  update monitoring immediately on rejection and retarget it only after confirmed replacement submission.

@@ -56,7 +56,7 @@ import java.util.TimeZone
 class CarAgreementScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
     override fun onGetTemplate(): Template = agreementTemplate(s) {
         // Agreed on the phone meanwhile → straight to "Ke mana?"; otherwise the message stays.
-        if (s.agreed()) { screenManager.push(CarHomeScreen(s)); finish() } else invalidate()
+        if (s.agreed()) { screenManager.push(s.navigationIntentScreen() ?: CarHomeScreen(s)); finish() } else invalidate()
     }
 }
 
@@ -100,10 +100,12 @@ class CarHomeScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
 }
 
 /** Search (the host shows the keyboard only when parked). */
-class CarSearchScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
+class CarSearchScreen(private val s: ManotuCarSession, private val initialQuery: String = "") : Screen(s.carContext) {
     private var results: List<PlaceSummary> = emptyList()
     private var loading = false
     private var job: Job? = null
+
+    init { if (initialQuery.isNotBlank()) search(initialQuery, true) }
 
     private fun search(q: String, now: Boolean) {
         job?.cancel()
@@ -121,7 +123,7 @@ class CarSearchScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
         val b = SearchTemplate.Builder(object : SearchTemplate.SearchCallback {
             override fun onSearchTextChanged(searchText: String) = search(searchText, false)
             override fun onSearchSubmitted(searchText: String) = search(searchText, true)
-        }).setHeaderAction(Action.BACK).setShowKeyboardByDefault(true).setSearchHint(s.str(R.string.car_where_to))
+        }).setHeaderAction(Action.BACK).setInitialSearchText(initialQuery).setShowKeyboardByDefault(initialQuery.isBlank()).setSearchHint(s.str(R.string.car_where_to))
         if (loading) return b.setLoading(true).build()
         val items = ItemList.Builder()
         results.take(CarRules.MAX_ROWS_DRIVING).forEach { p ->
@@ -214,7 +216,7 @@ class CarNavigationScreen(private val s: ManotuCarSession) : Screen(s.carContext
     override fun onGetTemplate(): Template {
         val n = nav
         val actions = ActionStrip.Builder()
-            .addAction(Action.Builder().setTitle(s.str(R.string.car_report)).setOnClickListener { screenManager.push(CarReportScreen(s)) }.build())
+            .apply { if (!n.simulated) addAction(Action.Builder().setTitle(s.str(R.string.car_report)).setOnClickListener { screenManager.push(CarReportScreen(s)) }.build()) }
             .addAction(Action.Builder().setTitle(s.str(R.string.car_end)).setOnClickListener { s.c.navigation.stop() }.build())
             .build()
         val mapActions = ActionStrip.Builder().addAction(Action.PAN)
@@ -297,6 +299,7 @@ class CarReportScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
     }
 
     private fun send(type: String) {
+        if (s.c.navigation.state.value.simulated) return
         val nav = s.c.navigation.state.value
         val fix = nav.fix ?: s.myLocation.value
         val p = fix?.takeIf { System.currentTimeMillis() - it.timeMs < 120_000 }?.point
