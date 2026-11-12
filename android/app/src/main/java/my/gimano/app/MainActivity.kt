@@ -36,7 +36,7 @@ import my.gimano.app.ui.SearchPurpose
 import my.gimano.app.ui.theme.GimanoTheme
 
 class MainActivity : AppCompatActivity() {
-    private var carConnected by mutableStateOf(false)
+    private var carConnectionType by mutableStateOf<Int?>(null)
 
     /** Debug builds only: `adb shell am start -n my.gimano.app/.MainActivity --ez gimano.simulateDrive true`. */
     /** "Leave by" reminder tapped → route preview for that planned drive. */
@@ -157,14 +157,14 @@ class MainActivity : AppCompatActivity() {
         handlePlannedIntent(intent)
         if (savedInstanceState == null) handleEventIntent(intent)
         androidx.car.app.connection.CarConnection(this).type.observe(this) {
-            carConnected = it == androidx.car.app.connection.CarConnection.CONNECTION_TYPE_PROJECTION
+            carConnectionType = it
         }
         setContent {
-            if (carConnected) {
+            if (carConnectionType != androidx.car.app.connection.CarConnection.CONNECTION_TYPE_NOT_CONNECTED) {
                 GimanoTheme {
                     androidx.compose.material3.Surface(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
                         androidx.compose.foundation.layout.Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
-                            androidx.compose.material3.Text(getString(R.string.car_phone_locked))
+                            androidx.compose.material3.Text(getString(if (carConnectionType == null) R.string.car_connection_check else R.string.car_phone_locked))
                         }
                     }
                 }
