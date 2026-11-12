@@ -149,6 +149,7 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
     private var failed = false
     /** The preview this screen published (selection changes copy it, keeping [CarPreview.owner]). */
     private var mine: CarPreview? = null
+    private var current: CarPreview? = null
 
     init {
         lifecycleScope.launch {
@@ -156,7 +157,12 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
             if (here == null) { CarToast.makeText(carContext, s.str(R.string.car_no_location), CarToast.LENGTH_LONG).show(); failed = true; invalidate(); return@launch }
             val req = RouteRequest(LatLngDto(here.lat, here.lng), dest.toDto(), vehicle = s.c.settings.current.vehicle, alternatives = 2)
             val routes = runCatching { s.c.repo.routes(req) }.getOrDefault(emptyList()).take(CarRules.MAX_ROUTES)
-            if (routes.isEmpty()) failed = true else s.preview.value = CarPreview(dest, req, routes).also { mine = it }
+            if (routes.isEmpty()) failed = true else {
+                val loaded = CarPreview(dest, req, routes)
+                mine = loaded
+                current = loaded
+                s.preview.value = loaded
+            }
             invalidate()
         }
         lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
@@ -169,7 +175,9 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
 
     override fun onGetTemplate(): Template {
         val b = RoutePreviewNavigationTemplate.Builder().setTitle(dest.name).setHeaderAction(Action.BACK)
-        val p = s.preview.value?.takeIf { it === mine || (mine != null && it.owner === mine) }
+        // The screen owns its rows; session.preview only controls the shared map surface.
+        val p = current
+        android.util.Log.d("ManotuCarPreview", "template ready=${p != null} failed=$failed shared=${s.preview.value === p}")
         if (p == null) {
             if (!failed) return b.setLoading(true).build()
             return MessageTemplate.Builder(s.str(R.string.car_no_route)).setTitle(dest.name).setHeaderAction(Action.BACK).build()
@@ -183,9 +191,13 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
                 .addText(listOfNotNull(CarRules.tollLabel(r, s.lang), CarRules.shortVia(r.summary, s.lang)).joinToString(" · ")).build())
         }
         items.setSelectedIndex(p.selected)
-        items.setOnSelectedListener { i -> s.preview.value = s.preview.value?.select(i); invalidate() }
+        items.setOnSelectedListener { i ->
+            current = p.select(i)
+            s.preview.value = current
+            invalidate()
+        }
         return b.setItemList(items.build())
-            .setNavigateAction(Action.Builder().setTitle(s.str(R.string.car_go)).setOnClickListener { s.start(s.preview.value ?: p) }.build())
+            .setNavigateAction(Action.Builder().setTitle(s.str(R.string.car_go)).setOnClickListener { s.start(current ?: p) }.build())
             .build()
     }
 }
