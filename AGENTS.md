@@ -229,7 +229,9 @@ and must not claim the entire app or dependency stack is “100% open source” 
   `onNewIntent`; declare the activity intent filter. Test named queries, encoded queries, coordinate-only
   destinations, no results, invalid input, and replacing a request during a drive on Android Auto.
   Verify the visible query/title also updates on consecutive voice requests; correct results under a stale
-  heading are a failure. Use titled result lists for intent-provided queries because hosts can retain
+  heading are a failure. Reopen the same destination after Back/End and confirm the route rows and Go
+  action remain available; distinct preview requests must not be suppressed by StateFlow equality.
+  Use titled result lists for intent-provided queries because hosts can retain
   SearchTemplate initial text across requests.
 - Implement `NavigationManagerCallback.onAutoDriveEnabled` in the signed Play variant, not only debug.
   Test the host AUTO_DRIVE command followed by destination selection: route progress, voice, arrival and End.

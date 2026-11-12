@@ -63,7 +63,10 @@ class ManotuCarAppService : CarAppService() {
 }
 
 /** A route choice on the car: up to 3 routes to [destination], [selected] drawn on top. */
-data class CarPreview(val destination: NavDestination, val request: RouteRequest, val routes: List<Route>, val selected: Int = 0) {
+data class CarPreview(val destination: NavDestination, val request: RouteRequest, val routes: List<Route>, val selected: Int = 0,
+    // StateFlow must publish a new request even when its destination/routes equal the previous one.
+    private val requestIdentity: Any = Any(),
+) {
     /** The preview as first published by its screen; a selection change is a copy with the same owner. */
     var owner: CarPreview? = null
         private set
