@@ -180,7 +180,10 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
         // The screen owns its rows; session.preview only controls the shared map surface.
         val p = current
         if (p == null) {
-            if (!failed) return b.setLoading(true).build()
+            if (!failed) return if (carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_7)
+                MapWithContentTemplate.Builder().setContentTemplate(ListTemplate.Builder()
+                    .setTitle(dest.name).setHeaderAction(Action.BACK).setLoading(true).build()).build()
+                else b.setLoading(true).build()
             return MessageTemplate.Builder(s.str(R.string.car_no_route)).setTitle(dest.name).setHeaderAction(Action.BACK).build()
         }
         if (carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_7) {
