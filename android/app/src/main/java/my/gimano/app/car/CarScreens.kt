@@ -11,6 +11,7 @@ import androidx.car.app.model.DateTimeWithZone
 import androidx.car.app.model.Distance
 import androidx.car.app.model.GridItem
 import androidx.car.app.model.GridTemplate
+import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.MessageTemplate
 import androidx.car.app.model.Row
@@ -128,13 +129,18 @@ class CarSearchScreen(private val s: ManotuCarSession, private val initialQuery:
             override fun onSearchTextChanged(searchText: String) = search(searchText, false)
             override fun onSearchSubmitted(searchText: String) = search(searchText, true)
         }).setHeaderAction(Action.BACK).setInitialSearchText(searchText).setShowKeyboardByDefault(initialQuery.isBlank()).setSearchHint(s.str(R.string.car_where_to))
-        if (loading) return b.setLoading(true).build()
+        val intentResults = if (initialQuery.isNotBlank()) ListTemplate.Builder()
+            .setTitle(initialQuery).setHeaderAction(Action.BACK) else null
+        // SearchTemplate initial text is retained by some hosts across consecutive voice requests.
+        // An intent already supplies the query: show its results with an explicit, refreshed title.
+        if (loading) return intentResults?.setLoading(true)?.build() ?: b.setLoading(true).build()
         val items = ItemList.Builder().setNoItemsMessage(s.str(R.string.car_no_results))
         results.take(CarRules.MAX_ROWS_DRIVING).forEach { p ->
             val d = NavDestination(p.name, p.address, GeoPoint(p.lat, p.lng), p.id.takeUnless { it.startsWith("pin:") })
             items.addItem(placeRow(s, d) { screenManager.push(CarRoutePreviewScreen(s, d)) })
         }
-        return b.setItemList(items.build()).build()
+        val list = items.build()
+        return intentResults?.setSingleList(list)?.build() ?: b.setItemList(list).build()
     }
 }
 
