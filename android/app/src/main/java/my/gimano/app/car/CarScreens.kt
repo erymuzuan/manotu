@@ -101,6 +101,7 @@ class CarHomeScreen(private val s: ManotuCarSession) : Screen(s.carContext) {
 
 /** Search (the host shows the keyboard only when parked). */
 class CarSearchScreen(private val s: ManotuCarSession, private val initialQuery: String = "") : Screen(s.carContext) {
+    private var searchText = initialQuery
     private var results: List<PlaceSummary> = emptyList()
     private var loading = false
     private var job: Job? = null
@@ -108,13 +109,16 @@ class CarSearchScreen(private val s: ManotuCarSession, private val initialQuery:
     init { if (initialQuery.isNotBlank()) search(initialQuery, true) }
 
     private fun search(q: String, now: Boolean) {
+        searchText = q
         job?.cancel()
         if (q.isBlank()) { results = emptyList(); loading = false; invalidate(); return }
         job = lifecycleScope.launch {
             if (!now) delay(400)
             loading = true; invalidate()
             val here = s.myLocation.value?.point
-            results = runCatching { s.c.repo.search(q, here?.lat, here?.lng, CarRules.MAX_ROWS_DRIVING) }.getOrDefault(emptyList())
+            results = try { s.c.repo.search(q, here?.lat, here?.lng, CarRules.MAX_ROWS_DRIVING) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (_: Exception) { emptyList() }
             loading = false; invalidate()
         }
     }
@@ -123,7 +127,7 @@ class CarSearchScreen(private val s: ManotuCarSession, private val initialQuery:
         val b = SearchTemplate.Builder(object : SearchTemplate.SearchCallback {
             override fun onSearchTextChanged(searchText: String) = search(searchText, false)
             override fun onSearchSubmitted(searchText: String) = search(searchText, true)
-        }).setHeaderAction(Action.BACK).setInitialSearchText(initialQuery).setShowKeyboardByDefault(initialQuery.isBlank()).setSearchHint(s.str(R.string.car_where_to))
+        }).setHeaderAction(Action.BACK).setInitialSearchText(searchText).setShowKeyboardByDefault(initialQuery.isBlank()).setSearchHint(s.str(R.string.car_where_to))
         if (loading) return b.setLoading(true).build()
         val items = ItemList.Builder().setNoItemsMessage(s.str(R.string.car_no_results))
         results.take(CarRules.MAX_ROWS_DRIVING).forEach { p ->

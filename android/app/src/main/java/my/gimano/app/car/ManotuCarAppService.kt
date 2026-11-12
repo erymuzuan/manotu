@@ -128,6 +128,7 @@ class ManotuCarSession : Session() {
         lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
             override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
                 surface.release()
+                if (autoDrive && c.navigation.state.value.simulated) c.navigation.stop()
                 if (navigating) runCatching { navManager.navigationEnded() }
             }
         })
