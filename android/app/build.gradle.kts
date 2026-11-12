@@ -339,6 +339,29 @@ abstract class CheckPlayManifest : DefaultTask() {
             "googleapis.com/auth/drive",
         ).filter { it in xml }
         check(forbidden.isEmpty()) { "Play variant manifest must not contain: $forbidden" }
+        val doc = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+            .newDocumentBuilder().parse(mergedManifest.get().asFile)
+        val ns = "http://schemas.android.com/apk/res/android"
+        val activities = doc.getElementsByTagName("activity")
+        val navigationFilter = (0 until activities.length).any { i ->
+            val activity = activities.item(i) as org.w3c.dom.Element
+            if (!activity.getAttributeNS(ns, "name").endsWith(".MainActivity")) false else {
+                val filters = activity.getElementsByTagName("intent-filter")
+                (0 until filters.length).any { j ->
+                    val filter = filters.item(j) as org.w3c.dom.Element
+                    fun has(tag: String, attr: String, value: String): Boolean {
+                        val nodes = filter.getElementsByTagName(tag)
+                        return (0 until nodes.length).any { k ->
+                            (nodes.item(k) as org.w3c.dom.Element).getAttributeNS(ns, attr) == value
+                        }
+                    }
+                    has("action", "name", "androidx.car.app.action.NAVIGATE") &&
+                        has("category", "name", "android.intent.category.DEFAULT") && has("data", "scheme", "geo")
+                }
+            }
+        }
+        check(navigationFilter) { "Play navigation app must declare the Android Auto NAVIGATE geo intent on MainActivity" }
+
         check(driveBackup.get() == "false") { "Play variant must have BuildConfig.DRIVE_BACKUP=false (no Google Drive backup)" }
         check(oauthClientIdEmpty.get()) { "Play variant must not carry a Drive OAuth client id (GOOGLE_OAUTH_CLIENT_ID must be empty)" }
         logger.lifecycle("Play manifest OK: no REQUEST_INSTALL_PACKAGES, no self-updater receivers, no Google sign-in / Drive components; DRIVE_BACKUP=false, no Drive OAuth client id")
