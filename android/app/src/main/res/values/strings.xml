@@ -1369,4 +1369,5 @@
     <string name="nav_link_finish_drive">Finish your drive before routing to a link from another app.</string>
     <string name="nav_link_pin_desc">Pin at %1$s</string>
     <string name="car_phone_locked">Android Auto is connected. Use the car screen. Disconnect Android Auto to use Manotu on your phone.</string>
+    <string name="car_no_results">No destinations found. Try another search.</string>
 </resources>

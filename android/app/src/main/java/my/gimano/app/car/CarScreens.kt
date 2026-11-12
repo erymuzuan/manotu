@@ -109,7 +109,7 @@ class CarSearchScreen(private val s: ManotuCarSession, private val initialQuery:
 
     private fun search(q: String, now: Boolean) {
         job?.cancel()
-        if (q.isBlank()) { results = emptyList(); invalidate(); return }
+        if (q.isBlank()) { results = emptyList(); loading = false; invalidate(); return }
         job = lifecycleScope.launch {
             if (!now) delay(400)
             loading = true; invalidate()
@@ -125,7 +125,7 @@ class CarSearchScreen(private val s: ManotuCarSession, private val initialQuery:
             override fun onSearchSubmitted(searchText: String) = search(searchText, true)
         }).setHeaderAction(Action.BACK).setInitialSearchText(initialQuery).setShowKeyboardByDefault(initialQuery.isBlank()).setSearchHint(s.str(R.string.car_where_to))
         if (loading) return b.setLoading(true).build()
-        val items = ItemList.Builder()
+        val items = ItemList.Builder().setNoItemsMessage(s.str(R.string.car_no_results))
         results.take(CarRules.MAX_ROWS_DRIVING).forEach { p ->
             val d = NavDestination(p.name, p.address, GeoPoint(p.lat, p.lng), p.id.takeUnless { it.startsWith("pin:") })
             items.addItem(placeRow(s, d) { screenManager.push(CarRoutePreviewScreen(s, d)) })

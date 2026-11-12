@@ -134,12 +134,14 @@ class ManotuCarSession : Session() {
         // docs/driving.md §5: the agreement is never shown in the car; until it is agreed on the phone, say so.
         pendingNavigation = intent
         if (!agreed()) return CarAgreementScreen(this)
+        if (c.navigation.state.value.active) {
+            navigating = true
+            runCatching { navManager.navigationStarted() }
+        }
         navigationIntentScreen()?.let { screens.push(CarHomeScreen(this)); return it }
         val home = CarHomeScreen(this)
         if (c.navigation.state.value.active) {
             // The car connected mid-drive: the host needs navigationStarted() before the first NavigationTemplate.
-            navigating = true
-            runCatching { navManager.navigationStarted() }
             screens.push(home)
             return navigationScreen()
         }
@@ -309,6 +311,12 @@ class ManotuCarSession : Session() {
         val route = p.routes.getOrNull(p.selected) ?: return
         val simulate = autoDrive || c.repo.isDemo || c.settings.current.simulateDrive
         c.navigation.start(route.copy(vehicle = route.vehicle ?: p.request.vehicle), p.destination, p.request, simulate)
+        // Replacing an active drive does not toggle active; explicitly leave the preview in that case.
+        if (navigating && screens.top !is CarNavigationScreen) {
+            preview.value = null
+            screens.popToRoot()
+            screens.push(navigationScreen())
+        }
         // docs/driving.md §5: no reminder card in the car; a toast at the start when the reminder is on.
         if (c.settings.current.safetyReminderEnabled) CarToast.makeText(carContext, str(R.string.safety_banner), CarToast.LENGTH_LONG).show()
         if (!p.destination.eventStop) c.scope.launch {
