@@ -177,7 +177,6 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
         val b = RoutePreviewNavigationTemplate.Builder().setTitle(dest.name).setHeaderAction(Action.BACK)
         // The screen owns its rows; session.preview only controls the shared map surface.
         val p = current
-        android.util.Log.d("ManotuCarPreview", "template ready=${p != null} failed=$failed shared=${s.preview.value === p}")
         if (p == null) {
             if (!failed) return b.setLoading(true).build()
             return MessageTemplate.Builder(s.str(R.string.car_no_route)).setTitle(dest.name).setHeaderAction(Action.BACK).build()
