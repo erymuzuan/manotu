@@ -20,6 +20,11 @@ class CarNavigationIntentTest {
         assertEquals(3.139, target.lat!!, 0.000001)
         assertEquals(101.6869, target.lng!!, 0.000001)
     }
+    @Test fun coordinateQueryDoesNotNeedGeocoding() {
+        assertEquals(3.139, parse("geo:0,0?q=3.139,101.6869(KL)")!!.lat!!, 0.000001)
+        assertNull(parse("geo:0,0?q=91,101"))
+        assertNull(parse("geo:0,0?q="))
+    }
     @Test fun malformedOrUnrelatedInputIsRejected() {
         listOf("geo:NaN,101", "geo:91,101", "geo:3,181", "geo:3", "geo:0,0?q=%GG",
             "geo:0,0?q=a&q=b", "geo:0,0?q=%00", "https://example.com?q=coffee").forEach {
