@@ -193,7 +193,10 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
                 title.setSpan(androidx.car.app.model.DurationSpan.create(route.effectiveDurationS.toLong()), 0, 1, android.text.Spanned.SPAN_INCLUSIVE_INCLUSIVE)
                 rows.addItem(Row.Builder().setTitle(title)
                     .addText(listOfNotNull(CarRules.tollLabel(route, s.lang), CarRules.shortVia(route.summary, s.lang)).joinToString(" · "))
-                    .addAction(Action.Builder().setTitle(s.str(R.string.car_go)).setOnClickListener {
+                    .addAction(Action.Builder().setTitle(s.str(R.string.car_go))
+                        .setIcon(CarIcon.Builder(IconCompat.createWithBitmap(
+                            CarIcons.render(androidx.compose.material.icons.Icons.Filled.Navigation, 96, androidx.compose.ui.graphics.Color.White)))
+                            .setContentDescription(s.str(R.string.car_go)).build()).setOnClickListener {
                         current = p.select(index)
                         s.preview.value = current
                         s.start(current!!)
