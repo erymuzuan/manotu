@@ -19,7 +19,7 @@ no testing releases were shown in the release overview. Recheck before upload.
 - Phone content is replaced during Android Auto projection. Disconnect restores normal UI;
   initial setup requires parking and disconnecting before using the phone.
 
-## Required exact-artifact QA (pending until recorded)
+## Required exact-artifact QA (record results for each candidate)
 
 Run on the signed Play variant with a physical phone and DHU/real head unit.
 Do not uninstall or clear the owner's app data. Record device/OS, SHA, artifact hash and video.
@@ -50,3 +50,26 @@ replacement submission is confirmed. Do not set backend latest version until pub
 References: [Navigation apps](https://developer.android.com/training/cars/apps/navigation),
 [navigation intents](https://developer.android.com/develop/devices/assistant/intents-assistant-nav-app),
 [connection API](https://developer.android.com/training/cars/apps/library/connection-api).
+
+## 13 November replacement validation
+
+The final signed candidate is built from master `ebdcaa9` (0.4.3/code15). Release tests:
+605 passed, zero failures; Play manifest and no-Drive AAB guards passed. Exact APK/AAB
+signatures and production identity were verified. Physical S22 (Android16) DHU checks
+covered cold/warm navigation intents, encoded queries, coordinates, invalid/no-result input,
+active-drive replacement, repeated route choice, simulation progress/arrival/End,
+phone lockout through recreation and restoration/stopping simulation on disconnect.
+
+Physical QA found two additional host integration defects: deprecated route-preview rendering
+could lose rows on reopening, and speech did not request navigation audio focus. Current hosts
+use MapWithContentTemplate for route choice with visible navigation actions. VoiceGuide now
+uses navigation/speech audio attributes, transient-may-duck focus and releases focus after
+completion/error/stop. The owner explicitly confirmed audible directions and arrival on the
+final candidate; earlier silent candidates are superseded.
+
+Local exact-artifact hashes, timestamped2fps physical-device video (without an audio track),
+phone screenshots and QA results are in ignored
+`artifacts/android-auto-review-20261113/revision-ebdcaa9/`. Audio confirmation is the owner's
+listening result, not an audio recording. No owner data was cleared. Test server/forward
+were stopped, developer mode restored off and the temporary test helper removed.
+Store submission status must be verified in Play Console; passing QA is not public availability.
