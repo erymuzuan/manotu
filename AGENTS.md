@@ -245,3 +245,5 @@ and must not claim the entire app or dependency stack is “100% open source” 
 - Inspect all Play tracks for affected bundles and the highest version code before choosing the replacement.
   Exclude rejected bundles from replacement releases. Record submitted/in-review separately from live;
   update monitoring immediately on rejection and retarget it only after confirmed replacement submission.
+
+- Android Auto voice guidance must use navigation/speech audio attributes and transient-may-duck audio focus, releasing focus after speech/stop/error. Verify audible turn and arrival prompts on the exact signed build; a moving map or initialized TTS engine is not proof of audible guidance.
