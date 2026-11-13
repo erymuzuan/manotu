@@ -73,3 +73,13 @@ phone screenshots and QA results are in ignored
 listening result, not an audio recording. No owner data was cleared. Test server/forward
 were stopped, developer mode restored off and the temporary test helper removed.
 Store submission status must be verified in Play Console; passing QA is not public availability.
+
+## Submission record
+
+On 2026-11-13T08:24:35.835828+08:00 (Asia/Kuala_Lumpur), production release5
+**0.4.3 (15) — Android Auto fixes** was uploaded and sent for review. Play Console
+showed **Changes in review**, with automated quick checks still running. Rollout is100%
+of the existing sole target country, Malaysia. Rejected build14 is excluded. The only
+validation warning concerns optional native debug symbols; ReTrace mapping is included.
+This is submission confirmation, not approval or public availability. Monitoring now targets
+Android0.4.3(15); Apple0.4.2(14) remains a separate remediation channel.
