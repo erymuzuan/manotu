@@ -196,7 +196,7 @@ class CarRoutePreviewScreen(private val s: ManotuCarSession, private val dest: N
                     .addAction(Action.Builder().setTitle(s.str(R.string.car_go))
                         .setIcon(CarIcon.Builder(IconCompat.createWithBitmap(
                             CarIcons.render(androidx.compose.material.icons.Icons.Filled.Navigation, 96, androidx.compose.ui.graphics.Color.White)))
-                            .setContentDescription(s.str(R.string.car_go)).build()).setOnClickListener {
+                            .build()).setOnClickListener {
                         current = p.select(index)
                         s.preview.value = current
                         s.start(current!!)
