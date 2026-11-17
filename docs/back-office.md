@@ -210,8 +210,9 @@ back office has no moderation page yet, so appeals and map-place reports are wor
 **Photo points.** Approving a held, rejected or appealed photo (`restore`) awards the uploader the +2 points an auto-published photo
 earns, once.
 
-**Suspected spam feedback.** Feedback whose message the AI screen flagged as spam or abuse shows a "suspected spam" pill in the
-Feedback list and detail pages (and `suspectedSpam` in `GET /api/v1/admin/feedback`). It is never hidden or deleted automatically. Authors appear only by display name and the opaque `authorRef` handle, never by
+**Suspected spam feedback.** Previously flagged feedback may show a "suspected spam" pill in the Feedback list and detail pages
+(and `suspectedSpam` in `GET /api/v1/admin/feedback`). New private feedback is not sent to the external AI screener or automatically
+flagged. It is never hidden or deleted automatically. Authors appear only by display name and the opaque `authorRef` handle, never by
 user id: act on an author through one of their items. Display names are filtered on set (word list, no links). Users can
 also hide a contributor on their own device by `authorRef`, without telling the server.
 

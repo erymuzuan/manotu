@@ -60,9 +60,14 @@ public sealed class HaikuContentScreener(GimanoDbContext db, IOptions<ScreeningO
         }
         """)!;
 
-    public Task<ContentResult> ScreenTextAsync(ContentInput input, CancellationToken ct) => RunAsync(null, input, ct);
+    // Enforce the privacy boundary here too, even if a future caller bypasses ContentGate.
+    public Task<ContentResult> ScreenTextAsync(ContentInput input, CancellationToken ct) => input.Kind == ContentKind.Feedback
+        ? Task.FromResult(ContentResult.Off)
+        : RunAsync(null, input, ct);
 
-    public Task<ContentResult> ScreenImageAsync(byte[] jpeg, ContentInput context, CancellationToken ct) => RunAsync(jpeg, context, ct);
+    public Task<ContentResult> ScreenImageAsync(byte[] jpeg, ContentInput context, CancellationToken ct) => context.Kind == ContentKind.Feedback
+        ? Task.FromResult(ContentResult.Off)
+        : RunAsync(jpeg, context, ct);
 
     private async Task<ContentResult> RunAsync(byte[]? jpeg, ContentInput input, CancellationToken ct)
     {
@@ -83,9 +88,10 @@ public sealed class HaikuContentScreener(GimanoDbContext db, IOptions<ScreeningO
     internal static async Task<(ContentResult Result, long InputTokens, long OutputTokens)> AskAsync(AnthropicClient client, byte[]? jpeg, ContentInput input,
         CancellationToken ct)
     {
+        if (input.Kind == ContentKind.Feedback) return (ContentResult.Off, 0, 0);
         var payload = JsonSerializer.Serialize(new
         {
-            kind = input.Kind switch { ContentKind.Review => "review", ContentKind.ReviewEdit => "review", ContentKind.ReportNote => "road_report_note", ContentKind.Feedback => "feedback", _ => "photo" },
+            kind = input.Kind switch { ContentKind.Review => "review", ContentKind.ReviewEdit => "review", ContentKind.ReportNote => "road_report_note", ContentKind.Photo => "photo", _ => throw new InvalidOperationException("Only public content can be screened.") },
             isEdit = input.Kind == ContentKind.ReviewEdit,
             place = input.PlaceName,
             text = input.Kind == ContentKind.Photo ? null : input.Text,
@@ -107,7 +113,7 @@ public sealed class HaikuContentScreener(GimanoDbContext db, IOptions<ScreeningO
         {
             Model = ContentScreening.Model,
             MaxTokens = 1024,
-            System = input.Kind == ContentKind.Feedback ? ContentScreening.FeedbackSystemPrompt : ContentScreening.SystemPrompt,
+            System = ContentScreening.SystemPrompt,
             Messages = [message],
             OutputConfig = new OutputConfig { Effort = Effort.Low, Format = new JsonOutputFormat { Schema = Schema } },
         };

@@ -52,10 +52,9 @@ published photos). A rejected photo never blocks the review or place it belongs 
 ## Report notes
 
 `POST /reports` with a free-text `note`: a rejected note is dropped and the report still goes out. The response gains
-`noteDropped: true` and `noteReasons: string[]`. Feedback (`POST /feedback`) is private and is never blocked or rejected: the
-message text (only the text: never contact details, device info, location or user id) goes to the same Haiku 5.5 with a separate
-spam/abuse prompt, and a "reject" sets `suspectedSpam` on the feedback so the back office can show it. The API response is unchanged
-(`201 {id, createdAt, contactToken?}`; the app learns nothing). Off, budget used up, a failed call or no answer in 3 s: no flag, silently.
+`noteDropped: true` and `noteReasons: string[]`. Feedback (`POST /feedback`) is private and is not sent to the external AI
+screener. It is never blocked by this check; new feedback is not automatically marked as suspected spam. The API response remains
+`201 {id, createdAt, contactToken?}`. Previously stored spam flags remain visible to maintainers.
 
 ## Appeals
 

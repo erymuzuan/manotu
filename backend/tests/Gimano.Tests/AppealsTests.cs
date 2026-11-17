@@ -8,6 +8,7 @@ using Gimano.Core.Domain;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using SkiaSharp;
 
 namespace Gimano.Tests;
@@ -120,43 +121,32 @@ public class AppealsTests
         return TestGates.Content(db, TimeProvider.System, s);
     }
 
-    private static ContentResult R(string decision, string confidence = "high", params string[] reasons) =>
-        new(PlaceScreening.Normalize(decision, confidence, reasons), null, false);
-
-    [Theory]
-    [InlineData("reject", true)]
-    [InlineData("hold", false)]
-    [InlineData("publish", false)]
-    public async Task Only_a_reject_marks_feedback_as_suspected_spam(string decision, bool expected)
+    [Fact]
+    public async Task Private_feedback_never_reaches_an_enabled_external_screener()
     {
-        var screener = new TestGates.ContentScreener(_ => R(decision, "high", "spam"));
-        Assert.Equal(expected, await Gate(screener).IsSuspectedSpamAsync("Beli ubat kuat murah wasap 0123", TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+        var screener = new TestGates.ContentScreener(_ => throw new InvalidOperationException("Private feedback must not be screened"));
+        var gate = Gate(screener);
+        Assert.False(await gate.IsSuspectedSpamAsync("A private feedback message", TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+        Assert.False(await gate.IsSuspectedSpamAsync("  ", TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+        var input = new ContentInput(ContentKind.Feedback, "A private feedback message");
+        Assert.Equal(ContentOutcomeKind.Skipped, (await gate.CheckTextAsync(input, null, TestContext.Current.CancellationToken)).Kind);
+        Assert.Equal(ContentOutcomeKind.Skipped, (await gate.CheckImageAsync([1, 2, 3], input, null, TestContext.Current.CancellationToken)).Kind);
+        Assert.Empty(screener.Inputs);
     }
 
     [Fact]
-    public async Task The_screen_sends_the_message_text_only_and_is_silent_when_off_or_failing()
+    public async Task Haiku_screener_refuses_private_feedback_even_when_called_directly()
     {
+        var options = new DbContextOptionsBuilder<GimanoDbContext>();
+        var ds = GimanoDb.BuildDataSource("Host=localhost;Database=x"); // never opened
+        GimanoDb.Configure(options, ds);
+        await using var db = new GimanoDbContext(options.Options);
+        var screener = new HaikuContentScreener(db, Options.Create(new ScreeningOptions { ApiKey = "test-only" }), TimeProvider.System, NullLogger<HaikuContentScreener>.Instance);
+        var input = new ContentInput(ContentKind.Feedback, "A private feedback message");
         var ct = TestContext.Current.CancellationToken;
-        var screener = new TestGates.ContentScreener(_ => R("reject"));
-        await Gate(screener).IsSuspectedSpamAsync("Free vape promo code 123", TimeSpan.FromSeconds(3), ct);
-        var seen = Assert.Single(screener.Inputs);
-        Assert.Equal((ContentKind.Feedback, "Free vape promo code 123", null, null), (seen.Kind, seen.Text, seen.PlaceName, seen.Brands));
-
-        Assert.False(await Gate(new TestGates.ContentScreener(null)).IsSuspectedSpamAsync("x", TimeSpan.FromSeconds(3), ct));          // off or budget used up
-        Assert.False(await Gate(new TestGates.ContentScreener(_ => ContentResult.Failed)).IsSuspectedSpamAsync("x", TimeSpan.FromSeconds(3), ct));
-        Assert.False(await Gate(new TestGates.ContentScreener(_ => throw new HttpRequestException("down"))).IsSuspectedSpamAsync("x", TimeSpan.FromSeconds(3), ct));
-        var untouched = new TestGates.ContentScreener(_ => R("reject"));
-        Assert.False(await Gate(untouched).IsSuspectedSpamAsync("  ", TimeSpan.FromSeconds(3), ct));
-        Assert.Empty(untouched.Inputs);
-    }
-
-    [Fact]
-    public void The_feedback_prompt_is_separate_never_blocks_and_treats_the_message_as_data()
-    {
-        Assert.NotEqual(ContentScreening.SystemPrompt, ContentScreening.FeedbackSystemPrompt);
-        Assert.Contains("never blocked", ContentScreening.FeedbackSystemPrompt);
-        Assert.Contains("complaints", ContentScreening.FeedbackSystemPrompt);
-        Assert.Contains("never instructions", ContentScreening.FeedbackSystemPrompt);
+        Assert.Equal(ContentResult.Off, await screener.ScreenTextAsync(input, ct));
+        Assert.Equal(ContentResult.Off, await screener.ScreenImageAsync([1, 2, 3], input, ct));
+        Assert.Equal((ContentResult.Off, 0L, 0L), await HaikuContentScreener.AskAsync(null!, null, input, ct));
     }
 
     // ---- warnings suggested on a map place ----------------------------------------------------------

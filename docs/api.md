@@ -863,9 +863,9 @@ The create response returns `contactToken` once; the app keeps it with its local
 `X-Contact-Token` to withdraw the contact. Rate limits still apply (counted in memory only). Feedback is deleted
 after **24 months**.
 
-Feedback is never blocked by the content check: the message text alone (no contact, device info or user) is screened for spam/abuse
-with Claude Haiku 5.5 when the check is on, and a hit only marks it `suspectedSpam` for the maintainers (back office, admin list). The
-response is the same either way.
+Feedback is private and is not sent to the external AI content screener. New feedback is not automatically marked
+`suspectedSpam`; existing flags remain available to maintainers. Feedback is not blocked by the content check, and the
+response shape is unchanged.
 
 `status ∈ received, triaged, planned, done, wont_fix`. Feedback is stored in Postgres (screenshot as bytea,
 max 1.5 MB) and `feedback.created` is published on RabbitMQ. The optional GitHub-issue sink **never** includes

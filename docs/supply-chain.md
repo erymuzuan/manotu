@@ -60,7 +60,7 @@ A Google-free build is not promised by this decision. Revisit these exceptions w
 The server screens **new and edited public places** with Claude Haiku 5.5 through the Anthropic API (docs/api.md,
 "Community places", AI check). Boundaries:
 
-- Server only: no SDK or model in the apps.
+- Server only: no SDK or model in the apps. Private feedback and crash reports are not sent to the model.
 - It receives only what the contributor publishes to everyone (name, category, description, opening hours, business
   phone, website) and the names of public places within 150 m. Never a user id, pseudonym, device, location history or
   anything private. "Just for me" places never leave the phone, so they are never screened.

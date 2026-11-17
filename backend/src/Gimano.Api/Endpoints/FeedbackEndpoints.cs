@@ -66,8 +66,7 @@ public static class FeedbackEndpoints
         }
 
         var message = req.Message.Trim();
-        // Spam/abuse screen: only the message text goes to the model (never contact, device info or the user). It never blocks the feedback;
-        // a "yes" only marks it for the maintainers. Off, budget used up, a failed call or a timeout: no flag, silently.
+        // Private feedback is kept on Manotu's server and never sent to the external content screener.
         var suspected = await gate.IsSuspectedSpamAsync(message, SpamScreenBudget, ct);
 
         var fb = new Feedback
