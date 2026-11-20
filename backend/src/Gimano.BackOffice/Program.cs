@@ -25,6 +25,7 @@ builder.Services.AddGimanoData(config);
 // The same key as the API (Feedback:ContactKey, base64 of 32 bytes); without it contacts cannot be revealed here.
 builder.Services.AddSingleton(new Gimano.Core.Support.ContactCrypto(config["Feedback:ContactKey"]));
 builder.Services.AddScoped<TriageService>();
+builder.Services.AddScoped<HeldPlaceQueue>();
 builder.Services.AddScoped<Gimano.Core.AppVersions.AppVersionService>();
 builder.Services.AddScoped<Gimano.Core.Community.BrandWatchlistService>();
 
@@ -235,6 +236,13 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/place-moderation"))
+        context.Response.Headers.CacheControl = "no-store";
+    await next(context);
+});
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

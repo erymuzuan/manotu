@@ -109,6 +109,33 @@ public sealed class PostgresIntegrationAddPlaceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Held_place_queue_lists_oldest_first_and_finds_a_public_match()
+    {
+        if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }
+        await using var db = NewDb();
+        CommunityPlace Entry(string name, int days, bool held, PlaceStatus status) => new()
+        {
+            Name = name, CreatedAt = T0.AddDays(days), HeldForReview = held, Status = status,
+            Location = new GeoPoint(Lat, Lng).ToPoint(), Category = PlaceCategory.Convenience,
+        };
+        var newer = Entry("Public test cafe", 1, true, PlaceStatus.Hidden);
+        var oldest = Entry("99 Speedmart Bandar Baru Bangi Seksyen 9", 0, true, PlaceStatus.Hidden);
+        oldest.ScreeningReasons = "duplicate";
+        var ct = TestContext.Current.CancellationToken;
+        db.CommunityPlaces.AddRange(newer, oldest, Entry("Hidden after decision", -3, false, PlaceStatus.Hidden),
+            Entry("Already public", -2, true, PlaceStatus.Published));
+        await db.SaveChangesAsync(ct);
+
+        var (total, items) = await new Gimano.Core.BackOffice.HeldPlaceQueue(db).ListAsync(0, ct);
+
+        Assert.Equal(2, total);
+        Assert.Equal([oldest.Id, newer.Id], items.Select(p => p.Id));
+        Assert.Equal(["duplicate"], items[0].Reasons);
+        Assert.Equal("n77", items[0].SimilarPlaceId);
+        Assert.Null(items[1].SimilarPlaceId);
+    }
+
+    [Fact]
     public async Task Contributor_reply_is_private_to_author_audited_and_does_not_publish_or_fabricate_feedback()
     {
         if (_ds is null) { Assert.Skip("GIMANO_PG_TEST not set"); return; }

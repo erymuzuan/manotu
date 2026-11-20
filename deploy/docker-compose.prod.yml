@@ -219,7 +219,7 @@ services:
   # Maintainer back office (Blazor): feedback, crash groups, replies, agent tokens (docs/back-office.md). Never public:
   # bind it to 127.0.0.1 (reach it with `tailscale serve` or an SSH tunnel) or to an address only the VPN reaches.
   backoffice:
-    image: ${REGISTRY:?}/gimano-backoffice:${TAG:?}
+    image: ${REGISTRY:?}/gimano-backoffice:${BACKOFFICE_TAG:-${TAG:?}}
     restart: unless-stopped
     logging: *logging
     environment:

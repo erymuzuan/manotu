@@ -175,7 +175,12 @@ Reviews, photos and community places can be reported in the apps (`POST /reviews
 reports from different users hide the item automatically; a maintainer then decides. **Service level: act on every
 reported or auto-hidden item within 24 hours** (Apple guideline 1.2, Google Play UGC policy, and our Terms §3).
 
-The queue is on the API with the maintainer key (`X-Admin-Key`, LAN/Tailscale only):
+Signed-in maintainers can open **Place moderation** at `/place-moderation` to review held community places
+oldest first. The page shows the hold evidence, coarse locality and possible matches from the public map.
+It uses the existing maintainer session and is read-only. Use the protected API for verified decisions,
+reported map places and place appeals.
+
+The full queue is available on the API with the maintainer key (`X-Admin-Key`, LAN/Tailscale only).
 
 ```
 GET  /api/v1/admin/moderation?kind=review|photo|place&state=flagged|hidden   → ModerationItem[] (most-reported first)
@@ -204,8 +209,8 @@ Appeal text, note and evidence photos are deleted 30 days after the decision.
 
 **Reports on map places.** `POST /places/{id}/flag` for an OSM place lands as a `kind=place` item with `status:"osm"` in the default
 (`flagged`) view: the place's public name, `flagCount`, the reasons and `suggestedWarnings` (alcohol, gambling, tobacco). There is no
-author. `restore` dismisses the reports; `hide` is `409` (map data is fixed upstream). The queue is on the admin API; the Blazor
-back office has no moderation page yet, so appeals and map-place reports are worked from this API (and counted in the daily digest).
+author. `restore` dismisses the reports; `hide` is `409` (map data is fixed upstream). Appeals and map-place reports
+are handled through the admin API and counted in the daily digest.
 
 **Photo points.** Approving a held, rejected or appealed photo (`restore`) awards the uploader the +2 points an auto-published photo
 earns, once.

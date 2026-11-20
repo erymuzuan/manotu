@@ -1,0 +1,77 @@
+@page "/place-moderation"
+@inherits BackOfficePage
+
+<PageTitle>Place moderation · Manotu back office</PageTitle>
+
+<header class="page-head">
+    <div>
+        <h1>Place moderation</h1>
+        <p>@total held for review · Oldest first · Malaysia time</p>
+    </div>
+</header>
+
+<section class="table-box" aria-label="Held places">
+    @if (places.Count == 0)
+    {
+        <p class="empty">@(total == 0 ? "No places are held for review." : "No held places on this page.")</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead><tr><th scope="col">Submission</th><th scope="col">Submitted</th><th scope="col">Review reasons</th><th scope="col">Possible match</th></tr></thead>
+            <tbody>
+                @foreach (var place in places)
+                {
+                    <tr @key="place.Id">
+                        <td>
+                            <strong>@place.Name</strong>
+                            <div class="small muted">@Fmt.Label(Fmt.Wire(place.Category)) · @(place.Locality ?? place.Country)</div>
+                            <div class="sub">@place.Id</div>
+                        </td>
+                        <td class="small nowrap">@Fmt.When(place.CreatedAt)</td>
+                        <td>
+                            @(place.Reasons.Count == 0 ? "No reason recorded" : string.Join(" · ", place.Reasons.Select(Fmt.Label)))
+                            @if (!string.IsNullOrWhiteSpace(place.Description) || !string.IsNullOrWhiteSpace(place.AppealNote))
+                            {
+                                <details class="small">
+                                    <summary>Submitted text</summary>
+                                    @if (!string.IsNullOrWhiteSpace(place.Description)) { <p>@place.Description</p> }
+                                    @if (!string.IsNullOrWhiteSpace(place.AppealNote)) { <p><strong>Appeal note</strong> @place.AppealNote</p> }
+                                </details>
+                            }
+                        </td>
+                        <td>
+                            @if (place.SimilarPlaceId is { } id)
+                            {
+                                <span>@place.SimilarPlaceName</span>
+                                <div class="sub">@id</div>
+                            }
+                            else { <span>—</span> }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@if (offset > 0 || offset + places.Count < total)
+{
+    <nav aria-label="Held places pages">
+        @if (offset > 0) { <a href="place-moderation?offset=@(offset - HeldPlaceQueue.PageSize)">Previous page</a> }
+        @if (offset + places.Count < total) { <a href="place-moderation?offset=@(offset + HeldPlaceQueue.PageSize)">Next page</a> }
+    </nav>
+}
+
+@code {
+    [SupplyParameterFromQuery] private int? Offset { get; set; }
+
+    private int total, offset;
+    private IReadOnlyList<HeldPlaceView> places = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        offset = Math.Max(0, Offset ?? 0) / HeldPlaceQueue.PageSize * HeldPlaceQueue.PageSize;
+        (total, places) = await ScopedServices.GetRequiredService<HeldPlaceQueue>().ListAsync(offset);
+    }
+}

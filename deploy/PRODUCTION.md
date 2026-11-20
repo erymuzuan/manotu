@@ -146,6 +146,9 @@ passwords and codes count toward a 5-attempt lockout, and only allowlisted, invi
 
 - `.env.prod`: `BACKOFFICE_BIND=172.30.30.150`, `BACKOFFICE_PUBLIC_URL=https://backoffice.manotu.app`, `TRUSTED_PROXIES`
   (already set for the api) so the back office sees https.
+- For a BackOffice-only release, set `BACKOFFICE_TAG` to its image tag, then run `$C pull backoffice` and
+  `$C up -d --no-deps backoffice`. Preserve `TAG` for the other services. Clear the override when a full release
+  next includes BackOffice and its image is available at the shared tag.
 - IIS on .13 (elevated, same script as the api, its own farm and site):
   `.\gimano-api.ps1 -HostName backoffice.manotu.app -BackendPort 5090 -FarmName gimano-backoffice-docker -PhysicalPath C:\apps\websites\backoffice.manotu.app -CertThumbprint <LE thumbprint>`.
   Blazor needs WebSockets through ARR and Cloudflare, like `/hubs/live`.
