@@ -44,14 +44,14 @@ public sealed class HeldPlaceQueue(GimanoDbContext db)
             CommunityRules.NearbyName? similar = null;
             if (!p.Blocked && !sensitive)
             {
-                var map = db.Places.Where(o => o.Location.IsWithinDistance(p.Location, CommunityRules.DuplicateRadiusM)
-                        && (!o.Tags.ContainsKey("manotu:closed") || o.Tags["manotu:closed"] != "yes"))
-                    .Select(o => new { o.Id, o.Name, o.Location });
+                var map = await db.Places.Where(o => o.Location.IsWithinDistance(p.Location, CommunityRules.DuplicateRadiusM))
+                    .Select(o => new { o.Id, o.Name, o.Location, o.Tags }).ToListAsync(ct);
                 var community = db.CommunityPlaces.Where(c => c.Id != p.Id && !c.HeldForReview
                         && (c.Status == PlaceStatus.Published || (c.Status == PlaceStatus.Pending && c.Listed))
                         && c.Location.IsWithinDistance(p.Location, CommunityRules.DuplicateRadiusM))
                     .Select(c => new { c.Id, c.Name, c.Location });
-                var candidates = (await map.ToListAsync(ct)).Concat(await community.ToListAsync(ct))
+                var candidates = map.Where(o => o.Tags.GetValueOrDefault("manotu:closed") != "yes")
+                    .Select(o => new { o.Id, o.Name, o.Location }).Concat(await community.ToListAsync(ct))
                     .Select(c => new CommunityRules.NearbyName(c.Id, c.Name, c.Location.Y, c.Location.X));
                 similar = CommunityRules.FindDuplicate(p.Name, new GeoPoint(p.Location.Y, p.Location.X), candidates);
             }
